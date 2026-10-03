@@ -18,7 +18,13 @@ struct EventDetailScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("screen.events.detail")
+        .overlay(alignment: .topLeading) {
+            Text("Event detail screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.events.detail")
+        }
         .userActivity(
             PushGoUserActivityBuilder.eventActivityType,
             isActive: event != nil
@@ -88,6 +94,9 @@ private struct EventDetailPanel: View {
                             .lineLimit(2)
                         Spacer(minLength: 8)
                         EntityStateBadge(text: statusLabel, tone: statusTone)
+                            .accessibilityIdentifier(
+                                "field.event.detail.status.\(eventLifecycleState(from: event.state).rawValue.lowercased())"
+                            )
                     }
                     if let summary = event.summary, !summary.isEmpty {
                         Text(summary)
@@ -166,6 +175,15 @@ private struct EventDetailPanel: View {
                 .accessibilityLabel(Text(systemSummary.accessibilityLabel))
                 .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
                 .accessibilityAddTraits(.isHeader)
+                .overlay(alignment: .topLeading) {
+                    if let summary = event.summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.system(size: 1))
+                            .foregroundStyle(.clear)
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("field.event.detail.summary")
+                    }
+                }
 
                 if orderedTimeline.isEmpty {
                     EntityEmptyView(
@@ -186,6 +204,7 @@ private struct EventDetailPanel: View {
                             )
                         }
                     }
+                    .accessibilityIdentifier("event.timeline.count.\(orderedTimeline.count)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

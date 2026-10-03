@@ -19,7 +19,13 @@ struct ThingDetailScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("screen.things.detail")
+        .overlay(alignment: .topLeading) {
+            Text("Thing detail screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.things.detail")
+        }
         .userActivity(
             PushGoUserActivityBuilder.thingActivityType,
             isActive: thing != nil
@@ -56,14 +62,29 @@ private struct ThingDetailPanel: View {
         }
     }
 
+    private enum RelatedDetail: Identifiable {
+        case event(EventProjection)
+        case message(ThingRelatedMessage)
+        case update(ThingRelatedUpdate)
+
+        var id: String {
+            switch self {
+            case .event(let event):
+                return "event:\(event.id)"
+            case .message(let message):
+                return "message:\(message.messageIdentity)"
+            case .update(let update):
+                return "update:\(update.id.uuidString.lowercased())"
+            }
+        }
+    }
+
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let thing: ThingProjection
     @State private var previewImageItem: ThingImagePreviewItem?
     @State private var selectedTab: Tab = .events
-    @State private var selectedEvent: EventProjection?
-    @State private var selectedMessage: ThingRelatedMessage?
-    @State private var selectedUpdate: ThingRelatedUpdate?
+    @State private var relatedDetail: RelatedDetail?
     @State private var showMetadataSheet = false
 
     private var attrsEntries: [EntityDisplayAttribute] {
@@ -173,6 +194,7 @@ private struct ThingDetailPanel: View {
             VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
                 basicInfoSection
                     .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("field.thing.detail.identity")
                     .accessibilityLabel(Text(systemSummary.accessibilityLabel))
                     .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
                     .accessibilityAddTraits(.isHeader)
@@ -187,6 +209,7 @@ private struct ThingDetailPanel: View {
                         .foregroundStyle(Color.appTextSecondary)
                         .lineLimit(4)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("field.thing.detail.summary")
                 }
 
                     if !secondaryImageURLs.isEmpty {
@@ -200,7 +223,9 @@ private struct ThingDetailPanel: View {
 
                 Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases) { tab in
-                        Text(localizationManager.localized(tab.titleKey)).tag(tab)
+                        Text(localizationManager.localized(tab.titleKey))
+                            .tag(tab)
+                            .accessibilityIdentifier("tab.thing.detail.\(tab.rawValue)")
                     }
                 }
                 .pickerStyle(.segmented)
@@ -214,27 +239,20 @@ private struct ThingDetailPanel: View {
         }
         .background(EntityVisualTokens.pageBackground)
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
-        .sheet(item: $selectedEvent) { event in
+        .sheet(item: $relatedDetail) { detail in
             ThingSecondaryDetailSheet {
-                EventDetailScreen(event: event)
-            }
-            .toastOverlay(environment: environment)
-            .transientPresentationRoot()
-        }
-        .sheet(item: $selectedMessage) { message in
-            ThingSecondaryDetailSheet {
-                MessageDetailScreen(
-                    messageId: message.id,
-                    message: nil,
-                    useNavigationContainer: false
-                )
-            }
-            .toastOverlay(environment: environment)
-            .transientPresentationRoot()
-        }
-        .sheet(item: $selectedUpdate) { update in
-            ThingSecondaryDetailSheet {
-                ThingRelatedUpdateDetailScreen(update: update)
+                switch detail {
+                case .event(let event):
+                    EventDetailScreen(event: event)
+                case .message(let message):
+                    MessageDetailScreen(
+                        messageId: message.id,
+                        message: nil,
+                        useNavigationContainer: false
+                    )
+                case .update(let update):
+                    ThingRelatedUpdateDetailScreen(update: update)
+                }
             }
             .toastOverlay(environment: environment)
             .transientPresentationRoot()
@@ -415,14 +433,21 @@ private struct ThingDetailPanel: View {
             } else {
                 ThingDetailList(items: relatedEvents) { event in
                     Button {
-                        selectedEvent = event
+                        openEvent(event)
                     } label: {
                         EventListRow(event: event)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.event.\(event.id)")
                 }
             }
         }
+    }
+
+    private func openEvent(_ event: EventProjection) {
+        relatedDetail = .event(event)
     }
 
     private var relatedMessagesSection: some View {
@@ -438,11 +463,14 @@ private struct ThingDetailPanel: View {
             } else {
                 ThingDetailList(items: relatedMessages) { message in
                     Button {
-                        selectedMessage = message
+                        relatedDetail = .message(message)
                     } label: {
                         ThingRelatedMessageRow(message: message)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.message.\(message.messageIdentity)")
                 }
             }
         }
@@ -461,11 +489,14 @@ private struct ThingDetailPanel: View {
             } else {
                 ThingDetailList(items: relatedUpdates) { update in
                     Button {
-                        selectedUpdate = update
+                        relatedDetail = .update(update)
                     } label: {
                         ThingRelatedUpdateRow(update: update)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.update.\(update.id.uuidString.lowercased())")
                 }
             }
         }
@@ -724,6 +755,7 @@ private struct ThingSecondaryDetailSheet<Content: View>: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 .transientPresentationActionControl()
+                .accessibilityIdentifier("action.thing.related.close")
             }
         }
     }
@@ -781,5 +813,12 @@ private struct ThingRelatedUpdateDetailScreen: View {
             .padding(.vertical, 16)
         }
         .frame(minWidth: 520, minHeight: 420)
+        .overlay(alignment: .topLeading) {
+            Text("Thing update detail screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.thing.update.detail")
+        }
     }
 }

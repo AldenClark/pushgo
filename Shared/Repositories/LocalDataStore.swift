@@ -2,18 +2,6 @@ import Foundation
 import GRDB
 import os
 
-struct MessagePageCursor: Hashable, Sendable {
-    let receivedAt: Date
-    let id: UUID
-    let isRead: Bool
-
-    init(receivedAt: Date, id: UUID, isRead: Bool = false) {
-        self.receivedAt = receivedAt
-        self.id = id
-        self.isRead = isRead
-    }
-}
-
 struct EntityProjectionPageCursor: Hashable, Sendable {
     let receivedAt: Date
     let id: UUID
@@ -59,8 +47,17 @@ enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
 struct MessageUnreadOnlyFilterPreference {
     static let preferenceKey = "message_unread_only_filter"
 
-    static func load(defaults: UserDefaults = AppConstants.sharedUserDefaults()) -> Bool {
-        defaults.bool(forKey: preferenceKey)
+    static func load(
+        defaults: UserDefaults = AppConstants.sharedUserDefaults(),
+        qualitySessionActive: Bool = PushGoAutomationContext.qualitySession != nil
+    ) -> Bool {
+        // Each quality launch starts from a visible, deterministic message baseline.
+        // Tests may still toggle the filter during the journey, but a prior run must
+        // never hide fixture rows before the first functional assertion.
+        if qualitySessionActive {
+            return false
+        }
+        return defaults.bool(forKey: preferenceKey)
     }
 
     static func persist(
@@ -439,6 +436,9 @@ actor LocalDataStore {
     private let pushTokenStore = PushTokenStore()
     private let deviceKeyStore = ProviderDeviceKeyStore()
     private let canonicalDerivedWorkRetryDelay: TimeInterval
+    private var remainingQualityNotificationMaterialPersistenceFailures: Int
+    private var pendingQualityChannelSubscriptionPersistenceFailure: Bool
+    private var remainingQualityChannelSubscriptionPersistenceFailures: Int
     private var derivedWorkDrainTask: Task<Bool, Never>?
     private var derivedWorkDrainRequested = false
     private var derivedWorkRetryWakeTask: Task<Void, Never>?
@@ -476,6 +476,11 @@ actor LocalDataStore {
         self.spotlightIndexer = spotlightIndexer
         self.canonicalDerivedWorkRetryDelay = max(0.01, canonicalDerivedWorkRetryDelay)
         self.canonicalLiveActivityHandler = canonicalLiveActivityHandler
+        remainingQualityNotificationMaterialPersistenceFailures =
+            PushGoAutomationContext.qualitySession?.faults.failNotificationMaterialPersistenceOnce == true ? 1 : 0
+        pendingQualityChannelSubscriptionPersistenceFailure =
+            PushGoAutomationContext.qualitySession?.faults.failChannelSubscriptionPersistenceOnce == true
+        remainingQualityChannelSubscriptionPersistenceFailures = 0
         Self.writeStorageProbe(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier,
@@ -537,6 +542,12 @@ actor LocalDataStore {
     }
 
     #if DEBUG
+    struct QualitySQLitePageMetrics: Sendable, Equatable {
+        let pageCount: Int
+        let pageSize: Int
+        let maxPageCount: Int
+    }
+
     static func releaseSharedResourcesForTesting(storageRootURL: URL) {
         let rootPath = storageRootURL.standardizedFileURL.path
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
@@ -547,12 +558,45 @@ actor LocalDataStore {
             }
         }
     }
+
+    /// Returns page metrics from the production GRDB writer connection. This
+    /// is intentionally a narrow DEBUG-only seam for deterministic lower-layer
+    /// write-failure tests; callers cannot access the database path or execute
+    /// arbitrary SQL.
+    func qualitySQLitePageMetrics() async throws -> QualitySQLitePageMetrics {
+        try await requireBackend().qualitySQLitePageMetrics()
+    }
+
+    /// Applies a bounded SQLite page quota on the production writer
+    /// connection and returns the effective metrics. The quota is connection
+    /// local and must be restored by the owning test before it exits.
+    func setQualitySQLiteMaxPageCount(
+        _ maxPageCount: Int
+    ) async throws -> QualitySQLitePageMetrics {
+        guard maxPageCount > 0 else {
+            throw AppError.localStore("SQLite max page count must be positive.")
+        }
+        return try await requireBackend().setQualitySQLiteMaxPageCount(maxPageCount)
+    }
     #endif
 
     private static func buildSharedResources(
         fileManager: FileManager,
         appGroupIdentifier: String
     ) -> SharedResources {
+        #if DEBUG
+        if PushGoAutomationContext.qualitySession?.faults.failLocalStoreInitialization == true {
+            return SharedResources(
+                backend: nil,
+                searchIndex: nil,
+                metadataIndex: nil,
+                storageState: StorageState(
+                    mode: .unavailable,
+                    reason: "Quality-injected local persistent storage initialization failure."
+                )
+            )
+        }
+        #endif
         let resolvedBackend: GRDBStore?
         let resolvedStorageState: StorageState
         do {
@@ -561,6 +605,14 @@ actor LocalDataStore {
                 appGroupIdentifier: appGroupIdentifier
             )
             let storeURL = directory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            #if DEBUG
+            if let legacyStore = PushGoAutomationContext.qualitySession?.legacyStore {
+                try GRDBStore.prepareQualityLegacyStoreIfNeeded(
+                    storeURL: storeURL,
+                    legacyStore: legacyStore
+                )
+            }
+            #endif
             resolvedBackend = try GRDBStore(storeURL: storeURL)
             resolvedStorageState = StorageState(mode: .persistent, reason: nil)
         } catch {
@@ -1018,6 +1070,9 @@ actor LocalDataStore {
     }
 
     func loadServerConfig() async throws -> ServerConfig? {
+        if PushGoAutomationContext.qualitySession != nil {
+            return try localConfigStore.loadServerConfig()?.normalized()
+        }
         if let config = try? localConfigStore.loadServerConfig()?.normalized() {
             Self.saveWakeupIngressServerConfigDefaults(
                 config,
@@ -1030,11 +1085,27 @@ actor LocalDataStore {
 
     func saveServerConfig(_ config: ServerConfig?) async throws {
         let normalized = config?.normalized()
+#if DEBUG
+        if remainingQualityNotificationMaterialPersistenceFailures > 0 {
+            let previousMaterial = try localConfigStore.loadServerConfig()?.notificationKeyMaterial
+            if previousMaterial != normalized?.notificationKeyMaterial {
+                remainingQualityNotificationMaterialPersistenceFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_notification_material_persistence_failed",
+                    category: .local,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "quality protected notification material write failed before commit"
+                )
+            }
+        }
+#endif
         try localConfigStore.saveServerConfig(normalized)
-        Self.saveWakeupIngressServerConfigDefaults(
-            normalized,
-            suiteName: appGroupIdentifier
-        )
+        if PushGoAutomationContext.qualitySession == nil {
+            Self.saveWakeupIngressServerConfigDefaults(
+                normalized,
+                suiteName: appGroupIdentifier
+            )
+        }
     }
 
     private func normalizeGatewayKey(_ gateway: String) -> String {
@@ -1130,6 +1201,14 @@ actor LocalDataStore {
         return resolved
     }
 
+    func armQualityChannelSubscriptionPersistenceFailure() {
+#if DEBUG
+        guard pendingQualityChannelSubscriptionPersistenceFailure else { return }
+        pendingQualityChannelSubscriptionPersistenceFailure = false
+        remainingQualityChannelSubscriptionPersistenceFailures = 1
+#endif
+    }
+
     func upsertChannelSubscription(
         gateway: String,
         channelId: String,
@@ -1142,6 +1221,7 @@ actor LocalDataStore {
         var items = try channelSubscriptionStore.loadSubscriptions(
             gatewayKey: trimmedGateway
         )
+        let originalItems = items
         let now = Date()
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedChannelId.isEmpty else {
@@ -1171,21 +1251,42 @@ actor LocalDataStore {
             items.append(updated)
         }
 
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
-        if let backend {
-            try await backend.upsertChannelSubscription(
-                gateway: trimmedGateway,
-                channelId: trimmedChannelId,
-                displayName: resolvedName,
-                password: trimmedPassword,
-                lastSyncedAt: lastSyncedAt,
-                updatedAt: now,
-                isDeleted: false,
-                deletedAt: nil
+        do {
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
             )
+            if remainingQualityChannelSubscriptionPersistenceFailures > 0 {
+                remainingQualityChannelSubscriptionPersistenceFailures -= 1
+                throw AppError.localStore("Injected channel subscription persistence failure")
+            }
+            if let backend {
+                try await backend.upsertChannelSubscription(
+                    gateway: trimmedGateway,
+                    channelId: trimmedChannelId,
+                    displayName: resolvedName,
+                    password: trimmedPassword,
+                    lastSyncedAt: lastSyncedAt,
+                    updatedAt: now,
+                    isDeleted: false,
+                    deletedAt: nil
+                )
+            }
+        } catch {
+            let commitError = error
+            do {
+                try channelSubscriptionStore.saveSubscriptions(
+                    gatewayKey: trimmedGateway,
+                    subscriptions: originalItems
+                )
+            } catch {
+                throw AppError.localStore(
+                    "channel subscription commit failed and local rollback failed; "
+                        + "commit=\(commitError.localizedDescription); "
+                        + "rollback=\(error.localizedDescription)"
+                )
+            }
+            throw commitError
         }
         return ChannelSubscription(
             gateway: trimmedGateway,
@@ -1232,21 +1333,22 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway
         )
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else { return }
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? trimmedChannelId : trimmedName
-        var item = items[index]
-        item.displayName = resolvedName
-        item.updatedAt = Date()
-        if item.isDeleted {
-            item.isDeleted = false
-            item.deletedAt = nil
+        if let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) {
+            var item = items[index]
+            item.displayName = resolvedName
+            item.updatedAt = Date()
+            if item.isDeleted {
+                item.isDeleted = false
+                item.deletedAt = nil
+            }
+            items[index] = item
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
+            )
         }
-        items[index] = item
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
         if let backend {
             try await backend.updateChannelDisplayName(
                 gateway: trimmedGateway,
@@ -1267,14 +1369,15 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway
         )
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else { return }
-        var item = items[index]
-        item.lastSyncedAt = date
-        items[index] = item
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
+        if let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) {
+            var item = items[index]
+            item.lastSyncedAt = date
+            items[index] = item
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
+            )
+        }
         if let backend {
             try await backend.updateChannelLastSynced(
                 gateway: trimmedGateway,
@@ -2016,6 +2119,11 @@ actor LocalDataStore {
         return try await backend.loadMessage(deliveryId: deliveryId)
     }
 
+    func loadMessages(deliveryId: String) async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        return try await backend.loadMessages(deliveryId: deliveryId)
+    }
+
     func loadMessage(notificationRequestId: String) async throws -> PushMessage? {
         let backend = try requireBackend()
         return try await backend.loadMessage(notificationRequestId: notificationRequestId)
@@ -2261,18 +2369,30 @@ actor LocalDataStore {
         return AppError.localStore(message)
     }
 
-    func saveMessages(_ messages: [PushMessage]) async throws {
+    func saveMessages(
+        _ messages: [PushMessage],
+        progressObserver: (@Sendable (String) async -> Void)? = nil
+    ) async throws {
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        await progressObserver?("backend.start")
         let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages(canonicalMessages)
         }
+        await progressObserver?("backend.end")
         let searchable = storedMessages.filter(isTopLevelMessage)
+        await progressObserver?("search.start")
         await updateSearchIndex(with: searchable)
+        await progressObserver?("search.end")
         await rebuildMetadataIndex(with: searchable)
+        await progressObserver?("metadata.end")
         await indexSystemSearchMessages(searchable)
+        await progressObserver?("system_search.end")
         await mergeNotificationContextSnapshot(with: storedMessages)
+        await progressObserver?("notification_snapshot.end")
         await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+        await progressObserver?("live_activity.end")
         await refreshSystemSurfaceSnapshot(reason: .write)
+        await progressObserver?("system_snapshot.end")
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
@@ -2303,12 +2423,26 @@ actor LocalDataStore {
     func persistNotificationMessageIfNeeded(
         _ message: PushMessage
     ) async throws -> NotificationStoreSaveOutcome {
-        let canonicalMessage = canonicalizedMessageForPersistence(message)
-        let outcome = try await performBackendWrite { backend in
-            try await backend.persistNotificationMessageIfNeeded(canonicalMessage)
+        let outcomes = try await persistNotificationMessagesIfNeeded([message])
+        guard let outcome = outcomes.first else {
+            throw AppError.localStore("Notification batch commit returned no outcome.")
+        }
+        return outcome
+    }
+
+    /// Commits one bounded ingress batch atomically. The durable derived-work
+    /// rows remain per canonical identity, while the worker is kicked once only
+    /// after the whole transaction is visible to database observers.
+    func persistNotificationMessagesIfNeeded(
+        _ messages: [PushMessage]
+    ) async throws -> [NotificationStoreSaveOutcome] {
+        guard !messages.isEmpty else { return [] }
+        let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        let outcomes = try await performBackendWrite { backend in
+            try await backend.persistNotificationMessagesIfNeeded(canonicalMessages)
         }
         scheduleDerivedWorkDrain()
-        return outcome
+        return outcomes
     }
 
     /// Starts (or joins) the single owned worker for canonical post-commit
@@ -4133,6 +4267,117 @@ private actor GRDBStore {
         try Self.migrator.migrate(dbQueue)
     }
 
+    #if DEBUG
+    func qualitySQLitePageMetrics() throws -> LocalDataStore.QualitySQLitePageMetrics {
+        try dbQueue.writeWithoutTransaction { db in
+            try Self.qualitySQLitePageMetrics(in: db)
+        }
+    }
+
+    func setQualitySQLiteMaxPageCount(
+        _ maxPageCount: Int
+    ) throws -> LocalDataStore.QualitySQLitePageMetrics {
+        guard maxPageCount > 0 else {
+            throw AppError.localStore("SQLite max page count must be positive.")
+        }
+        return try dbQueue.writeWithoutTransaction { db in
+            // PRAGMA max_page_count does not accept a bound argument. The
+            // value is validated above and interpolated as an integer only.
+            try db.execute(sql: "PRAGMA max_page_count = \(maxPageCount);")
+            return try Self.qualitySQLitePageMetrics(in: db)
+        }
+    }
+
+    private static func qualitySQLitePageMetrics(
+        in db: Database
+    ) throws -> LocalDataStore.QualitySQLitePageMetrics {
+        LocalDataStore.QualitySQLitePageMetrics(
+            pageCount: try Int.fetchOne(db, sql: "PRAGMA page_count;") ?? 0,
+            pageSize: try Int.fetchOne(db, sql: "PRAGMA page_size;") ?? 0,
+            maxPageCount: try Int.fetchOne(db, sql: "PRAGMA max_page_count;") ?? 0
+        )
+    }
+
+    /// Builds a single representative old store inside the App-owned quality
+    /// container. The UI runner never receives the database path and never
+    /// reads this store; the next normal `GRDBStore` open must run production
+    /// migrations before any user-visible oracle can pass.
+    static func prepareQualityLegacyStoreIfNeeded(
+        storeURL: URL,
+        legacyStore: PushGoQualityLegacyStore
+    ) throws {
+        guard !FileManager.default.fileExists(atPath: storeURL.path) else { return }
+        guard legacyStore == .messagesV17 else { return }
+
+        let dbQueue = try DatabaseQueue(path: storeURL.path)
+        try migrator.migrate(dbQueue)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                DROP TRIGGER IF EXISTS messages_stats_after_insert;
+                DROP TRIGGER IF EXISTS messages_stats_after_delete;
+                DROP TRIGGER IF EXISTS messages_stats_after_update;
+                DROP TRIGGER IF EXISTS messages_revision_after_update;
+                DROP TABLE IF EXISTS canonical_derived_work;
+                DROP TABLE IF EXISTS pending_local_deletions;
+                DROP TABLE IF EXISTS message_facet_index;
+                DROP TABLE IF EXISTS message_summary_projection;
+                DROP TABLE IF EXISTS message_derived_state;
+                DROP TABLE IF EXISTS message_channel_stats;
+                DROP TABLE IF EXISTS message_global_stats;
+                DROP TABLE IF EXISTS message_store_revision;
+                DROP INDEX IF EXISTS idx_messages_top_level_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_received;
+                DROP INDEX IF EXISTS idx_messages_entity_identity;
+                DELETE FROM grdb_migrations
+                WHERE identifier NOT IN (
+                    'v1_grdb_primary_store',
+                    'v2_watch_sync_state_columns',
+                    'v3_watch_provisioning_columns',
+                    'v4_watch_mode_control_state_columns',
+                    'v5_watch_mode_control_readiness_column',
+                    'v6_watch_publication_digest_columns',
+                    'v7_watch_light_notify_columns',
+                    'v7_system_integration_settings_column',
+                    'v8_rebuild_snake_case_schema',
+                    'v9_message_occurred_at_epoch',
+                    'v10_pending_inbound_messages',
+                    'v11_projection_epoch_millis',
+                    'v12_all_epoch_millis',
+                    'v13_watch_light_decryption_state_columns',
+                    'v14_provider_delivery_ack_outbox',
+                    'v15_drop_provider_delivery_ack_outbox',
+                    'v16_entity_projection_heads',
+                    'v17_watch_delivery_records'
+                );
+                """)
+            try db.execute(
+                sql: """
+                    INSERT INTO messages (
+                        id, message_id, title, body, channel, url, is_read, received_at,
+                        raw_payload_json, status, decryption_state, notification_request_id,
+                        delivery_id, operation_id, entity_type, entity_id, event_id, thing_id,
+                        projection_destination, event_state, event_time_epoch, observed_time_epoch,
+                        occurred_at_epoch, is_top_level_message
+                    ) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, 'received', NULL, ?, ?, NULL,
+                              'message', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1);
+                    """,
+                arguments: [
+                    "00000000-0000-0000-0000-000000000017",
+                    "quality-legacy-v17-message",
+                    "Legacy Upgrade Message",
+                    "Preserved through the production database migration.",
+                    "legacy-upgrade-channel",
+                    1_768_464_000.0,
+                    "{\"body\":\"Preserved through the production database migration.\",\"channel\":\"legacy-upgrade-channel\",\"channel_id\":\"legacy-upgrade-channel\",\"message_id\":\"quality-legacy-v17-message\",\"title\":\"Legacy Upgrade Message\"}",
+                    "quality-legacy-v17-notification",
+                    "quality-legacy-v17-delivery",
+                ]
+            )
+        }
+    }
+    #endif
+
     private static func applyJournalModeWALIfPossible(_ db: Database) throws {
         do {
             try db.execute(sql: "PRAGMA journal_mode = WAL;")
@@ -5599,6 +5844,15 @@ private actor GRDBStore {
 	            return incomingRaw
 	        }
 	        var merged = jsonObject(fromJSONString: existingRaw) ?? [:]
+	        if incoming.keys.contains("location") {
+	            // Nested location is the canonical patch representation. A null
+	            // value clears the logical pair, including legacy flat aliases.
+	            merged.removeValue(forKey: "location_type")
+	            merged.removeValue(forKey: "location_value")
+	        } else if incoming.keys.contains("location_type") || incoming.keys.contains("location_value") {
+	            // A legacy flat patch supersedes an older nested representation.
+	            merged.removeValue(forKey: "location")
+	        }
 	        for (key, value) in incoming {
 	            if blankTextPatchPayloadKeys.contains(key),
 	               let text = value as? String,
@@ -6892,6 +7146,9 @@ private actor GRDBStore {
 	        existing: GRDBMessageRecord?,
 	        incoming: GRDBMessageRecord
 	    ) -> GRDBMessageRecord {
+	        if let existing, !projectionHeadIncomingSupersedes(existing: existing, incoming: incoming) {
+	            return existing
+	        }
 	        let incomingPayload = Self.jsonObject(fromJSONString: incoming.rawPayloadJSON)
 	        let mergedPayloadJSON = Self.mergeEntityPayloadJSON(
 	            existingRaw: existing?.rawPayloadJSON,
@@ -6938,6 +7195,39 @@ private actor GRDBStore {
 	            occurredAtEpoch: incoming.occurredAtEpoch ?? existing?.occurredAtEpoch,
 	            topLevelMessage: incoming.topLevelMessage
 	        )
+	    }
+
+	    private static func projectionHeadIncomingSupersedes(
+	        existing: GRDBMessageRecord,
+	        incoming: GRDBMessageRecord
+	    ) -> Bool {
+	        let existingLogicalTime = projectionHeadLogicalTime(existing)
+	        let incomingLogicalTime = projectionHeadLogicalTime(incoming)
+	        if incomingLogicalTime != existingLogicalTime {
+	            return incomingLogicalTime > existingLogicalTime
+	        }
+	        return incoming.receivedAt >= existing.receivedAt
+	    }
+
+	    private static func projectionHeadLogicalTime(_ record: GRDBMessageRecord) -> Int64 {
+	        let receivedAtEpoch = Int64(storedEpoch(record.receivedAt).rounded())
+	        switch record.entityType {
+	        case "thing":
+	            return record.observedTimeEpoch
+	                ?? record.occurredAtEpoch
+	                ?? record.eventTimeEpoch
+	                ?? receivedAtEpoch
+	        case "event":
+	            return record.eventTimeEpoch
+	                ?? record.observedTimeEpoch
+	                ?? record.occurredAtEpoch
+	                ?? receivedAtEpoch
+	        default:
+	            return record.occurredAtEpoch
+	                ?? record.observedTimeEpoch
+	                ?? record.eventTimeEpoch
+	                ?? receivedAtEpoch
+	        }
 	    }
 
 	    private static func upsertEventProjectionHead(
@@ -8354,85 +8644,114 @@ private actor GRDBStore {
         _ message: PushMessage
     ) async throws -> NotificationStoreSaveOutcome {
         try write { db in
-            let canonicalMessage = canonicalizedMessageForPersistence(message)
-            let record = try buildMessageRecord(from: canonicalMessage)
-            if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
-               try !hasThingParentRecord(thingId: thingId, db: db)
-            {
-                try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
-                return .persistedPending(canonicalMessage)
-            }
+            try persistNotificationMessageIfNeeded(message, db: db)
+        }
+    }
 
-            if let notificationRequestId = record.notificationRequestId,
-               let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
-            {
-                let updatedRecord = GRDBMessageRecord(
-                    id: existing.id,
-                    messageId: existing.messageId,
-                    title: record.title,
-                    body: record.body,
-                    channel: record.channel,
-                    url: record.url,
-                    isRead: record.isRead,
-                    receivedAt: record.receivedAt,
-                    rawPayloadJSON: record.rawPayloadJSON,
-                    status: record.status,
-                    decryptionState: record.decryptionState,
-                    notificationRequestId: existing.notificationRequestId,
-                    deliveryId: record.deliveryId,
-                    operationId: record.operationId,
-                    entityType: record.entityType,
-                    entityId: record.entityId,
-                    eventId: record.eventId,
-                    thingId: record.thingId,
-                    projectionDestination: record.projectionDestination,
-                    eventState: record.eventState,
-                    eventTimeEpoch: record.eventTimeEpoch,
-                    observedTimeEpoch: record.observedTimeEpoch,
-                    occurredAtEpoch: record.occurredAtEpoch,
-                    topLevelMessage: record.topLevelMessage
-                )
-                try insertOrUpdateMessage(
-                    updatedRecord,
-                    db: db,
-                    updateOnConflict: true,
-                    projectionMessage: canonicalMessage
-                )
-                try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
-                return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
-            }
+    func persistNotificationMessagesIfNeeded(
+        _ messages: [PushMessage]
+    ) async throws -> [NotificationStoreSaveOutcome] {
+        guard !messages.isEmpty else { return [] }
+        return try write { db in
+            try messages.map { try persistNotificationMessageIfNeeded($0, db: db) }
+        }
+    }
 
-            if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
-               let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
-               let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db)
-            {
-                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
-            }
+    private func persistNotificationMessageIfNeeded(
+        _ message: PushMessage,
+        db: Database
+    ) throws -> NotificationStoreSaveOutcome {
+        let canonicalMessage = canonicalizedMessageForPersistence(message)
+        let record = try buildMessageRecord(from: canonicalMessage)
+        if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
+           try !hasThingParentRecord(thingId: thingId, db: db)
+        {
+            try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
+            return .persistedPending(canonicalMessage)
+        }
 
-            if let existing = try loadMessageRecordByMessageId(record.messageId, db: db) {
-                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
-            }
-
+        if let notificationRequestId = record.notificationRequestId,
+           let existing = try fetchMessageRecords(
+               db: db,
+               where: ["notification_request_id = \(Self.sqlQuoted(notificationRequestId))"],
+               orderBy: "received_at DESC, id DESC",
+               limit: nil
+           ).first(where: {
+               // Notification request IDs and delivery IDs are scoped to the
+               // originating Gateway. An older restored Gateway can reuse one
+               // without making the new message a replay of the old row.
+               $0.toPushMessage(decoder: decoder).providerSourceBaseURL
+                   == canonicalMessage.providerSourceBaseURL
+           })
+        {
+            let updatedRecord = GRDBMessageRecord(
+                id: existing.id,
+                messageId: existing.messageId,
+                title: record.title,
+                body: record.body,
+                channel: record.channel,
+                url: record.url,
+                // A delivery replay may refresh canonical content, but it must
+                // not undo an explicit local read transition.
+                isRead: existing.isRead || record.isRead,
+                receivedAt: record.receivedAt,
+                rawPayloadJSON: record.rawPayloadJSON,
+                status: record.status,
+                decryptionState: record.decryptionState,
+                notificationRequestId: existing.notificationRequestId,
+                deliveryId: record.deliveryId,
+                operationId: record.operationId,
+                entityType: record.entityType,
+                entityId: record.entityId,
+                eventId: record.eventId,
+                thingId: record.thingId,
+                projectionDestination: record.projectionDestination,
+                eventState: record.eventState,
+                eventTimeEpoch: record.eventTimeEpoch,
+                observedTimeEpoch: record.observedTimeEpoch,
+                occurredAtEpoch: record.occurredAtEpoch,
+                topLevelMessage: record.topLevelMessage
+            )
             try insertOrUpdateMessage(
-                record,
+                updatedRecord,
                 db: db,
-                updateOnConflict: false,
+                updateOnConflict: true,
                 projectionMessage: canonicalMessage
             )
-            if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
-                try upsertOperationLedger(
-                    identity: identity,
-                    messageId: record.messageId,
-                    appliedAt: Date(),
-                    db: db
-                )
-            }
-            if let thingId = thingParentIdentity(from: canonicalMessage) {
-                try replayPendingInboundMessages(thingId: thingId, db: db)
-            }
-            try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
-            return .persisted(record.toPushMessage(decoder: decoder))
+            try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
+            return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
         }
+
+        if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
+           let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
+           let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db)
+        {
+            return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+        }
+
+        if let existing = try loadMessageRecordByMessageId(record.messageId, db: db) {
+            return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+        }
+
+        try insertOrUpdateMessage(
+            record,
+            db: db,
+            updateOnConflict: false,
+            projectionMessage: canonicalMessage
+        )
+        if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
+            try upsertOperationLedger(
+                identity: identity,
+                messageId: record.messageId,
+                appliedAt: Date(),
+                db: db
+            )
+        }
+        if let thingId = thingParentIdentity(from: canonicalMessage) {
+            try replayPendingInboundMessages(thingId: thingId, db: db)
+        }
+        try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
+        return .persisted(record.toPushMessage(decoder: decoder))
     }
 
     private func enqueueCanonicalDerivedWork(messageID: UUID, db: Database) throws {
@@ -8648,7 +8967,7 @@ private actor GRDBStore {
         storedMessages.reserveCapacity(messages.count)
         try write { db in
             let useBulkProjectionHeads = messages.count > 500
-            var existingByMessageID: [String: (id: UUID, receivedAt: Date)] = [:]
+            var existingByMessageID: [String: (id: UUID, receivedAt: Date, isRead: Bool)] = [:]
             var eventProjectionHeads: [String: GRDBMessageRecord] = [:]
             var thingProjectionHeads: [String: GRDBMessageRecord] = [:]
             var affectedEventIDs = Set<String>()
@@ -8656,17 +8975,19 @@ private actor GRDBStore {
             if useBulkProjectionHeads {
                 let rows = try Row.fetchAll(
                     db,
-                    sql: "SELECT id, message_id, received_at FROM messages;"
+                    sql: "SELECT id, message_id, received_at, is_read FROM messages;"
                 )
                 existingByMessageID.reserveCapacity(rows.count + messages.count)
                 for row in rows {
                     let idText: String = row["id"]
                     let messageID: String = row["message_id"]
                     let receivedAtEpoch: Double = row["received_at"]
+                    let isRead: Int64 = row["is_read"]
                     guard let id = UUID(uuidString: idText) else { continue }
                     existingByMessageID[messageID] = (
                         id: id,
-                        receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch)
+                        receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch),
+                        isRead: isRead != 0
                     )
                 }
                 for row in try Row.fetchAll(db, sql: "SELECT * FROM event_projection_heads;") {
@@ -8683,23 +9004,31 @@ private actor GRDBStore {
                 }
             }
             for message in messages {
-                let canonical = message
-                let record = try buildMessageRecord(from: canonical)
+                var canonical = message
+                var record = try buildMessageRecord(from: canonical)
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {
                     try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
-                let existingIdentity: (id: UUID, receivedAt: Date)?
+                let existingIdentity: (id: UUID, receivedAt: Date, isRead: Bool)?
                 if useBulkProjectionHeads {
                     existingIdentity = existingByMessageID[record.messageId]
                 } else {
                     let existingRecord = try loadMessageRecordByMessageId(record.messageId, db: db)
-                    existingIdentity = existingRecord.map { (id: $0.id, receivedAt: $0.receivedAt) }
+                    existingIdentity = existingRecord.map {
+                        (id: $0.id, receivedAt: $0.receivedAt, isRead: $0.isRead)
+                    }
                 }
                 if let existingIdentity, record.receivedAt < existingIdentity.receivedAt {
                     continue
+                }
+                if let existingIdentity {
+                    // Content refreshes may carry a stale read snapshot. The
+                    // explicit local read transition owns existing row state.
+                    canonical.isRead = existingIdentity.isRead
+                    record = try buildMessageRecord(from: canonical)
                 }
                 try insertOrUpdateMessage(
                     record,
@@ -8726,7 +9055,8 @@ private actor GRDBStore {
                 if useBulkProjectionHeads {
                     existingByMessageID[record.messageId] = (
                         id: existingIdentity?.id ?? record.id,
-                        receivedAt: record.receivedAt
+                        receivedAt: record.receivedAt,
+                        isRead: canonical.isRead
                     )
                 }
                 if let thingId = thingParentIdentity(from: canonical) {
@@ -9019,6 +9349,19 @@ private actor GRDBStore {
         return try read { db in
             try loadMessageRecord(where: "delivery_id = \(Self.sqlQuoted(trimmed))", db: db)?
                 .toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadMessages(deliveryId: String) async throws -> [PushMessage] {
+        let trimmed = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return try read { db in
+            try fetchMessageRecords(
+                db: db,
+                where: ["delivery_id = \(Self.sqlQuoted(trimmed))"],
+                orderBy: "received_at DESC, id DESC",
+                limit: nil
+            ).map { $0.toPushMessage(decoder: decoder) }
         }
     }
 

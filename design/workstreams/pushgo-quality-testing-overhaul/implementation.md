@@ -1,0 +1,118 @@
+# PushGo 全栈质量体系实施工作流
+
+## 目标
+
+把 `pushgo` 与 `pushgo-android` 现有以 Automation State、宿主绝对路径、代理指标和存在性断言为主的测试，迁移为围绕真实用户目的、App-owned 数据、可恢复状态、真实性能区间和系统入口的分层质量体系。
+
+设计权威是 `design/pushgo-app-quality-testing-final-design.md` 第 21–33 节。本工作流只记录实施顺序和新鲜证据，不重新解释产品语义。
+
+## Git 根与边界
+
+- Apple：`/Users/ethan/Repo/PushGo/pushgo`
+- Android：`/Users/ethan/Repo/PushGo/pushgo-android`
+- Gateway sandbox 只用于 contract/real-system 验证；本工作流无权部署、发布、变更生产数据或读取真实凭据。
+- Windows、Gateway 产品功能改造和测试框架整体替换不在范围。
+
+## 不可漂移约束
+
+1. 每个保留或新增测试必须能说明用户目的、适用状态、数据/系统终点和会让它失败的反例。
+2. Identifier、文件、版本、Automation State、报告和测试名不能单独成为产品 Oracle。
+3. 每次切片同时执行源码→测试与测试→可达产品的双向核对。
+4. 主导航、核心 CTA 和关键字段不能只在基础态证明可用；若 badge、loading、error、disabled 或长文案会改变布局，必须选择一个最高风险代表态证明原信息与动态状态同时可读、互不遮挡且仍可完成真实动作。
+5. Runner 不直接给 App 传宿主 DB/Fixture/结果绝对路径；数据由 App 在自身 Container 内生成或读取测试 Bundle 内容。
+6. Release 不能激活 Quality Runtime。
+7. `FAILED/FLAKY/BLOCKED/NOT RUN/WAIVED` 不得合并为绿色。
+8. 后续实现若与最终设计冲突，先修正文档并说明真实代码证据，不能静默偏离。
+
+## 价值与预算护栏
+
+按以下顺序分配实现和执行预算：
+
+1. 高频核心旅程与本次暴露的慢加载/数据未显示问题；
+2. 历史真实缺陷、数据丢失/损坏、错误成功态和不可恢复状态；
+3. 发布阻断、权限/通知/后台/升级等高影响平台边界；
+4. 能以低成本单元/组件/property test 覆盖的广输入空间；
+5. 其余低频长尾只在已有事故、明确合同/安全责任或实现成本很低时进入自动化。
+
+禁止为理论完备构造设备×语言×状态×故障全笛卡尔积。风险等价的长尾选代表例；低后果且昂贵的场景标为 P2/人工辅助或延期，并保留理由。连续两次只修辅助设施却没有推进真实用户能力证据时，停止第三次打磨，简化机制或保留 `BLOCKED/NOT RUN`。
+
+### 最低充分正向切片门槛
+
+剩余迁移不再按设计清单顺序机械推进，而按“可达用户价值 × 发生频率 × 失败影响 × 独有缺陷类型 ÷ 设备时间与维护成本”排序。分数只用于比较，不伪装成精确统计；以下约束是硬规则：
+
+1. 先完成当前产品可达的 P0/P1 正向主链，再实现没有事故、没有安全/数据责任、也没有 owner 变更触发的边缘负向组合；
+2. 相同 fixture、页面 owner 和生命周期能够承载的新目的，必须并入既有旅程。只有需要独有系统前置、独有数据规模或会破坏后续主链状态时，才允许新增 UI 方法或 App 启动；
+3. UI 只证明真实入口、关键交互、准确用户结果和必要持久化。输入组合、解析边界、排序/筛选代数与故障矩阵下沉到 Core/JVM/Room/Store；不得在三端 UI 重复同一种算法风险；
+4. 每个新 UI 步骤必须说明新增的独有缺陷类型。只证明文件、版本、控件或字符串存在，或只重复已有准确终点的步骤，不进入设备门禁；
+5. 正向路径出现产品 bug 时当场修复并用同一 Oracle 回归；准备或平台问题连续两次仍不能进入首个业务动作时，保留 `BLOCKED/FAILED_TEST_SYSTEM` 证据并切换到下一项，不继续消耗主预算；
+6. 负控用于一次性校准新 Oracle，默认不进入日常设备集。历史事故、数据丢失、错误成功态、事务补偿和安全边界可进入 Nightly/Release，其他负向只在其 owner 发生变更时 Focused 运行；
+7. 每轮至少交付一个真实用户能力终点；若只能增加框架资产或形式合同，该轮不计功能覆盖进展。
+
+日常设备集的目标不是“测试最多”，而是用每个平台约十二条跨功能族正向代表链尽早发现最常见、最有损害的回归。Nightly/Release 保留高影响故障与系统边界，但不作为当前正向迁移队列的执行顺序。
+
+## 工作包
+
+### WP0 去伪审计与基线
+
+- 两仓库 `docs/quality/current-test-disposition.md`；
+- 两仓库 `docs/quality/capability-coverage.md`；
+- 当前 smoke、弱 Oracle、skip/return、固定等待、路径协议和 Release Runtime 基线；
+- 导出 helper 与菜单栏内容可达性裁决；`MacMenuBarContentView`/`MenuBarViewModel` 已因无生产挂载且吞错为空而删除，真实 Status Item 动作由目的级 UI 旅程保护。
+
+退出：所有现有 UI/device 测试均有处置；P0 缺口明确；没有因测试数量或文件存在宣称覆盖。
+
+### WP1 Runtime 与环境闭环
+
+- Runtime Profile、受限 Session Descriptor、App-owned session Store；
+- `empty.clean`、`messages.standard`、`messages.large`；
+- readiness、doctor、teardown、唯一结果目录；
+- Session/Store/fixture 准备失败必须在 10 秒内输出稳定阶段并停止，禁止业务 UI/空态/ready；同批正常 `empty.clean` 必须继续到准确功能空态；
+- Release isolation 负测；
+- 两端连续启动验证。
+
+### WP2 慢加载纵向样板
+
+- Message List 首次加载/分页/刷新状态；三端分页正向子项均已落地为一次性受控延迟、旧页保持、可见进度、重复压力不重复追加及准确下一页唯一对象。iOS/Android 复用原分页/已读/relaunch 方法；macOS 复用原首次慢加载方法，并以固定在列表可视底部的进度浮层处理 `List` 离屏 `onAppear` 会自动触发分页、普通行尾进度对用户不可见的平台行为；
+- delay/query failure fault；
+- 正确内容、Retry、旧内容保留和超预算负控；
+- Store/VM/UI milestone 与参考设备预算。
+
+三端 append 分页 failure/retry 已在各自既有分页主链中关闭：一次性失败必须显示 page-owned error、保留准确旧页且可操作，真实 Retry 后只能唯一有序追加，并继续原有准确数据/已读/badge/relaunch 终点。当前证据为 Android `../pushgo-android/build/quality-results/android-page-retry-final/summary.json`、iOS `build/quality-results/ios-page-retry-optimized/run-1-20260831-235842.xcresult`、macOS `build/quality-results/macos-page-retry-current-byte/run-20260831-235045.xcresult`。iOS 删除每次滑动前的重复可视窗口扫描后仍核对完整 125-ID 集，单方法从 220.939 秒降至 183.790 秒；macOS 按真实 `pageSize=50` 核对第一页 `124…75` 与第二页 `74…25` 的首尾和唯一性。超预算性能阈值和参考真机证据仍开放；不得从受控 Simulator/emulator/host 结果外推。
+
+最终 cursor/remainder 修复后的动态回执为 iOS `build/quality-results/ios-page-retry-final/run-1-20260901-001535.xcresult`（1/1、183.171 秒）和 macOS `build/quality-results/macos-page-retry-final/run-20260901-001358.xcresult`（1/1、28.121 秒）。随后只把已执行的逐行消费 helper 从 Xcode-only ViewModel 文件移动到 App 与 SwiftPM 共编译的 model 文件，产品调用不变；当前源码 partial-overlap/remainder 行为测试 1/1、相关 Swift 33/33、两端 Release 构建和独立红队复审均通过。
+
+### WP3–WP6 完整能力迁移
+
+按最终设计第 25 节执行 Messages、Events、Things、Channels、Settings、Ingress、通知、系统表面、watchOS、后台任务、性能、可访问性和本地化，不以聚合 smoke 替代分支证据。
+
+已落地的 accessibility/l10n 第一切片采用“两种互补 Oracle”：PR 静态合同枚举所有生产 string/plural/array key、所有支持语言、非空译文和格式占位符；独立设备任务在实际 zh-Hans/zh-CN 与 accessibility5/1.5 font scale 下完成准确消息详情和 accepted 频道创建。Runner 必须从平台读取并复核实际配置，捕获旧值并在任何退出路径恢复；App 内再断言实际 SwiftUI Dynamic Type 或 Activity Configuration，禁止把 launch argument/adb 命令成功当成 UI 已生效。该代表任务进入 Nightly/Release，但不扩成全设备×全语言×全状态矩阵；物理 VoiceOver/TalkBack 仍是独立 Release 证据。
+
+### WP7 治理收口
+
+- Focused/PR/Nightly/Accessibility/Release 反馈 Lane，以及显式 opt-in 的 Performance 脚本和 CI/人工调度入口；
+- AI 增量测试规则；
+- 两端真实历史任务语料、确定性选择回放和隔离 blind packet 评估；
+- 具名 owner、精确签名、到期门禁和收据 issue ID 的 flake/test-system 治理；
+- 删除或降级旧 Runtime 产品操作；
+- 连续两周与最终双向覆盖审查。
+
+## 实施账本规则
+
+从 2026-08-28 起，每个工作包只允许使用以下状态：`NOT STARTED / PARTIAL / VERIFIED / BLOCKED`。`VERIFIED` 必须同时满足该工作包的产品 Oracle、实际执行证据和退出条件；脚本、测试名、fixture、报告文件存在只能证明实现资产，不能把状态提升为 `VERIFIED`。
+
+每个切片落地时必须在 `progress.md` 记录：真实用户目的、最终数据/系统终点、负控、实际 lane、产品能力状态、测试系统状态、未运行项以及被替换的弱测试。若只是改善 runner/报告但没有新增产品能力证据，必须明确标成“体系 enabler”，不得计入功能覆盖。
+
+当前整体状态为 `PARTIAL`：WP0–WP2、WP7 已有底座或样板，WP3–WP6 未完成。第 21.2 节任一硬性完成条件缺证据时，整体 Goal 保持 active。
+
+## 验证策略
+
+- 黑盒：真实入口、可见对象/集合/字段、动作和重启终点；
+- 动态布局：为主导航/核心 CTA 选一个会改变几何或对比度的高风险状态，要求原始标题、动态装饰和点击终点同时成立；不以辅助树文字存在替代视觉可读；
+- 白盒：状态分支、错误、取消、并发、幂等、迁移和资源释放；
+- 数据血缘：ingress→canonical Store→projection/index→UI/system surface→mutation/delete；
+- 负控：错误字段、重复 cursor、Store failure、超预算 delay、不可读文件消费者、进程死亡；
+- 独立审查未获授权时只报告同上下文审查并保留 `common-mode-risk`。
+
+## 完成条件
+
+以最终设计第 21.2 节为准。某个工作包完成不等于整个目标完成；模拟器通过不等于真实系统通过；文档落盘不等于测试已实施。

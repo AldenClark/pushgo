@@ -7,6 +7,7 @@ struct MessageDetailScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
     @State private var isShowingRuntimeAlert = false
+    @State private var isShowingDecryptionSettings = false
     @State private var previewingImage: ImagePreview?
     @State private var didLoad: Bool = false
     private let onCommitDelete: (@MainActor () async throws -> Void)?
@@ -81,6 +82,17 @@ struct MessageDetailScreen: View {
                 title: Text(viewModel.alertMessage ?? ""),
                 dismissButton: .default(Text(localizationManager.localized("ok")))
             )
+        }
+        .sheet(isPresented: $isShowingDecryptionSettings) {
+            SettingsView(
+                embedInNavigationContainer: true,
+                openDecryptionOnAppear: true,
+                showsCloseButton: true
+            )
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+        }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            viewModel.refresh()
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
         .userActivity(
@@ -177,6 +189,7 @@ struct MessageDetailScreen: View {
                         messageImagesSection(imageURLs: messageImageURLs)
                     }
                     criticalSeverityHint(for: messageSeverity)
+                    decryptionRecoveryAction(for: message)
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
                         font: .body,
@@ -195,6 +208,7 @@ struct MessageDetailScreen: View {
                             .buttonStyle(.borderedProminent)
                             .appButtonHeight()
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("action.message.open_link")
 
                             Button {
                                 copyText(safeOpenURL.absoluteString, toastKey: "link_copied")
@@ -224,6 +238,20 @@ struct MessageDetailScreen: View {
             } else {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func decryptionRecoveryAction(for message: PushMessage) -> some View {
+        if let state = message.decryptionState, state != .decryptOk {
+            Button {
+                isShowingDecryptionSettings = true
+            } label: {
+                Label(localizationManager.localized("message_decryption"), systemImage: "key.fill")
+            }
+            .buttonStyle(.bordered)
+            .appButtonHeight()
+            .accessibilityIdentifier("action.message.configure_decryption")
         }
     }
 
@@ -305,6 +333,7 @@ struct MessageDetailScreen: View {
                     }
                     .buttonStyle(.appPlain)
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                    .accessibilityIdentifier("message.image.0")
                 } placeholder: {
                     RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
                         .fill(EntityVisualTokens.subtleFill)
@@ -381,6 +410,16 @@ struct MessageDetailScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .accessibilityIdentifier("action.message.close")
+            .accessibilityLabel(localizationManager.localized("close"))
+        }
+
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(role: .destructive) {
                 if let message = viewModel.message {
@@ -428,6 +467,9 @@ struct MessageDetailScreen: View {
                 )
                 .foregroundStyle(badgeContent.tone.foreground)
                 .labelStyle(.titleAndIcon)
+                .accessibilityIdentifier(
+                    "status.message.decryption.\(message.decryptionState?.rawValue ?? "encrypted")"
+                )
         } else {
             EmptyView()
         }
@@ -554,7 +596,14 @@ struct MessageDetailScreen: View {
     private func copyText(_ text: String, toastKey: String = "message_content_copied") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        PushGoSystemInteraction.copyTextToPasteboard(trimmed)
+        guard PushGoSystemInteraction.copyTextToPasteboard(trimmed) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
             message: localizationManager.localized(toastKey),
             style: .success,

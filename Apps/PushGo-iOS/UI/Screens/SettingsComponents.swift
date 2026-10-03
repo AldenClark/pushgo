@@ -35,28 +35,59 @@ struct ManualKeySettingsSheet: View {
 
 struct ServerManagementSheet: View {
     @Bindable var viewModel: SettingsViewModel
+    let onDismiss: () -> Void
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     var body: some View {
         navigationContainer {
-            ServerManagementContentView(viewModel: viewModel)
+            ServerManagementContentView(
+                viewModel: viewModel,
+                onDismiss: onDismiss
+            )
                 .navigationTitle(localizationManager.localized("server_management"))
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(localizationManager.localized("cancel")) {
+                            viewModel.cancelServerSaveIfNeeded()
+                            viewModel.clearServerError()
+                            onDismiss()
+                        }
+                        .disabled(viewModel.isSavingServerConfig)
+                        .accessibilityIdentifier("action.settings.server.cancel")
+                    }
+#if DEBUG
+                    if environment.isQualityGatewaySwitchPreCommitPaused {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Continue") {
+                                environment.continueQualityGatewaySwitchPreCommitPhase()
+                            }
+                            .accessibilityIdentifier("action.quality.gateway_switch.continue")
+                            .accessibilityLabel("Continue quality gateway switch")
+                            .accessibilityHint("DEBUG quality-session control")
+                        }
+                    }
+#endif
+                }
         }
+        // Gateway validation and registration continue across awaited work.
+        // Do not let a user dismiss the editor while that work can still
+        // commit a new active gateway in the background.
+        .interactiveDismissDisabled(viewModel.isSavingServerConfig)
     }
 }
 
 struct NotificationSoundSettingsSheet: View {
     @Bindable var viewModel: SettingsViewModel
-    @Environment(LocalizationManager.self) private var localizationManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         navigationContainer {
             NotificationSoundSettingsContentView(
                 viewModel: viewModel,
-                dismissAction: { dismiss() }
+                dismissAction: { dismiss() },
+                showsInlineTitle: true
             )
-                .navigationTitle(localizationManager.localized("notification_sounds"))
         }
         .accessibilityIdentifier("screen.settings.notification_sounds")
     }
@@ -64,6 +95,7 @@ struct NotificationSoundSettingsSheet: View {
 
 private struct ServerManagementContentView: View {
     @Bindable var viewModel: SettingsViewModel
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: ServerField?
@@ -77,13 +109,22 @@ private struct ServerManagementContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let errorMessage = viewModel.errorMessage {
+#if DEBUG
+            if environment.isQualityGatewaySwitchPreCommitPaused {
+                Text("Gateway switch pre-commit paused")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("quality-runtime.gateway_switch_precommit_paused")
+            }
+#endif
+            if let errorMessage = viewModel.serverErrorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,
                     accessibilityID: "feedback.settings.server"
                 ) {
-                    viewModel.clearError()
+                    viewModel.clearServerError()
                 }
             }
 
@@ -139,6 +180,10 @@ private struct ServerManagementContentView: View {
                         }
                     }
                     .textFieldStyle(.plain)
+                    // API credentials are app-scoped secrets, not website passwords.
+                    // Use code semantics so Password AutoFill does not treat them as a
+                    // website login and cover this sheet after reveal/hide.
+                    .textContentType(.oneTimeCode)
                     .accessibilityIdentifier("field.settings.server.token")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
@@ -157,6 +202,7 @@ private struct ServerManagementContentView: View {
                             .foregroundStyle(Color.appTextSecondary)
                     }
                     .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.server.token.toggle_visibility")
                     .accessibilityLabel(
                         LocalizedStringKey(viewModel.gatewayInput.isTokenVisible ? "hide_key" : "show_key")
                     )
@@ -175,7 +221,7 @@ private struct ServerManagementContentView: View {
                 isLoading: viewModel.isSavingServerConfig
             ) {
                 focusedField = nil
-                Task { await viewModel.saveServerConfig() }
+                viewModel.startServerSave()
             }
             .disabled(viewModel.isSavingServerConfig)
             .accessibilityIdentifier("action.settings.server.save")
@@ -229,13 +275,13 @@ private struct ManualKeySettingsContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let errorMessage = viewModel.errorMessage {
+            if let errorMessage = viewModel.manualKeyErrorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,
                     accessibilityID: "feedback.settings.decryption"
                 ) {
-                    viewModel.clearError()
+                    viewModel.clearManualKeyError()
                 }
             }
 
@@ -249,6 +295,17 @@ private struct ManualKeySettingsContentView: View {
                 .foregroundStyle(Color.appTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if viewModel.manualKeyInput.hasConfiguredKey {
+                AppActionButton(
+                    title: localizationManager.localized("delete"),
+                    variant: .plain,
+                    role: .destructive
+                ) {
+                    Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                }
+                .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
+                .accessibilityIdentifier("action.settings.decryption.clear")
+            }
             AppActionButton(
                 text: Text(localizationManager.localized("save_configuration"))
                     .font(.headline),
@@ -314,6 +371,7 @@ private struct ManualKeySettingsContentView: View {
                             }
                         }
                         .textFieldStyle(.plain)
+                        .textContentType(.oneTimeCode)
                         .font(.system(.body, design: .monospaced))
                         .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
@@ -332,6 +390,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )
@@ -356,6 +415,7 @@ private struct ManualKeySettingsContentView: View {
                             }
                         }
                         .textFieldStyle(.plain)
+                        .textContentType(.oneTimeCode)
                         .font(.system(.body, design: .monospaced))
                         .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
@@ -374,6 +434,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )

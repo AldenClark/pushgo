@@ -785,9 +785,9 @@ enum EventLifecycleState: String {
 
 func eventLifecycleState(from raw: String?) -> EventLifecycleState {
     switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
-    case "ONGOING":
+    case "ONGOING", "ACTIVE", "OPEN", "ACK", "ACKNOWLEDGED", "MUTED", "TRIGGERED":
         return .ongoing
-    case "CLOSED":
+    case "CLOSED", "CLOSE", "RESOLVED", "ENDED", "DONE", "COMPLETED", "CANCELLED", "CANCELED":
         return .closed
     default:
         return .unknown

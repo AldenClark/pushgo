@@ -30,7 +30,13 @@ struct ThingListScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("screen.things.list")
+        .overlay(alignment: .topLeading) {
+            Text("Things screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.things.list")
+        }
     }
 
     private var thingList: some View {
@@ -76,6 +82,7 @@ struct ThingListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
+        .accessibilityIdentifier("list.things")
     }
 
     private func thingAccessibilityActions(for thing: ThingProjection) -> some ViewModifier {

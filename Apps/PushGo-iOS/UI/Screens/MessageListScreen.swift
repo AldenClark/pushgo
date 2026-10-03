@@ -4,6 +4,7 @@ import Observation
 @MainActor
 struct MessageListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.scenePhase) private var scenePhase
@@ -19,6 +20,9 @@ struct MessageListScreen: View {
     @State private var pendingScrollTarget: UUID?
     @State private var isFilterPopoverPresented = false
     @State private var isHistoryCleanupPresented = false
+    @State private var isPullRefreshing = false
+    @State private var isPullRefreshSlow = false
+    @State private var didPullRefreshFail = false
 
     private struct MessageTagSummary: Identifiable, Hashable {
         let tag: String
@@ -68,6 +72,13 @@ struct MessageListScreen: View {
                 publishAutomationState()
 #endif
             }
+            .onChange(of: environment.notificationOpenController.pendingMessageUnavailableFeedback) { _, feedback in
+                // A stale notification/deep link has an explicit list fallback. Do
+                // not leave a previously selected Message sheet covering that result.
+                if feedback != nil {
+                    selectedMessage = nil
+                }
+            }
             .onChange(of: scenePhase) { _, newValue in
                 if newValue == .active {
                     openPendingMessageIfNeeded()
@@ -84,7 +95,7 @@ struct MessageListScreen: View {
                 )
 #endif
             }
-            .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+            .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
                 if let selectedMessage, isPendingLocalDeletion(selectedMessage) {
                     self.selectedMessage = nil
                 }
@@ -167,27 +178,13 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var screenContent: some View {
         if !viewModel.hasLoadedOnce {
-            List(0 ..< 6, id: \.self) { _ in
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.secondary.opacity(0.18))
-                        .frame(width: 42, height: 42)
-                    VStack(alignment: .leading, spacing: 8) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.secondary.opacity(0.18))
-                            .frame(height: 14)
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.secondary.opacity(0.12))
-                            .frame(width: 180, height: 11)
-                    }
-                }
-                .redacted(reason: .placeholder)
-                .accessibilityHidden(true)
-            }
-            .allowsHitTesting(false)
+            initialLoadingState
+        } else if viewModel.loadState == .failed && visibleFilteredMessages.isEmpty {
+            messageLoadFailureState
         } else {
             ZStack {
                 messageList
+                    .id(pendingLocalDeletionController.effectiveScope)
                     .opacity(showsEmptyState ? 0.001 : 1)
                     .allowsHitTesting(!showsEmptyState)
                     .accessibilityHidden(showsEmptyState)
@@ -195,19 +192,119 @@ struct MessageListScreen: View {
                 if showsEmptyState {
                     emptyState
                 }
+
+                if viewModel.loadState == .failed && !visibleFilteredMessages.isEmpty {
+                    messageLoadFailureBanner
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+
+                if !didPullRefreshFail
+                    && (isPullRefreshSlow || viewModel.loadState == .slow)
+                    && !visibleFilteredMessages.isEmpty {
+                    messageRefreshSlowBanner
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
+    private var initialLoadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(localizationManager.localized(
+                viewModel.loadState == .slow
+                    ? "message_ingress_processing_slow"
+                    : "message_ingress_processing_progress"
+            ))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(
+            viewModel.loadState == .slow ? "state.messages.loading.slow" : "state.messages.loading"
+        )
+    }
+
+    private var messageLoadFailureState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+                .multilineTextAlignment(.center)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.load_failed")
+    }
+
+    private var messageLoadFailureBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(localizationManager.localized("message_load_failed"))
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityIdentifier("state.messages.load_failed")
+    }
+
+    private var messageRefreshSlowBanner: some View {
+        Label(
+            localizationManager.localized("message_ingress_processing_slow"),
+            systemImage: "arrow.clockwise"
+        )
+        .font(.subheadline.weight(.semibold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("state.messages.refresh.slow")
+    }
+
+    @ViewBuilder
+    private var messageRefreshFailureRow: some View {
+        if didPullRefreshFail {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(localizationManager.localized("message_refresh_failed"))
+                    .font(.callout)
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityIdentifier("state.messages.refresh.failed")
+        }
+    }
+
     private var isShowingSearchResults: Bool {
-        searchViewModel.hasSearched
+        searchViewModel.hasSearched || searchViewModel.isSearching
     }
 
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
 
     private var showsEmptyState: Bool {
-        visibleFilteredMessages.isEmpty && !isShowingSearchResults
+        visibleFilteredMessages.isEmpty && !isShowingSearchResults && !didPullRefreshFail
     }
 
     private var showsUnreadFilterEmptyState: Bool {
@@ -248,7 +345,35 @@ struct MessageListScreen: View {
     }
 
     private func handlePullToRefresh() async {
-        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        guard !isPullRefreshing else { return }
+        isPullRefreshing = true
+        isPullRefreshSlow = false
+        let slowStateTask = Task { @MainActor in
+            try await Task.sleep(for: .seconds(1))
+            try Task.checkCancellation()
+            isPullRefreshSlow = true
+        }
+        defer {
+            slowStateTask.cancel()
+            isPullRefreshSlow = false
+            isPullRefreshing = false
+        }
+#if DEBUG
+        if let delay = PushGoAutomationContext.qualitySession?.faults.messageRefreshDelayMilliseconds,
+           delay > 0 {
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+#endif
+        let outcome = await environment.syncProviderIngressOutcome(reason: "messages_pull_to_refresh")
+        if case .failed = outcome {
+            didPullRefreshFail = true
+        } else {
+            didPullRefreshFail = false
+        }
         await refreshVisibleMessageData()
     }
 
@@ -268,10 +393,15 @@ struct MessageListScreen: View {
         let filteredMessages = visibleFilteredMessages
         ScrollViewReader { proxy in
             List {
+                ingressNoticeRow
+                messageRefreshFailureRow
+
                 if isShowingSearchResults {
                     if searchResults.isEmpty {
                         if searchViewModel.isSearching {
                             searchProgressRow
+                        } else if searchViewModel.searchFailed {
+                            searchFailureRow
                         } else {
                             searchPlaceholderRow
                         }
@@ -334,6 +464,11 @@ struct MessageListScreen: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isShowingSearchResults {
+                    messagePageStatusInset
+                }
+            }
             .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !showsUnreadFilterEmptyState))
             .modifier(
                 ScrollObserverModifier(enabled: true) { topOffset, pullDistance in
@@ -368,6 +503,60 @@ struct MessageListScreen: View {
     }
 
     @ViewBuilder
+    private var messagePageStatusInset: some View {
+        if viewModel.isLoadingPage {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                Text(localizationManager.localized("message_page_loading"))
+                    .font(.callout)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.regularMaterial)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.page.loading")
+        } else if viewModel.pageLoadError != nil {
+            messagePageFailureInset
+        }
+    }
+
+    private var messagePageFailureInset: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryPageAfterFailure() }
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.page.retry")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.regularMaterial)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.page.failed")
+    }
+
+    @ViewBuilder
+    private var ingressNoticeRow: some View {
+        if let notice = environment.messageIngressNotice {
+            MessageIngressNoticeView(
+                notice: notice,
+                text: environment.messageIngressNoticeText(for: notice)
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder
     private func messageRow(for message: PushMessageSummary, at index: Int) -> some View {
         Button {
             handleSelect(message)
@@ -383,7 +572,7 @@ struct MessageListScreen: View {
             markReadAction(for: message)
             deleteAction(for: message)
         }
-        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+        .accessibilityIdentifier("message.row.\(message.id.uuidString.lowercased())")
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityLabel))
         .accessibilityValue(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityValue ?? ""))
@@ -424,6 +613,7 @@ struct MessageListScreen: View {
                 )
             }
             .tint(Color.appAccentPrimary)
+            .accessibilityIdentifier("action.message.mark_read.\(message.id.uuidString)")
         }
     }
 
@@ -456,6 +646,7 @@ struct MessageListScreen: View {
                 )
             }
         }
+        .accessibilityIdentifier("state.messages.empty")
     }
 
     private func configureNavigationAppearance() {
@@ -474,6 +665,7 @@ struct MessageListScreen: View {
             Group { Color.clear },
         )
         .hideListSeparator()
+        .accessibilityIdentifier("state.messages.search.empty")
     }
 
     private var searchProgressRow: some View {
@@ -482,12 +674,108 @@ struct MessageListScreen: View {
             ProgressView()
                 .progressViewStyle(.circular)
                 .controlSize(.large)
+            Text(localizationManager.localized(
+                searchViewModel.isSearchLoadSlow ? "message_loading_slow" : "searching_messages"
+            ))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier(
+                    searchViewModel.isSearchLoadSlow
+                        ? "state.messages.search.loading.slow"
+                        : "state.messages.search.loading"
+                )
             Spacer()
         }
         .padding(.vertical, 60)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Group { Color.clear })
         .hideListSeparator()
+        // Keep the loading container stable while the copy changes to the
+        // slow-progress warning.  The stable container proves that the real
+        // search is still in flight; the nested state identifier below lets
+        // the UI Oracle distinguish the user-visible slow phase without
+        // racing a transient identifier swap.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.loading")
+    }
+
+    private var searchFailureRow: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("operation_failed"))
+                .font(.headline)
+            Button(localizationManager.localized("retry")) {
+                searchViewModel.retrySearch()
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.search.retry")
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 60)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Group { Color.clear })
+        .hideListSeparator()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.failed")
+    }
+}
+
+private struct MessageIngressNoticeView: View {
+    let notice: AppEnvironment.MessageIngressNotice
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            statusIcon
+                .frame(width: 16, height: 16)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Color.appTextSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurfaceSunken.opacity(0.7), in: .rect(cornerRadius: 10))
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityIdentifier("message.ingress.notice")
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch notice {
+        case .processing, .processingSlow:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+                .tint(tone.foreground)
+                .accessibilityHidden(true)
+        case .waitingRetry:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tone.foreground)
+                .accessibilityHidden(true)
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tone.foreground)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var tone: AppSemanticTone {
+        switch notice {
+        case .processing:
+            .info
+        case .processingSlow, .waitingRetry:
+            .warning
+        case .completed:
+            .success
+        }
     }
 }
 
@@ -630,6 +918,19 @@ private extension MessageListScreen {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                Task { await handlePullToRefresh() }
+            } label: {
+                if isPullRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .disabled(isPullRefreshing)
+            .accessibilityLabel(localizationManager.localized("refresh"))
+            .accessibilityIdentifier("action.messages.refresh")
             if !isShowingSearchResults && viewModel.hasUnreadMessagesInCurrentScope {
                 Button {
                     Task { await markAllCurrentScopeMessagesAsRead() }
@@ -637,7 +938,12 @@ private extension MessageListScreen {
                     Image(systemName: "envelope.open.fill")
                 }
                 .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                .accessibilityIdentifier("action.messages.mark_all_read")
             }
+        }
+        // Give the popover its own stable toolbar item: selecting a channel can
+        // remove the conditional mark-read action while the popover is open.
+        ToolbarItem(id: "message-filter", placement: .primaryAction) {
             Button {
                 isFilterPopoverPresented = true
             } label: {
@@ -675,6 +981,7 @@ private extension MessageListScreen {
         ScrollView {
             filterPopoverContent
         }
+        .accessibilityIdentifier("filter.surface")
         .frame(maxHeight: 420)
     }
 
@@ -720,6 +1027,7 @@ private extension MessageListScreen {
                         ) {
                             viewModel.toggleChannelSelection(summary.key)
                         }
+                        .accessibilityIdentifier("filter.\(summary.key.id)")
                     }
                 }
             }
@@ -895,7 +1203,7 @@ private extension MessageListScreen {
     }
 
     private func isPendingLocalDeletion(_ message: PushMessageSummary) -> Bool {
-        environment.pendingLocalDeletionController.suppressesMessage(
+        return pendingLocalDeletionController.suppressesMessage(
             id: message.id,
             channelId: message.channel
         )
@@ -907,7 +1215,7 @@ private extension MessageListScreen {
 
     @MainActor
     private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [message],
             identity: { $0.id },
             title: { $0.title },

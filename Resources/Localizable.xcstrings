@@ -1756,6 +1756,46 @@
         }
       }
     },
+    "channel_stats_empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No messages" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無訊息" } }
+      }
+    },
+    "channel_stats_loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading activity…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载动态…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在載入動態…" } }
+      }
+    },
+    "channel_stats_no_recent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recent message" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无最近消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無最近訊息" } }
+      }
+    },
+    "channel_stats_summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$d messages · %2$d unread · Latest %3$@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 条消息 · %2$d 条未读 · 最近 %3$@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 則訊息 · %2$d 則未讀 · 最近 %3$@" } }
+      }
+    },
+    "channel_stats_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Activity unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "动态暂不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "動態暫不可用" } }
+      }
+    },
     "current_number_messages" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2458,6 +2498,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "匯出失敗：%@"
+          }
+        }
+      }
+    },
+    "filter_ongoing_events" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ongoing events"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进行中的事件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中的事件"
           }
         }
       }
@@ -3777,6 +3840,167 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "訊息解密"
+          }
+        }
+      }
+    },
+    "message_ingress_completed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages updated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息更新完成"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訊息更新完成"
+          }
+        }
+      }
+    },
+    "message_page_loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading earlier messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载更早的消息…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入更早的訊息…"
+          }
+        }
+      }
+    },
+    "message_ingress_processing_progress" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新新消息…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新新訊息…"
+          }
+        }
+      }
+    },
+    "message_ingress_processing_slow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages are still updating. Please wait…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新消息仍在更新，请稍候…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新訊息仍在更新，請稍候…"
+          }
+        }
+      }
+    },
+    "message_loading_slow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages are still loading. Please wait…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息仍在加载，请稍候…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訊息仍在載入，請稍候…"
+          }
+        }
+      }
+    },
+    "message_ingress_waiting_retry" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some messages will continue processing automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分消息稍后会自动继续处理。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分訊息稍後會自動繼續處理。"
+          }
+        }
+      }
+    },
+    "message_refresh_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh failed. Tap Refresh to retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新失败。点击刷新以重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新整理失敗。點擊重新整理以重試。"
           }
         }
       }
@@ -6020,6 +6244,52 @@
         }
       }
     },
+    "refresh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新整理"
+          }
+        }
+      }
+    },
+    "retry" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重試"
+          }
+        }
+      }
+    },
     "placeholder_no_unread_messages" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7095,6 +7365,29 @@
         }
       }
     },
+    "searching_messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Searching messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在搜索消息…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在搜尋訊息…"
+          }
+        }
+      }
+    },
     "search_objects" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7342,6 +7635,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "網關配置已保存"
+          }
+        }
+      }
+    },
+    "server_configuration_saved_sync_pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway switched; channel sync is pending and will retry automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关已切换，频道同步待完成，稍后会自动重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "網關已切換，頻道同步待完成，稍後會自動重試。"
           }
         }
       }

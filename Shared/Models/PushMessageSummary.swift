@@ -1,5 +1,58 @@
 import Foundation
 
+struct MessagePageCursor: Hashable, Sendable {
+    let receivedAt: Date
+    let id: UUID
+    let isRead: Bool
+
+    init(receivedAt: Date, id: UUID, isRead: Bool = false) {
+        self.receivedAt = receivedAt
+        self.id = id
+        self.isRead = isRead
+    }
+}
+
+enum MessagePaginationError: Error {
+    case cursorDidNotAdvance
+}
+
+struct UniqueMessagePageConsumption<Element> {
+    let appended: [Element]
+    let reachedTarget: Bool
+}
+
+func consumeUniqueMessagePage<Element, ID: Hashable, Cursor: Equatable>(
+    _ page: [Element],
+    targetRemaining: Int,
+    seenIDs: inout Set<ID>,
+    currentCursor: inout Cursor?,
+    id: (Element) -> ID,
+    cursor: (Element) -> Cursor,
+    isVisible: (Element) -> Bool
+) throws -> UniqueMessagePageConsumption<Element> {
+    precondition(targetRemaining > 0)
+    var appended: [Element] = []
+
+    for element in page {
+        let advancedCursor = cursor(element)
+        guard advancedCursor != currentCursor else {
+            throw MessagePaginationError.cursorDidNotAdvance
+        }
+        currentCursor = advancedCursor
+
+        let elementID = id(element)
+        guard isVisible(element), seenIDs.insert(elementID).inserted else {
+            continue
+        }
+        appended.append(element)
+        if appended.count == targetRemaining {
+            return UniqueMessagePageConsumption(appended: appended, reachedTarget: true)
+        }
+    }
+
+    return UniqueMessagePageConsumption(appended: appended, reachedTarget: false)
+}
+
 struct PushMessageSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     let messageId: String?
@@ -34,6 +87,40 @@ struct PushMessageSummary: Identifiable, Hashable, Sendable {
             isRead ? "1" : "0",
         ].joined(separator: "|")
     }
+}
+
+@MainActor
+func loadVisibleMessageSearchPage(
+    before cursor: MessagePageCursor?,
+    targetVisibleCount: Int,
+    pageSize: Int,
+    loadPage: (MessagePageCursor?, Int) async throws -> [PushMessageSummary],
+    isVisible: (PushMessageSummary) -> Bool
+) async throws -> (messages: [PushMessageSummary], nextCursor: MessagePageCursor?, hasMoreResults: Bool) {
+    guard targetVisibleCount > 0 else { return ([], cursor, false) }
+    var results: [PushMessageSummary] = []
+    var currentCursor = cursor
+    var seenIDs: Set<UUID> = []
+    while results.count < targetVisibleCount {
+        try Task.checkCancellation()
+        let page = try await loadPage(currentCursor, pageSize)
+        guard !page.isEmpty else { return (results, currentCursor, false) }
+        let consumed = try consumeUniqueMessagePage(
+            page,
+            targetRemaining: targetVisibleCount - results.count,
+            seenIDs: &seenIDs,
+            currentCursor: &currentCursor,
+            id: \.id,
+            cursor: {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            },
+            isVisible: isVisible
+        )
+        results.append(contentsOf: consumed.appended)
+        if consumed.reachedTarget { return (results, currentCursor, true) }
+        if page.count < pageSize { return (results, currentCursor, false) }
+    }
+    return (results, currentCursor, true)
 }
 
 struct UnreadFilterSessionState {

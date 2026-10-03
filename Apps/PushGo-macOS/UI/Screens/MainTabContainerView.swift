@@ -13,6 +13,7 @@ struct MainTabContainerView: View {
     @State private var selectedMessageSnapshot: PushMessage?
     @State private var selectedEventId: String?
     @State private var selectedThingId: String?
+    @State private var unavailableThingTargetFeedback: String?
 
     @State private var didRefreshAuthorizationStatus: Bool = false
     @State private var dataRefreshTask: Task<Void, Never>?
@@ -34,16 +35,38 @@ struct MainTabContainerView: View {
     @ViewBuilder
     private func configuredRootView<Content: View>(_ content: Content) -> some View {
         content
+            .overlay(alignment: .top) {
+                if let feedback = environment.notificationOpenController.pendingMessageUnavailableFeedback {
+                    AppInlineFeedbackBanner(
+                        message: feedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.message.target_unavailable",
+                        dismissAction: {
+                            environment.notificationOpenController.pendingMessageUnavailableFeedback = nil
+                        }
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                }
+            }
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
                 await environment.pushRegistrationService.refreshAuthorizationStatus()
                 await entityViewModel.reload()
+                if let pendingList = environment.pendingSystemListToOpen {
+                    openList(pendingList)
+                    environment.pendingSystemListToOpen = nil
+                }
                 environment.updateActiveTab(activeTab)
                 if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
                     openPendingEntityIfNeeded()
                 }
                 ensureSidebarSelectionIsVisible()
+            }
+            .task(id: activeTab) {
+                guard activeTab == .channels else { return }
+                await messageListViewModel.refreshChannelSummaries()
             }
             .task {
                 for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
@@ -186,8 +209,18 @@ struct MainTabContainerView: View {
 
     private func sidebarPrimaryRow(_ tab: MainTab) -> some View {
         return HStack(spacing: SidebarLayout.rowSpacing) {
-            Label(tab.localizedTitle(using: localizationManager), systemImage: tab.systemImageName)
-                .font(.headline.weight(.semibold))
+            HStack(spacing: SidebarLayout.titleSpacing) {
+                Image(systemName: tab.systemImageName)
+                    .foregroundStyle(Color.appAccentPrimary)
+                    .frame(width: SidebarLayout.iconWidth)
+                Text(tab.localizedTitle(using: localizationManager))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.appTextPrimary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
+            }
+            .layoutPriority(1)
             Spacer(minLength: 8)
             if tab == .messages {
                 SidebarUnreadBadge()
@@ -195,7 +228,6 @@ struct MainTabContainerView: View {
         }
         .padding(.horizontal, SidebarLayout.rowHorizontalPadding)
         .padding(.vertical, SidebarLayout.primaryRowVerticalPadding)
-        .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
         .listRowInsets(
             EdgeInsets(
                 top: SidebarLayout.rowInsetVertical,
@@ -210,9 +242,11 @@ struct MainTabContainerView: View {
     private enum SidebarLayout {
         static let rowInsetHorizontal: CGFloat = 8
         static let rowInsetVertical: CGFloat = 2
-        static let rowHorizontalPadding: CGFloat = 10
+        static let rowHorizontalPadding: CGFloat = 0
         static let primaryRowVerticalPadding: CGFloat = 7
         static let rowSpacing: CGFloat = 10
+        static let titleSpacing: CGFloat = 10
+        static let iconWidth: CGFloat = 16
     }
     @ViewBuilder
     private var detailContent: some View {
@@ -247,12 +281,19 @@ struct MainTabContainerView: View {
                 viewModel: entityViewModel,
                 selection: $selectedThingId,
                 openThingId: environment.pendingThingToOpen,
+                unavailableTargetFeedback: unavailableThingTargetFeedback,
+                onUnavailableTargetFeedbackChanged: {
+                    unavailableThingTargetFeedback = $0
+                },
                 onOpenThingHandled: {
                     environment.pendingThingToOpen = nil
                 }
             )
         case .channels:
-            ChannelManagementView()
+            ChannelManagementView(
+                channelSummaries: messageListViewModel.channelSummaries,
+                channelSummariesLoadState: messageListViewModel.channelSummariesLoadState
+            )
         case .settings:
             SettingsView()
         }
@@ -298,6 +339,16 @@ struct MainTabContainerView: View {
     private func applySidebarSelection(previous _: SidebarSelection?, current: SidebarSelection?) {
         let nextTab = current?.mainTab ?? .messages
         environment.updateActiveTab(nextTab)
+        if nextTab == .channels {
+            // Recovery belongs to the actual sidebar selection event.  A
+            // NavigationSplitView detail may be constructed before it is
+            // selected, so ChannelManagementView.onAppear is not a reliable
+            // user-entry boundary.
+            Task { @MainActor in
+                await environment.syncSubscriptionsOnChannelListEntry()
+                await messageListViewModel.refreshChannelSummaries()
+            }
+        }
         guard nextTab == .messages else { return }
         switch current ?? .messagesAll {
         case .messagesAll:
@@ -394,6 +445,7 @@ private struct SidebarUnreadBadge: View {
                 )
                 .accessibilityLabel(LocalizedStringKey("unread"))
                 .accessibilityValue(Text(displayText))
+                .accessibilityIdentifier("sidebar.messages.unread_badge")
         }
     }
 }

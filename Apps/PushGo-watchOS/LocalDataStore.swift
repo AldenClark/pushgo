@@ -55,6 +55,14 @@ struct WatchProvisioningState: Hashable, Sendable, Codable {
     let sourceControlGeneration: Int64
 }
 
+struct WatchGatewayRouteCleanup: Sendable, Equatable {
+    let id: String
+    let baseURL: URL
+    let token: String?
+    let deviceKey: String
+    let lastSucceededAt: Date?
+}
+
 struct EntityOpenTarget: Hashable, Sendable {
     let entityType: String
     let entityId: String
@@ -99,6 +107,10 @@ actor LocalDataStore {
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+#if DEBUG
+    private var qualityWatchMessageLoadFailureEnabled = false
+    private var qualityInterruptProvisioningAfterFirstKeychainWrite = false
+#endif
 
     private static let settingsKey = "io.ethan.pushgo.watch.local-settings.v1"
     private static let trackedGatewaysKey = "io.ethan.pushgo.watch.tracked-gateways.v1"
@@ -113,6 +125,12 @@ actor LocalDataStore {
         decoder.dateDecodingStrategy = .iso8601
 
         do {
+#if DEBUG
+            try WatchQualityRuntime.prepareLegacyStoreIfRequested(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+#endif
             sqliteStore = try WatchLocalSQLiteStore(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
@@ -374,7 +392,36 @@ actor LocalDataStore {
 
     func saveWatchProvisioningServerConfig(_ config: ServerConfig?) async throws {
         let sqliteStore = try requireSQLiteStore()
-        try sqliteStore.saveProvisioningServerConfig(config?.normalized())
+        let previousDeviceKey = deviceKeyStore.load(platform: "watchos")
+        try sqliteStore.transitionProvisioningServerConfig(
+            config?.normalized(),
+            previousDeviceKey: previousDeviceKey
+        )
+    }
+
+    func pendingWatchGatewayRouteCleanups() async throws -> [WatchGatewayRouteCleanup] {
+        try requireSQLiteStore().loadPendingGatewayRouteCleanups()
+    }
+
+    func completeWatchGatewayRouteCleanup(id: String) async throws {
+        try requireSQLiteStore().recordGatewayRouteCleanupSuccess(id: id)
+    }
+
+    func enqueueWatchGatewayRouteCleanup(
+        config: ServerConfig,
+        deviceKey: String
+    ) async throws {
+        try requireSQLiteStore().enqueueGatewayRouteCleanup(
+            config: config.normalized(),
+            deviceKey: deviceKey
+        )
+    }
+
+    func isRetiredWatchGatewayRouteKey(baseURL: URL, deviceKey: String) async throws -> Bool {
+        try requireSQLiteStore().isRetiredGatewayRouteKey(
+            baseURL: baseURL,
+            deviceKey: deviceKey
+        )
     }
 
     func loadWatchProvisioningState() async -> WatchProvisioningState? {
@@ -393,6 +440,7 @@ actor LocalDataStore {
     ) async throws -> WatchProvisioningState {
         let sqliteStore = try requireSQLiteStore()
         let normalizedConfig = snapshot.serverConfig?.normalized()
+        let previousDeviceKey = deviceKeyStore.load(platform: "watchos")
         let normalizedGateway = normalizedConfig?.gatewayKey ?? ""
         let provisioningState = WatchProvisioningState(
             schemaVersion: WatchConnectivitySchema.currentVersion,
@@ -407,6 +455,14 @@ actor LocalDataStore {
         let incomingByGateway = Dictionary(grouping: snapshot.channels) {
             $0.gateway.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+
+        // Keychain and SQLite cannot share a transaction. Mark the incoming
+        // generation first so a restart never syncs partly replaced credentials
+        // under the previous committed gateway and generation.
+        try sqliteStore.beginProvisioning(
+            generation: snapshot.generation,
+            contentDigest: snapshot.contentDigest
+        )
 
         for gateway in Set(existing.map(\.gateway)).union(incomingByGateway.keys) where !gateway.isEmpty {
             let incoming = incomingByGateway[gateway] ?? []
@@ -455,15 +511,37 @@ actor LocalDataStore {
             }
 
             try channelSubscriptionStore.saveSubscriptions(gatewayKey: gateway, subscriptions: next)
+#if DEBUG
+            if qualityInterruptProvisioningAfterFirstKeychainWrite,
+               gateway == normalizedGateway {
+                qualityInterruptProvisioningAfterFirstKeychainWrite = false
+                throw AppError.localStore("Injected interruption after watch Keychain credential write.")
+            }
+#endif
             await rememberTrackedGateway(gateway)
         }
 
         if !normalizedGateway.isEmpty {
             await rememberTrackedGateway(normalizedGateway)
         }
-        try sqliteStore.saveProvisioningServerConfig(normalizedConfig)
-        try sqliteStore.saveProvisioningState(provisioningState)
+        try sqliteStore.commitProvisioning(
+            config: normalizedConfig,
+            state: provisioningState,
+            previousDeviceKey: previousDeviceKey
+        )
         return provisioningState
+    }
+
+    func pendingWatchProvisioningGeneration() async throws -> Int64? {
+        try requireSQLiteStore().pendingProvisioningGeneration()
+    }
+
+    func hasPendingWatchProvisioning() async -> Bool {
+        do {
+            return try requireSQLiteStore().pendingProvisioningGeneration() != nil
+        } catch {
+            return true
+        }
     }
 
     func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
@@ -477,9 +555,24 @@ actor LocalDataStore {
     }
 
     func loadWatchLightMessages() async throws -> [WatchLightMessage] {
+#if DEBUG
+        if qualityWatchMessageLoadFailureEnabled {
+            throw AppError.localStore("Injected watch message read failure.")
+        }
+#endif
         let sqliteStore = try requireSQLiteStore()
         return try sqliteStore.loadWatchLightMessages()
     }
+
+#if DEBUG
+    func enableQualityProvisioningInterruption() {
+        qualityInterruptProvisioningAfterFirstKeychainWrite = true
+    }
+
+    func enableQualityWatchMessageLoadFailure() {
+        qualityWatchMessageLoadFailureEnabled = true
+    }
+#endif
 
     func loadWatchLightMessage(messageId: String) async throws -> WatchLightMessage? {
         let sqliteStore = try requireSQLiteStore()
@@ -687,6 +780,152 @@ private final class WatchLocalSQLiteStore {
     func saveProvisioningServerConfig(_ config: ServerConfig?) throws {
         let base64 = try config.flatMap { try encoder.encode($0).base64EncodedString() }
         try upsertAppSettings(columns: ["watch_provisioning_server_config_data_base64": base64])
+    }
+
+    func transitionProvisioningServerConfig(
+        _ config: ServerConfig?,
+        previousDeviceKey: String?
+    ) throws {
+        try writeTransaction {
+            try recordPreviousGatewayRouteIfNeeded(
+                nextConfig: config,
+                previousDeviceKey: previousDeviceKey
+            )
+            try saveProvisioningServerConfig(config)
+        }
+    }
+
+    func commitProvisioning(
+        config: ServerConfig?,
+        state: WatchProvisioningState,
+        previousDeviceKey: String?
+    ) throws {
+        try writeTransaction {
+            try recordPreviousGatewayRouteIfNeeded(
+                nextConfig: config,
+                previousDeviceKey: previousDeviceKey
+            )
+            try saveProvisioningServerConfig(config)
+            try saveProvisioningState(state)
+            try upsertAppSettings(columns: [
+                "watch_provisioning_pending_generation": nil,
+                "watch_provisioning_pending_digest": nil,
+            ])
+        }
+    }
+
+    func beginProvisioning(generation: Int64, contentDigest: String) throws {
+        try upsertAppSettings(columns: [
+            "watch_provisioning_pending_generation": String(generation),
+            "watch_provisioning_pending_digest": contentDigest,
+        ])
+    }
+
+    func pendingProvisioningGeneration() throws -> Int64? {
+        guard let raw = try loadAppSetting(column: "watch_provisioning_pending_generation") else {
+            return nil
+        }
+        guard let generation = Int64(raw) else {
+            throw StoreError.sqliteStepFailed("invalid pending watch provisioning generation")
+        }
+        return generation
+    }
+
+    func loadPendingGatewayRouteCleanups() throws -> [WatchGatewayRouteCleanup] {
+        let statement = try prepare("SELECT id, base_url, token, device_key, last_succeeded_at FROM watch_gateway_route_cleanups ORDER BY created_at, id;")
+        defer { sqlite3_finalize(statement) }
+        var cleanups: [WatchGatewayRouteCleanup] = []
+        while true {
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE { break }
+            guard result == SQLITE_ROW else {
+                throw StoreError.sqliteStepFailed("load pending gateway route cleanup")
+            }
+            guard let id = Self.columnText(statement, index: 0),
+                  let rawURL = Self.columnText(statement, index: 1),
+                  let baseURL = URL(string: rawURL),
+                  let deviceKey = Self.columnText(statement, index: 3)
+            else { throw StoreError.sqliteStepFailed("invalid pending gateway route cleanup") }
+            cleanups.append(WatchGatewayRouteCleanup(
+                id: id,
+                baseURL: baseURL,
+                token: Self.columnText(statement, index: 2),
+                deviceKey: deviceKey,
+                lastSucceededAt: sqlite3_column_type(statement, 4) == SQLITE_NULL
+                    ? nil
+                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 4))
+            ))
+        }
+        return cleanups
+    }
+
+    func recordGatewayRouteCleanupSuccess(id: String) throws {
+        // Retain the obligation: a timed-out old UPSERT can arrive after a
+        // successful DELETE. Future foreground/launch drains recheck it.
+        let statement = try prepare("UPDATE watch_gateway_route_cleanups SET last_succeeded_at = ? WHERE id = ?;")
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, Date().timeIntervalSince1970)
+        try bindText(statement, index: 2, value: id)
+        try stepDone(statement)
+    }
+
+    func enqueueGatewayRouteCleanup(config: ServerConfig, deviceKey: String) throws {
+        try writeTransaction {
+            try insertGatewayRouteCleanup(config: config, deviceKey: deviceKey)
+        }
+    }
+
+    func isRetiredGatewayRouteKey(baseURL: URL, deviceKey: String) throws -> Bool {
+        let statement = try prepare("SELECT 1 FROM watch_retired_gateway_route_keys WHERE base_url = ? AND device_key = ? LIMIT 1;")
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: baseURL.absoluteString)
+        try bindText(statement, index: 2, value: deviceKey)
+        let result = sqlite3_step(statement)
+        guard result == SQLITE_ROW || result == SQLITE_DONE else {
+            throw StoreError.sqliteStepFailed("load retired gateway route key")
+        }
+        return result == SQLITE_ROW
+    }
+
+    private func recordPreviousGatewayRouteIfNeeded(
+        nextConfig: ServerConfig?,
+        previousDeviceKey: String?
+    ) throws {
+        let previousConfig = try loadProvisioningServerConfig()?.normalized()
+        let key = previousDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let previousConfig, !key.isEmpty,
+           previousConfig.gatewayKey != nextConfig?.gatewayKey {
+            try insertGatewayRouteCleanup(config: previousConfig, deviceKey: key)
+        }
+        // A returned gateway receives a fresh device key because the retired
+        // (gateway, key) pair can still have a delayed DELETE in flight. Keep
+        // its pending cleanup until the old remote route is actually absent.
+    }
+
+    private func insertGatewayRouteCleanup(config: ServerConfig, deviceKey: String) throws {
+        let key = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        let statement = try prepare("""
+                INSERT INTO watch_gateway_route_cleanups (id, base_url, token, device_key, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(base_url, device_key) DO UPDATE SET
+                    id = excluded.id,
+                    token = excluded.token,
+                    created_at = excluded.created_at,
+                    last_succeeded_at = NULL;
+                """)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: UUID().uuidString.lowercased())
+        try bindText(statement, index: 2, value: config.gatewayKey)
+        try bindText(statement, index: 3, value: config.token)
+        try bindText(statement, index: 4, value: key)
+        sqlite3_bind_double(statement, 5, Date().timeIntervalSince1970)
+        try stepDone(statement)
+        let retired = try prepare("INSERT OR IGNORE INTO watch_retired_gateway_route_keys (base_url, device_key) VALUES (?, ?);")
+        defer { sqlite3_finalize(retired) }
+        try bindText(retired, index: 1, value: config.gatewayKey)
+        try bindText(retired, index: 2, value: key)
+        try stepDone(retired)
     }
 
     func loadProvisioningState() throws -> WatchProvisioningState? {
@@ -1392,7 +1631,9 @@ private final class WatchLocalSQLiteStore {
                 watch_provisioning_content_digest TEXT,
                 watch_provisioning_applied_at REAL,
                 watch_provisioning_mode_raw_value TEXT,
-                watch_provisioning_source_control_generation INTEGER
+                watch_provisioning_source_control_generation INTEGER,
+                watch_provisioning_pending_generation INTEGER,
+                watch_provisioning_pending_digest TEXT
             );
             """,
             db: db
@@ -1404,6 +1645,38 @@ private final class WatchLocalSQLiteStore {
         try ensureColumn("watch_provisioning_applied_at", type: "REAL", db: db)
         try ensureColumn("watch_provisioning_mode_raw_value", type: "TEXT", db: db)
         try ensureColumn("watch_provisioning_source_control_generation", type: "INTEGER", db: db)
+        try ensureColumn("watch_provisioning_pending_generation", type: "INTEGER", db: db)
+        try ensureColumn("watch_provisioning_pending_digest", type: "TEXT", db: db)
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS watch_gateway_route_cleanups (
+                id TEXT PRIMARY KEY NOT NULL,
+                base_url TEXT NOT NULL,
+                token TEXT,
+                device_key TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                last_succeeded_at REAL,
+                UNIQUE(base_url, device_key)
+            );
+            """,
+            db: db
+        )
+        try ensureTableColumn(
+            table: "watch_gateway_route_cleanups",
+            column: "last_succeeded_at",
+            type: "REAL",
+            db: db
+        )
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS watch_retired_gateway_route_keys (
+                base_url TEXT NOT NULL,
+                device_key TEXT NOT NULL,
+                PRIMARY KEY(base_url, device_key)
+            );
+            """,
+            db: db
+        )
         try ensureTableColumn(
             table: "watch_light_events",
             column: "decryption_state",

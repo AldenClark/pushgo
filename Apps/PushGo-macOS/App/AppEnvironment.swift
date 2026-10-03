@@ -26,6 +26,7 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var isCountsRefreshRequested = false
     @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
@@ -33,6 +34,17 @@ final class AppEnvironment {
     @ObservationIgnored private var scenePhases: [UUID: ScenePhase] = [:]
     @ObservationIgnored private var pendingDeletionActivity: NSObjectProtocol?
     @ObservationIgnored private var pendingDeletionActivityTask: Task<Void, Never>?
+#if DEBUG
+    @ObservationIgnored private var remainingQualityGatewaySwitchValidationFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
+    @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+    @ObservationIgnored private var qualityGatewayPostCommitSyncFailurePending =
+        PushGoAutomationContext.qualitySession?.faults.failGatewayPostCommitSyncOnce == true
+    @ObservationIgnored private var remainingQualityGatewayPostCommitSyncFailures = 0
+    @ObservationIgnored private var qualityEventCloseAttemptCount = 0
+    @ObservationIgnored private var isQualityEventCloseRoundTripInFlight = false
+#endif
 
     private var toastDismissTask: Task<Void, Never>?
     private(set) var isMainWindowVisible = true
@@ -43,6 +55,9 @@ final class AppEnvironment {
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
     private(set) var isDeletionRecoveryReady = false
+#if DEBUG
+    private(set) var qualityRuntimeReadiness = "inactive"
+#endif
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -71,7 +86,97 @@ final class AppEnvironment {
     private(set) var channelListFeedbackMessage: String?
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
 
+    private var isQualityChannelMutationSession: Bool {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario else {
+            return false
+        }
+        return scenario != .none
+#else
+        false
+#endif
+    }
+
+    /// Quality gateway recovery must survive the ordinary process restart used by
+    /// the UI suite.  Keep that state inside the already session-scoped quality
+    /// storage root so debug automation never writes a production preference.
+    private var qualityGatewayRecoveryMarkerURL: URL? {
+#if DEBUG
+        guard isQualityChannelMutationSession,
+              let rootURL = PushGoAutomationContext.storageRootURL
+        else {
+            return nil
+        }
+        return rootURL.appendingPathComponent("gateway-recovery-pending", isDirectory: false)
+#else
+        nil
+#endif
+    }
+
+    private func markQualityGatewayRecoveryPending() {
+        guard let markerURL = qualityGatewayRecoveryMarkerURL else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: markerURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("pending".utf8).write(to: markerURL, options: .atomic)
+        } catch {
+            recordAutomationRuntimeError(error, source: "quality.gateway_recovery.marker_write")
+        }
+    }
+
+    private var hasQualityGatewayRecoveryPending: Bool {
+        guard isQualityChannelMutationSession else { return false }
+        if let markerURL = qualityGatewayRecoveryMarkerURL,
+           FileManager.default.fileExists(atPath: markerURL.path)
+        {
+            return true
+        }
+#if DEBUG
+        do {
+            // The protected committed journal remains authoritative if marker
+            // persistence failed or the process died between the two writes.
+            return try gatewayTransitionJournal.load(platform: platformIdentifier())?.phase == .committed
+        } catch {
+            recordAutomationRuntimeError(error, source: "quality.gateway_recovery.journal_read")
+            return false
+        }
+#else
+        return false
+#endif
+    }
+
+    private func clearQualityGatewayRecoveryPending(expectedTransitionID: UUID? = nil) throws {
+#if DEBUG
+        // Do not let a recovery that started for transition A clear a newer
+        // transition B that was written while the sync awaited the gateway.
+        let current = try gatewayTransitionJournal.load(platform: platformIdentifier())
+        if let expectedTransitionID {
+            if let current, current.transitionID != expectedTransitionID {
+                return
+            }
+        } else if current != nil {
+            return
+        }
+#endif
+        if let markerURL = qualityGatewayRecoveryMarkerURL,
+           FileManager.default.fileExists(atPath: markerURL.path)
+        {
+            try FileManager.default.removeItem(at: markerURL)
+        }
+#if DEBUG
+        if let expectedTransitionID {
+            _ = try gatewayTransitionJournal.clear(
+                platform: platformIdentifier(),
+                expectedTransitionID: expectedTransitionID
+            )
+        }
+#endif
+    }
+
     private let channelSubscriptionService = ChannelSubscriptionService()
+    @ObservationIgnored private let gatewayTransitionJournal = GatewayTransitionJournal()
     @ObservationIgnored private(set) lazy var providerRouteController = ProviderRouteController(
         platform: platformIdentifier(),
         dataStore: dataStore,
@@ -90,7 +195,10 @@ final class AppEnvironment {
         }
     )
     @ObservationIgnored private(set) lazy var notificationIngressController = makeNotificationIngressController()
-    @ObservationIgnored private let localStoreFailureStreakThreshold = 3
+    // Quality may compress repeated process launches, but still exercises the
+    // production recovery surface and destructive Store implementation.
+    @ObservationIgnored private let localStoreFailureStreakThreshold =
+        PushGoAutomationContext.qualitySession?.faults.localStoreFailureStreakThreshold ?? 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
     // Keep AppEnvironment as the composition root. Feature-specific behavior
@@ -106,6 +214,7 @@ final class AppEnvironment {
         pushRegistrationService: pushRegistrationService,
         channelSubscriptionService: channelSubscriptionService,
         providerRouteController: providerRouteController,
+        subscriptionSyncRoundTrip: Self.makeQualityChannelSyncRoundTrip(),
         localizationManager: localizationManager,
         serverConfigProvider: { [weak self] in
             self?.serverConfig
@@ -133,10 +242,14 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
-        }
+        },
+        channelMutationRoundTrip: Self.makeQualityChannelMutationRoundTrip()
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
+        timeout: PushGoAutomationContext.qualitySession?.faults.pendingDeletionTimeoutMilliseconds.map {
+            TimeInterval($0) / 1_000
+        } ?? 5,
         channelCommitHandler: { [weak self] record, owner in
             guard let self else { throw CancellationError() }
             return try await self.channelSubscriptionController.commitPendingChannelRemoval(
@@ -219,6 +332,38 @@ final class AppEnvironment {
         registerDefaultNotificationCategories()
     }
 
+    private static func makeQualityChannelMutationRoundTrip() -> (any ChannelMutationRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
+#else
+        return nil
+#endif
+    }
+
+    private static func makeQualityChannelSyncRoundTrip() -> (any ChannelSubscriptionSyncRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
+#else
+        return nil
+#endif
+    }
+
     private func makeNotificationIngressController() -> NotificationIngressController {
         NotificationIngressController(
             platformSuffix: platformIdentifier(),
@@ -268,9 +413,20 @@ final class AppEnvironment {
         bootstrapTask = nil
     }
 
+#if DEBUG
+    func markQualityRuntimeReadiness(_ status: String?) {
+        qualityRuntimeReadiness = status ?? "inactive"
+    }
+#endif
+
     private func performBootstrap() async {
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+        guard dataStore.storageState.mode == .persistent else {
+            finishProviderIngressBootstrapRecovery()
+            isDeletionRecoveryReady = true
+            return
+        }
         startMessageStoreObservationIfNeeded()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
@@ -428,13 +584,269 @@ final class AppEnvironment {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
-        serverConfig = normalized
-        await refreshChannelSubscriptions()
-        await syncPrivateChannelState()
-        providerRouteController.schedulePreviousGatewayDeviceCleanup(
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+        // A committed quality gateway is authoritative even if the following
+        // subscription reconciliation fails.  Arm a durable marker before the
+        // caller performs that work so the next Channels entry retries through
+        // ChannelSyncController rather than merely reloading cached rows.
+        markQualityGatewayRecoveryPending()
+    }
+
+    /// Gateway replacement is a prepare/commit transition. The candidate must
+    /// issue a fresh device identity and accept the current APNs route before
+    /// any locally active gateway state is changed.
+    func validateAndUpdateServerConfig(_ config: ServerConfig) async throws {
+        try Task.checkCancellation()
+        let normalized = config.normalized()
+        let previousConfig = serverConfig
+        if gatewayIdentity(previousConfig) == gatewayIdentity(normalized) {
+            try Task.checkCancellation()
+            try await updateServerConfig(normalized)
+            return
+        }
+        // Do not overwrite a durable cleanup obligation from an earlier gateway
+        // switch. If it cannot be reconciled now, keep both the old snapshot
+        // and the new candidate out of the active identity rather than silently
+        // forgetting the old remote route.
+        try await reconcileCommittedGatewayTransitionCleanup()
+        try Task.checkCancellation()
+        let previousDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try Task.checkCancellation()
+        let preparedDeviceKey = try await prepareCandidateGateway(normalized)
+        // The candidate has been validated, but no local identity has been
+        // changed yet. Cancellation here must leave the old gateway active.
+        try Task.checkCancellation()
+
+        var transition = GatewayTransitionJournal.Record(
+            platform: platformIdentifier(),
             previousConfig: previousConfig,
             previousDeviceKey: previousDeviceKey,
-            nextConfig: normalized
+            nextConfig: normalized,
+            nextDeviceKey: preparedDeviceKey
+        )
+        // The rollback snapshot is protected and durable before either active
+        // store changes. A cancellation or crash at any later stage therefore
+        // has an unambiguous old identity to restore on the next bootstrap.
+        try gatewayTransitionJournal.save(transition)
+        do {
+            try Task.checkCancellation()
+            try await dataStore.saveServerConfig(normalized)
+            try Task.checkCancellation()
+            try gatewayTransitionJournal.advance(&transition, to: .configPersisted)
+#if DEBUG
+            if remainingQualityGatewaySwitchCommitFailures > 0 {
+                remainingQualityGatewaySwitchCommitFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_local_commit_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway commit failed after candidate config persistence"
+                )
+            }
+#endif
+            try await providerRouteController.persistProviderDeviceKey(
+                preparedDeviceKey,
+                source: "provider.device_key.gateway_switch"
+            )
+            try Task.checkCancellation()
+            try gatewayTransitionJournal.advance(&transition, to: .deviceKeyPersisted)
+        } catch {
+            do {
+                try await restoreGatewayTransition(transition)
+            } catch let rollbackError {
+                throw AppError.typedLocal(
+                    code: "gateway_local_commit_rollback_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "commit=\(error.localizedDescription); rollback=\(rollbackError.localizedDescription)"
+                )
+            }
+            throw error
+        }
+        try gatewayTransitionJournal.advance(&transition, to: .committed)
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+        // The gateway switch has crossed its local commit boundary.  Arm the
+        // session-scoped hand-off before the caller performs post-commit
+        // subscription reconciliation (which may fail or be interrupted).
+        markQualityGatewayRecoveryPending()
+        armQualityGatewayPostCommitSyncFailureIfNeeded()
+        Task(priority: .utility) { @MainActor [weak self] in
+            do {
+                try await self?.reconcileCommittedGatewayTransitionCleanup()
+            } catch {
+                // The new gateway is already the only local identity. Preserve
+                // the committed journal for bootstrap/Channels retry instead of
+                // misreporting cleanup as a candidate-registration failure.
+                self?.recordAutomationRuntimeError(error, source: "gateway.transition.cleanup.commit")
+            }
+        }
+    }
+
+    private func activatePersistedServerConfig(
+        _ normalized: ServerConfig?,
+        previousConfig: ServerConfig?,
+        previousDeviceKey: String?
+    ) async {
+        serverConfig = normalized
+        await refreshChannelSubscriptions(syncProviderRoute: !isQualityChannelMutationSession)
+        if isQualityChannelMutationSession {
+            return
+        }
+        await syncPrivateChannelState()
+    }
+
+    /// Restores both protected stores before this environment consumes gateway
+    /// state. The journal is left in place when either write fails so the next
+    /// bootstrap retries instead of exposing a mixed address/device identity.
+    private func restoreGatewayTransition(
+        _ transition: GatewayTransitionJournal.Record
+    ) async throws {
+        var failures: [Error] = []
+        do {
+            try await dataStore.saveServerConfig(transition.previousConfig)
+        } catch {
+            failures.append(error)
+        }
+        do {
+            try await providerRouteController.restoreProviderDeviceKey(
+                transition.previousDeviceKey,
+                source: "provider.device_key.gateway_switch.rollback"
+            )
+        } catch {
+            failures.append(error)
+        }
+        guard failures.isEmpty else {
+            throw AppError.typedLocal(
+                code: "gateway_local_commit_rollback_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: failures.map(\.localizedDescription).joined(separator: "; ")
+            )
+        }
+        _ = try gatewayTransitionJournal.clear(
+            platform: transition.platform,
+            expectedTransitionID: transition.transitionID
+        )
+    }
+
+    /// Completes a committed transition's remote cleanup. This is deliberately
+    /// separate from local commit: cleanup failure keeps a durable retry record
+    /// while the new gateway remains authoritative.
+    private func reconcileCommittedGatewayTransitionCleanup() async throws {
+        guard let transition = try gatewayTransitionJournal.load(platform: platformIdentifier()),
+              transition.phase == .committed
+        else {
+            return
+        }
+        let persistedConfig = try await dataStore.loadServerConfig()?.normalized()
+        let persistedDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard gatewayIdentity(persistedConfig) == gatewayIdentity(transition.nextConfig),
+              persistedDeviceKey == transition.nextDeviceKey
+        else {
+            throw AppError.typedLocal(
+                code: "gateway_transition_active_identity_mismatch",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "committed gateway transition does not match protected active identity"
+            )
+        }
+#if DEBUG
+        // The quality candidate is an app-owned, in-process gateway contract;
+        // it never creates an old external provider route to retire. Preserve
+        // production cleanup semantics without leaking the test session into a
+        // real gateway merely to clear test-only transition state.
+        if isQualityChannelMutationSession {
+            // Keep the protected committed record until the recovery
+            // controller has produced its business result.  It also acts as
+            // the durable fallback when the marker cannot be written.
+            return
+        }
+#endif
+        try await providerRouteController.cleanupPreviousGatewayDeviceRoute(
+            previousConfig: transition.previousConfig,
+            previousDeviceKey: transition.previousDeviceKey,
+            nextConfig: transition.nextConfig
+        )
+        _ = try gatewayTransitionJournal.clear(
+            platform: transition.platform,
+            expectedTransitionID: transition.transitionID
+        )
+    }
+
+    /// Returns false only when recovery itself cannot make both protected
+    /// values coherent. Callers must then avoid consuming gateway state.
+    private func recoverIncompleteGatewayTransitionIfNeeded() async -> Bool {
+        do {
+            guard let transition = try gatewayTransitionJournal.load(platform: platformIdentifier()) else {
+                return true
+            }
+            guard transition.phase != .committed else { return true }
+            try await restoreGatewayTransition(transition)
+            return true
+        } catch {
+            recordAutomationRuntimeError(error, source: "gateway.transition.recover")
+            return false
+        }
+    }
+
+    private func armQualityGatewayPostCommitSyncFailureIfNeeded() {
+#if DEBUG
+        guard qualityGatewayPostCommitSyncFailurePending else { return }
+        qualityGatewayPostCommitSyncFailurePending = false
+        remainingQualityGatewayPostCommitSyncFailures = 1
+#endif
+    }
+
+    private func gatewayIdentity(_ config: ServerConfig?) -> String {
+        guard let config else { return "" }
+        let normalized = config.normalized()
+        let token = normalized.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(normalized.baseURL.absoluteString)|\(token)"
+    }
+
+    private func prepareCandidateGateway(_ config: ServerConfig) async throws -> String {
+#if DEBUG
+        if PushGoAutomationContext.qualitySession != nil {
+            if remainingQualityGatewaySwitchValidationFailures > 0 {
+                remainingQualityGatewaySwitchValidationFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_registration_rejected",
+                    category: .network,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality candidate gateway rejected device registration"
+                )
+            }
+            guard isQualityChannelMutationSession else {
+                throw AppError.typedLocal(
+                    code: "quality_gateway_validation_unconfigured",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway switch requires an explicit accepted round trip"
+                )
+            }
+            return "quality-gateway-device"
+        }
+#endif
+        let providerToken = try await pushRegistrationService.awaitToken()
+        return try await providerRouteController.prepareProviderRoute(
+            config: config,
+            providerToken: providerToken,
+            reuseExistingDeviceKey: false
         )
     }
 
@@ -472,9 +884,15 @@ final class AppEnvironment {
     }
 
     private func scheduleCountsRefresh() {
-        pendingCountsRefreshTask?.cancel()
+        isCountsRefreshRequested = true
+        guard pendingCountsRefreshTask == nil else { return }
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            await self?.refreshMessageCountsAndNotify()
+            guard let self else { return }
+            repeat {
+                self.isCountsRefreshRequested = false
+                await self.refreshMessageCountsAndNotify()
+            } while self.isCountsRefreshRequested && !Task.isCancelled
+            self.pendingCountsRefreshTask = nil
         }
     }
 
@@ -883,14 +1301,53 @@ final class AppEnvironment {
     }
 
     private func syncSubscriptionsOnLaunch() async {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnLaunch()
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
+        if isQualityChannelMutationSession {
+            channelListFeedbackMessage = nil
+            guard hasQualityGatewayRecoveryPending else {
+                await refreshChannelSubscriptions(syncProviderRoute: false)
+                return
+            }
+            do {
+                let recoveryTransitionID = try gatewayTransitionJournal
+                    .load(platform: platformIdentifier())?
+                    .transitionID
+                try await channelSyncController.syncSubscriptionsIfNeeded()
+                try clearQualityGatewayRecoveryPending(expectedTransitionID: recoveryTransitionID)
+            } catch {
+                recordAutomationRuntimeError(error, source: "channel.sync.entry.quality_recovery")
+                channelListFeedbackMessage = userFacingErrorMessage(error)
+            }
+            return
+        }
         await channelSyncController.syncSubscriptionsOnChannelListEntry()
     }
 
     func syncSubscriptionsIfNeeded() async throws {
+#if DEBUG
+        if remainingQualityGatewayPostCommitSyncFailures > 0 {
+            remainingQualityGatewayPostCommitSyncFailures -= 1
+            throw AppError.typedLocal(
+                code: "quality_gateway_post_commit_sync_failed",
+                category: .network,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality gateway switch committed but subscription sync failed"
+            )
+        }
+#endif
+        if isQualityChannelMutationSession {
+            try await channelSyncController.syncSubscriptionsIfNeeded()
+            // The marker is cleared only by the Channels-entry recovery boundary,
+            // after the user-visible business result has been produced.
+            return
+        }
         try await channelSyncController.syncSubscriptionsIfNeeded()
     }
 
@@ -898,7 +1355,7 @@ final class AppEnvironment {
         channelListFeedbackMessage = nil
     }
 
-    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
+    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async throws {
         var config = serverConfig ?? (Self.makeDefaultServerConfig() ?? ServerConfig(
             id: UUID(),
             name: "Local Device",
@@ -909,13 +1366,13 @@ final class AppEnvironment {
         ))
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
-        do {
-            try await updateServerConfig(config)
-        } catch {
-            showToast(message: localizationManager.localized(
-                "failed_to_save_server_configuration_placeholder",
-                userFacingErrorMessage(error),
-            ))
+        try await updateServerConfig(config)
+        let recovery = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+            using: material,
+            dataStore: dataStore
+        )
+        if recovery.updatedCount > 0 {
+            await refreshMessageCountsAndNotify()
         }
     }
 
@@ -954,7 +1411,7 @@ final class AppEnvironment {
         await dataPageVisibilityController.loadPersistedState()
     }
 
-    private func autoEnableDataPageIfNeeded(for message: PushMessage) {
+    func autoEnableDataPageIfNeeded(for message: PushMessage) {
         dataPageVisibilityController.autoEnableDataPageIfNeeded(for: message)
     }
 
@@ -980,6 +1437,11 @@ final class AppEnvironment {
             localStoreRecoveryController.clearFailureStreak()
             break
         }
+        guard await recoverIncompleteGatewayTransitionIfNeeded() else {
+            serverConfig = nil
+            bootstrapErrors.append(localizationManager.localized("server_configuration_read_failed"))
+            return
+        }
         do {
             serverConfig = try await dataStore.loadServerConfig()?.normalized()
         } catch {
@@ -1001,6 +1463,11 @@ final class AppEnvironment {
                 ))
             }
         }
+        do {
+            try await reconcileCommittedGatewayTransitionCleanup()
+        } catch {
+            recordAutomationRuntimeError(error, source: "gateway.transition.cleanup.bootstrap")
+        }
         await loadDataPageVisibility()
 
         do {
@@ -1021,8 +1488,10 @@ final class AppEnvironment {
             let mergedReasons = listFormatter.string(from: bootstrapErrors) ?? bootstrapErrors.joined(separator: "、")
             showToast(message: localizationManager.localized("initialization_failed_placeholder", mergedReasons))
         }
-        await refreshChannelSubscriptions()
-        await syncPrivateChannelState()
+        await refreshChannelSubscriptions(syncProviderRoute: !isQualityChannelMutationSession)
+        if !isQualityChannelMutationSession {
+            await syncPrivateChannelState()
+        }
     }
 
     private func preparePushInfrastructure() async {
@@ -1060,8 +1529,8 @@ final class AppEnvironment {
         await syncWidgetPushRegistration()
     }
 
-    func refreshChannelSubscriptions() async {
-        await channelSyncController.refreshChannelSubscriptions()
+    func refreshChannelSubscriptions(syncProviderRoute: Bool = true) async {
+        await channelSyncController.refreshChannelSubscriptions(syncProviderRoute: syncProviderRoute)
     }
 
     func channelDisplayName(for channelId: String?) -> String? {
@@ -1157,6 +1626,34 @@ final class AppEnvironment {
             return severity
         }()
 
+#if DEBUG
+        if let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario,
+           scenario != .none
+        {
+            var boundaryPayload: [String: Any] = [
+                "channel_id": normalizedChannelId,
+                "op_id": OpaqueId.generateHex128(),
+                "event_id": normalizedEventId,
+                "event_time": Int64(Date().timeIntervalSince1970),
+                "status": resolvedStatus,
+                "message": resolvedMessage,
+                "attrs": [String: Any](),
+                "severity": resolvedSeverity,
+            ]
+            if let normalizedThingId {
+                boundaryPayload["thing_id"] = normalizedThingId
+            }
+            let boundaryPath: String
+            if let normalizedThingId {
+                boundaryPath = "/thing/\(escapedGatewayPathComponent(normalizedThingId))/event/close"
+            } else {
+                boundaryPath = "/event/close"
+            }
+            try await postGatewayPayload(boundaryPayload, endpointPath: boundaryPath, config: config)
+            return
+        }
+#endif
+
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
             throw AppError.typedLocal(
                 code: "channel_password_missing",
@@ -1223,6 +1720,7 @@ final class AppEnvironment {
     private func applyAggregateScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            Task { await pushRegistrationService.applicationDidBecomeActive() }
             Task { await pendingLocalDeletionController.sceneBecameActive() }
             navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()
@@ -1470,6 +1968,14 @@ final class AppEnvironment {
         guard JSONSerialization.isValidJSONObject(payload) else {
             throw AppError.invalidURL
         }
+#if DEBUG
+        if try await persistQualityEventCloseRoundTripIfNeeded(
+            payload: payload,
+            endpointPath: endpointPath
+        ) {
+            return
+        }
+#endif
         guard var components = URLComponents(url: config.baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
@@ -1496,6 +2002,65 @@ final class AppEnvironment {
             response: response
         )
     }
+
+#if DEBUG
+    /// Replaces only the external Gateway round trip for an explicitly typed quality
+    /// session. The simulated delivery still enters through the production notification
+    /// parser, canonical event projection, and App-owned store.
+    private func persistQualityEventCloseRoundTripIfNeeded(
+        payload: [String: Any],
+        endpointPath: String
+    ) async throws -> Bool {
+        let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario ?? .none
+        guard let delivery = PushGoQualityEventCloseDelivery.make(
+            boundaryPayload: payload,
+            endpointPath: endpointPath,
+            scenario: scenario
+        )
+        else {
+            return false
+        }
+
+        if scenario == .failOnceThenAcceptedAndDelivered {
+            guard !isQualityEventCloseRoundTripInFlight else {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_duplicate_in_flight",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "a second event close crossed the boundary while the first was in flight"
+                )
+            }
+            isQualityEventCloseRoundTripInFlight = true
+            defer { isQualityEventCloseRoundTripInFlight = false }
+            qualityEventCloseAttemptCount += 1
+            try await Task.sleep(for: .milliseconds(2_500))
+            if qualityEventCloseAttemptCount == 1 {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_rejected_once",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality event close rejected once before retry"
+                )
+            }
+        }
+
+        let outcome = await persistRemotePayloadIfNeeded(
+            delivery.payload,
+            requestIdentifier: delivery.requestIdentifier
+        )
+        switch outcome {
+        case .persistedMain, .duplicate:
+            return true
+        case .persistedPending, .rejected, .failed:
+            throw AppError.typedLocal(
+                code: "quality_event_close_delivery_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality event close response did not reach the canonical store"
+            )
+        }
+    }
+#endif
 
     private func escapedGatewayPathComponent(_ raw: String) -> String {
         var allowed = CharacterSet.urlPathAllowed

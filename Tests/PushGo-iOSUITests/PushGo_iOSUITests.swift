@@ -1,5 +1,6 @@
 import XCTest
 import os
+import UIKit
 
 private enum PushGoIOSUITestRuntimeRoots {
     private static let roots = OSAllocatedUnfairLock<[URL]>(initialState: [])
@@ -20,6 +21,28 @@ private enum PushGoIOSUITestRuntimeRoots {
 
 @MainActor
 final class PushGo_iOSUITests: XCTestCase {
+    func testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = "not-valid-base64"
+        let startedAt = Date()
+
+        launch(context.app)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.invalid")
+                .waitForExistence(timeout: 8),
+            "QUALITY_PRECONDITION: invalid App-owned session was not classified within 8 seconds."
+        )
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            10,
+            "QUALITY_PRECONDITION: invalid App-owned session exceeded the 10-second preparation budget."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "quality-runtime.ready").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+    }
+
     private struct AutomationState: Decodable {
         let activeTab: String?
         let visibleScreen: String?
@@ -85,7 +108,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let error: String?
     }
 
-    private struct LaunchContext {
+    struct LaunchContext {
         let app: XCUIApplication
         let runtimeRoot: URL
         let responseURL: URL
@@ -152,6 +175,7 @@ final class PushGo_iOSUITests: XCTestCase {
         .init(code: "zh-CN", localeIdentifier: "zh_CN"),
         .init(code: "zh-TW", localeIdentifier: "zh_TW"),
     ]
+    private let largeFixtureQualityHandshakeTimeout: TimeInterval = 60
 
     private func localizationShowcaseFixturePath(for localization: LocalizationSpec) -> String {
         Self.fixturePath("localization-showcase.\(localization.code).json")
@@ -170,21 +194,1712 @@ final class PushGo_iOSUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    override func tearDownWithError() throws {
+    @MainActor
+    override func tearDown() async throws {
+        let app = XCUIApplication()
+        if app.state != .notRunning {
+            app.terminate()
+        }
         let fileManager = FileManager.default
         for runtimeRoot in PushGoIOSUITestRuntimeRoots.consumeAll() {
             try? fileManager.removeItem(at: runtimeRoot)
         }
     }
 
-    func testLaunchesIntoMessageList() {
+    // Non-discoverable migration diagnostic. It must not be restored to a test until its
+    // command/state oracle is replaced by an independent user-purpose outcome.
+    func legacyDiagnosticLaunchesIntoMessageList() {
         let context = configuredLaunchContext()
         launch(context.app)
 
         assertVisibleScreen("screen.messages.list", in: context)
     }
 
-    func testAutomationRequestCanOpenChannelsScreen() {
+    func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-empty-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "empty.clean"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 5)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+
+        // A rendered empty marker is only a preparation fact.  Exercise the
+        // real Channels -> Settings -> Messages path and require the same
+        // functional empty state after returning, so a frozen or one-way
+        // launch cannot satisfy this journey.
+        openSettingsFromChannels(in: context.app)
+        assertElementExists("screen.settings", in: context.app, timeout: 5)
+        leaveSettings(in: context.app)
+        // Settings is presented from Channels, so the real back action returns
+        // to Channels first.  Continue through the production Messages tab
+        // before asserting the empty-state business endpoint.
+        tapWhenHittable(
+            messagesTab(in: context.app),
+            timeout: 8,
+            message: "Messages must remain reachable after returning from Settings"
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 5)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+    }
+
+    func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
+        let sessionID = "ios-store-fatal-\(UUID().uuidString.lowercased())"
+        let seeded = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        launch(seeded.app)
+        assertQualityRuntimeReady(in: seeded.app, timeout: 15)
+        XCTAssertTrue(
+            seeded.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The destructive recovery journey must begin with real canonical data to lose."
+        )
+        seeded.app.terminate()
+        XCTAssertEqual(seeded.app.state, .notRunning)
+
+        let firstFailure = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        firstFailure.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
+        )
+        launch(firstFailure.app)
+        XCTAssertTrue(
+            element(
+                in: firstFailure.app,
+                identifier: "state.storage.unavailable"
+            ).waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
+            firstFailure.app.buttons["Rebuild database and exit"].exists,
+            "Destructive recovery must not be offered before the configured repeated-failure threshold."
+        )
+        tapWhenHittable(
+            storageRecoveryButton(
+                in: firstFailure.app,
+                identifier: "action.storage.exit",
+                fallbackLabel: "Exit App"
+            ),
+            timeout: 5,
+            message: "The first fatal Store failure must retain the safe exit path."
+        )
+        let firstExit = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: firstFailure.app
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [firstExit], timeout: 5), .completed)
+
+        let failing = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        failing.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
+        )
+
+        launch(failing.app)
+
+        XCTAssertTrue(
+            failing.app.staticTexts[
+                "Local storage is unavailable. The app may be unable to load or save messages."
+            ].waitForExistence(timeout: 8),
+            "A fatal Store open failure must be shown as unavailable, not as an empty message list."
+        )
+        XCTAssertTrue(
+            failing.app.staticTexts.matching(
+                NSPredicate(
+                    format: "label CONTAINS %@",
+                    "Quality-injected local persistent storage initialization failure."
+                )
+            ).firstMatch.exists,
+            "The recovery surface must retain the causal Store failure for diagnosis."
+        )
+        XCTAssertTrue(element(in: failing.app, identifier: "state.storage.unavailable").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "state.messages.empty").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "quality-runtime.ready").exists)
+        let rebuild = storageRecoveryButton(
+            in: failing.app,
+            identifier: "action.storage.rebuild",
+            fallbackLabel: "Rebuild database and exit"
+        )
+        tapWhenHittable(
+            rebuild,
+            timeout: 5,
+            message: "Repeated fatal Store failure must offer destructive rebuild recovery."
+        )
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: failing.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The storage rebuild action must finish deletion before terminating the App."
+        )
+
+        let recovered = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        recovered.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        launch(recovered.app)
+        assertQualityRuntimeReady(in: recovered.app, timeout: 15)
+        assertElementExists("screen.messages.list", in: recovered.app, timeout: 8)
+        assertElementExists("state.messages.empty", in: recovered.app, timeout: 8)
+        XCTAssertFalse(
+            recovered.app.staticTexts["P2 Split Seed Message"].exists,
+            "A destructive rebuild must not resurrect the canonical row that existed before recovery."
+        )
+        XCTAssertFalse(recovered.app.buttons["Exit App"].exists)
+        XCTAssertFalse(recovered.app.buttons["Rebuild database and exit"].exists)
+    }
+
+    func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
+        let sessionID = "ios-standard-\(UUID().uuidString.lowercased())"
+        let seeded = configuredLaunchContext()
+        seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message"
+        )
+
+        launch(seeded.app)
+
+        assertQualityRuntimeReady(in: seeded.app, timeout: 15)
+        let legacyMessage = seeded.app.staticTexts["Legacy Upgrade Message"]
+        XCTAssertTrue(
+            legacyMessage.waitForExistence(timeout: 8),
+            "The production v17-to-current migration must preserve the legacy message in the real list."
+        )
+        legacyMessage.tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Preserved through the production database migration."].exists,
+            "The migrated detail must retain the exact legacy body, not only a row count."
+        )
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "A migrated message must remain usable through the real detail flow."
+        )
+
+        let markAllRead = element(in: seeded.app, identifier: "action.messages.mark_all_read")
+        tapWhenHittable(
+            markAllRead,
+            timeout: 5,
+            message: "The real Messages bulk action must establish a known zero-unread baseline."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: seeded.app,
+            message: "The provider refresh journey must begin from the persisted zero-unread state."
+        )
+        tapWhenHittable(
+            seeded.app.buttons["action.messages.refresh"],
+            timeout: 5,
+            message: "The production Refresh action must remain usable in the PR message journey."
+        )
+        let refreshedTitle = seeded.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            refreshedTitle.waitForExistence(timeout: 8),
+            "A successful provider refresh must add the exact new canonical message to the real list."
+        )
+        XCTAssertTrue(
+            seeded.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row must expose the provider body's accurate canonical value."
+        )
+        assertMessagesTabBadgeCount(
+            1,
+            in: seeded.app,
+            message: "The one persisted provider result must create exactly one unread message."
+        )
+        refreshedTitle.tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Opening the refreshed result must bind to its exact canonical detail."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: seeded.app,
+            message: "Opening the only unread provider result must persist its read transition."
+        )
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The refreshed canonical detail must return to the same Messages journey."
+        )
+        XCTAssertTrue(
+            seeded.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Seeded title was not rendered by the real message list"
+        )
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Seeded body was not rendered by the real message list"
+        )
+        seeded.app.staticTexts["P2 Split Seed Message"].tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(seeded.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+
+        let openLink = scrollToHittableElement(
+            identifier: "action.message.open_link",
+            in: seeded.app
+        )
+        let safari = resetSafariBeforeExternalRoute()
+        tapWhenHittable(
+            openLink,
+            timeout: 8,
+            message: "The canonical message URL must remain reachable through the production detail action"
+        )
+        assertSafariDestination(
+            safari,
+            compactURL: "pushgo.dev/quality-message",
+            fullURL: "https://pushgo.dev/quality-message",
+            compactAddressMessage: "Safari must expose a bounded address-bar expansion interaction",
+            destinationMessage: "Safari must expose the exact canonical message destination, not merely any web page."
+        )
+        seeded.app.activate()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Returning from the browser must preserve the same accurate message detail."
+        )
+
+        let image = element(in: seeded.app, identifier: "message.image.0")
+        for _ in 0..<6 where !(image.exists && image.isHittable) {
+            seeded.app.scrollViews.firstMatch.swipeDown()
+        }
+        tapWhenHittable(
+            image,
+            timeout: 8,
+            message: "The canonical message image must decode into an interactive detail asset"
+        )
+        assertElementExists("dialog.image.preview", in: seeded.app, timeout: 8)
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.image.preview.share"),
+            timeout: 8,
+            message: "The decoded image preview must expose its real Share action"
+        )
+        XCTAssertTrue(
+            seeded.app.otherElements["ActivityListView"].waitForExistence(timeout: 8),
+            "Sharing must prepare a consumable image file and hand it to the system activity view"
+        )
+        seeded.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            // Keep the injected request slow long enough for XCTest's
+            // accessibility snapshot cadence to observe the real warning;
+            // the product's user-facing slow threshold remains one second.
+            messageSearchDelayMilliseconds: 3_000,
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message"
+        )
+        launch(relaunched.app)
+
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Canonical message did not survive a process relaunch"
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Legacy Upgrade Message"].exists,
+            "The migrated canonical message must survive an ordinary process relaunch."
+        )
+        let relaunchedRefreshResult = relaunched.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            relaunchedRefreshResult.waitForExistence(timeout: 8),
+            "The successful provider refresh result must survive the existing process relaunch."
+        )
+        relaunchedRefreshResult.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Relaunch must preserve the refreshed result's exact canonical detail."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: relaunched.app,
+            message: "The refreshed result's read state must remain accurate after relaunch."
+        )
+        tapWhenHittable(
+            element(in: relaunched.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The persisted refresh detail must close before exercising search."
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+
+        let searchField = runtimeQualitySearchField(in: relaunched.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("P2 Split")
+        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
+        let searchTargets = relaunched.app.staticTexts.matching(
+            NSPredicate(format: "label == %@", "P2 Split Seed Message")
+        )
+        let slowSearchState = element(
+            in: relaunched.app,
+            identifier: "state.messages.search.loading.slow"
+        )
+        let slowSearchFeedback = relaunched.app.staticTexts.matching(
+            NSPredicate(
+                format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "Messages are still loading",
+                "消息仍在加载",
+                "訊息仍在載入"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            slowSearchState.waitForExistence(timeout: 2.5),
+            "A deliberately slow search must expose its real slow-loading state before the result is available."
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.exists,
+            "The slow-loading state must expose the supported localized warning text."
+        )
+        XCTAssertFalse(
+            searchTarget.exists,
+            "The slow-search warning must be visible before the delayed result is available."
+        )
+        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            searchTargets.count,
+            1,
+            "The completed search must render one canonical target title, not duplicate results."
+        )
+        XCTAssertFalse(slowSearchState.exists)
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.search.empty").exists)
+        searchTarget.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The slow search must open the exact canonical detail it found."
+        )
+        tapWhenHittable(
+            element(in: relaunched.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The slow-search detail must close before exercising the empty-result state."
+        )
+        tapWhenHittable(
+            searchField.buttons.firstMatch,
+            timeout: 5,
+            message: "The native search clear action must reset the known fresh query"
+        )
+        searchField.tap()
+        searchField.typeText("not-present-in-any-message")
+        assertElementExists("state.messages.search.empty", in: relaunched.app, timeout: 8)
+        XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
+    }
+
+    func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
+        let sessionID = "ios-cleanup-\(UUID().uuidString.lowercased())"
+        let englishLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        let context = configuredLaunchContext(launchArguments: englishLocale)
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.cleanup"
+        )
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let oldRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+        )
+        let recentRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+        )
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(2, in: context.app)
+
+        // Preserve the pre-tap toolbar pixels and AX geometry when the iOS
+        // Simulator cannot resolve the filter control's activation point.
+        let filterScreenshot = XCTAttachment(screenshot: context.app.screenshot())
+        filterScreenshot.name = "message-filter-before-history-cleanup"
+        filterScreenshot.lifetime = .keepAlways
+        add(filterScreenshot)
+        let filterHierarchy = XCTAttachment(string: context.app.debugDescription)
+        filterHierarchy.name = "message-filter-ax-before-history-cleanup"
+        filterHierarchy.lifetime = .keepAlways
+        add(filterHierarchy)
+
+        openMessageFilters(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup"),
+            timeout: 5
+        )
+        let rangeSheet = element(in: context.app, identifier: "sheet.messages.history_cleanup.range")
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        let thirtyDays = element(
+            in: context.app,
+            identifier: "option.messages.history_cleanup.30_days"
+        )
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        tapWhenHittable(thirtyDays, timeout: 5)
+        let confirm = element(
+            in: context.app,
+            identifier: "action.messages.history_cleanup.confirm"
+        )
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        guard let cancel = context.app.buttons
+            .matching(NSPredicate(format: "label == %@", "Cancel"))
+            .allElementsBoundByIndex
+            .first(where: { $0.isHittable }) else {
+            XCTFail("The history cleanup confirmation must offer a usable Cancel action.")
+            return
+        }
+        cancel.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 5))
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 5))
+        assertMessagesTabBadgeCount(
+            2,
+            in: context.app,
+            message: "Cancel must not delete either message or change unread state across relaunch"
+        )
+
+        openMessageFilters(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup"),
+            timeout: 5
+        )
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        tapWhenHittable(thirtyDays, timeout: 5)
+        tapWhenHittable(confirm, timeout: 5)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup.done"),
+            timeout: 8
+        )
+
+        XCTAssertTrue(oldRow.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(1, in: context.app)
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext(launchArguments: englishLocale)
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.cleanup"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+            ).exists,
+            "The removed old message must not return after process relaunch"
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+            ).waitForExistence(timeout: 8)
+        )
+        assertMessagesTabBadgeCount(1, in: relaunched.app)
+    }
+
+    func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
+        let sessionID = "ios-markdown-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.markdown"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let row = context.app.staticTexts["Quality Markdown Structure"]
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+
+        let requiredContent = [
+            "Quality Markdown Heading",
+            "Completed deployment check",
+            "Production quote remains visible",
+            "Gateway",
+            "Healthy",
+            "pushgo status",
+            "{\"environment\":\"quality\"}",
+        ]
+        let renderedElement: (String) -> XCUIElement = { fragment in
+            context.app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@", fragment)
+            ).firstMatch
+        }
+        for fragment in requiredContent {
+            let rendered = renderedElement(fragment)
+            XCTAssertTrue(
+                rendered.waitForExistence(timeout: 5),
+                "The production Markdown renderer omitted \(fragment)"
+            )
+        }
+        XCTAssertTrue(
+            context.app.links["Open quality guide"].waitForExistence(timeout: 5),
+            "The Markdown link was not exposed as a real link"
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["# Quality Markdown Heading"].exists,
+            "Raw Markdown syntax was shown instead of the rendered heading"
+        )
+        let heading = renderedElement("Quality Markdown Heading")
+        let task = renderedElement("Completed deployment check")
+        let gateway = renderedElement("Gateway")
+        let healthy = renderedElement("Healthy")
+        XCTAssertGreaterThan(heading.frame.height, task.frame.height)
+        XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
+        XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
+        XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+
+        let tail = renderedElement("Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻")
+        XCTAssertTrue(tail.waitForExistence(timeout: 5), "The exact Unicode tail was truncated before rendering")
+        let detail = element(in: context.app, identifier: "sheet.message.detail")
+        XCTAssertFalse(
+            detail.frame.intersects(tail.frame),
+            "The representative body must actually overflow the initial viewport"
+        )
+        for _ in 0..<12 {
+            if detail.frame.intersects(tail.frame) { break }
+            detail.swipeUp()
+        }
+        XCTAssertTrue(
+            detail.frame.intersects(tail.frame),
+            "A user must be able to scroll through the exact long body to its Unicode tail"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "Long content must not strand the user in the detail"
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Returning must preserve the exact source message")
+    }
+
+    func testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation() {
+        let context = configuredLaunchContext(
+            launchArguments: [
+                "-AppleLanguages", "(zh-Hans)",
+                "-AppleLocale", "zh_CN",
+            ]
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-zh-large-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            channelMutationScenario: "accepted"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.ready")
+                .label.contains("dynamic type accessibility5"),
+            "The SwiftUI environment must actually apply accessibility5, not merely receive a launch argument"
+        )
+        let tabBar = context.app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 8), "The production tab bar must be visible.")
+        let messagesTab = messagesTab(in: context.app)
+        let messagesTabActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: messagesTab
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [messagesTabActionable], timeout: 8),
+            .completed,
+            "The real Messages tab title must remain visible and actionable with an unread badge."
+        )
+        XCTAssertEqual(
+            messagesTab.label,
+            "消息",
+            "The system tab itself must own the localized Messages title, not a page-title lookalike."
+        )
+        XCTAssertEqual(
+            messagesTabBadgeCount(messagesTab),
+            1,
+            "The messages.standard fixture must expose its exact canonical unread count in the system tab value."
+        )
+        XCTAssertGreaterThanOrEqual(messagesTab.frame.width, 44, "The Messages tab lost its actionable width.")
+        let messagesTabScreenshot = messagesTab.screenshot()
+        let messagesTabAttachment = XCTAttachment(screenshot: messagesTabScreenshot)
+        messagesTabAttachment.name = "ios-zh-hans-messages-tab-title-with-unread-badge"
+        messagesTabAttachment.lifetime = .keepAlways
+        add(messagesTabAttachment)
+        XCTAssertTrue(
+            hasReadableLowerTitleContrast(in: messagesTabScreenshot),
+            "The lower title region has no readable foreground; the unread badge may have hidden the Messages title."
+        )
+        messagesTab.tap()
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        let messageTitle = context.app.staticTexts["P2 Split Seed Message"]
+        tapWhenHittable(messageTitle, timeout: 8, message: "The localized large-font list must open real data")
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The detail must still expose the canonical stored body at accessibility5"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "The large-font detail must keep its close action reachable"
+        )
+
+        let channels = channelsTab(in: context.app)
+        XCTAssertEqual(channels.label, "频道", "The real Channels destination must use zh-Hans")
+        tapWhenHittable(channels, timeout: 8, message: "Channels must remain reachable at accessibility5")
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
+        let addChannel = element(in: context.app, identifier: "action.channels.add")
+        XCTAssertEqual(addChannel.label, "添加频道", "The real add action must use zh-Hans")
+        tapWhenHittable(addChannel, timeout: 8, message: "Add Channel must remain reachable at accessibility5")
+
+        let name = element(in: context.app, identifier: "field.channels.create.name")
+        let password = element(in: context.app, identifier: "field.channels.create.password")
+        tapWhenHittable(name, timeout: 8, message: "Channel name must remain editable at accessibility5")
+        replaceText(in: name, with: "大字体测试频道")
+        enterSecureText(in: password, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "The real localized channel form must be submittable at accessibility5"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000003")
+                .waitForExistence(timeout: 8),
+            "Successful creation must produce the expected real channel row"
+        )
+        XCTAssertTrue(context.app.staticTexts["大字体测试频道"].exists)
+    }
+
+    func testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions() {
+        let sessionID = "ios-message-workflow-\(UUID().uuidString.lowercased())"
+        let zhHansLaunchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        let context = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow",
+            messagePageLoadDelayMilliseconds: 10_000,
+            failMessagePageLoadOnce: true
+        )
+
+        launch(context.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8),
+            "The first production page must start with the newest canonical object"
+        )
+        assertMessagesTabBadgeCount(39, in: context.app)
+        let markAll = element(in: context.app, identifier: "action.messages.mark_all_read")
+        XCTAssertTrue(markAll.waitForExistence(timeout: 5))
+
+        let list = runtimeQualityScrollableList(in: context.app)
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        var observedWorkflowIndices = Set<Int>()
+        let recordVisibleWorkflowRows = {
+            let rows = context.app.buttons.matching(
+                NSPredicate(
+                    format: "identifier BEGINSWITH %@",
+                    "message.row.00000000-0000-0000-0000-"
+                )
+            )
+            var visibleRows: [(index: Int, identifier: String, minY: CGFloat)] = []
+            for offset in 0..<rows.count {
+                let row = rows.element(boundBy: offset)
+                let frame = row.frame
+                guard row.exists,
+                      frame.width > 0,
+                      frame.height > 0,
+                      frame.intersects(list.frame),
+                      let suffix = row.identifier.split(separator: "-").last,
+                      let encodedIndex = Int(suffix, radix: 16),
+                      encodedIndex > 0
+                else {
+                    continue
+                }
+
+                let index = encodedIndex - 1
+                XCTAssertTrue(
+                    row.label.contains("Quality workflow \(index)."),
+                    "Stable identity \(row.identifier) must remain bound to Quality workflow \(index)."
+                )
+                visibleRows.append((index, row.identifier, frame.minY))
+                observedWorkflowIndices.insert(index)
+            }
+
+            let orderedRows = visibleRows.sorted { $0.minY < $1.minY }
+            XCTAssertEqual(
+                Set(orderedRows.map(\.identifier)).count,
+                orderedRows.count,
+                "Every visible workflow row must have one stable identity."
+            )
+            for pair in zip(orderedRows, orderedRows.dropFirst()) {
+                XCTAssertEqual(
+                    pair.0.index - pair.1.index,
+                    1,
+                    "Every visible workflow viewport must preserve contiguous newest-first order."
+                )
+            }
+        }
+        let swipeUpAndRecord = {
+            list.swipeUp()
+            recordVisibleWorkflowRows()
+        }
+        recordVisibleWorkflowRows()
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
+        for _ in 0..<12 where !pageLoading.exists {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            pageLoading.waitForExistence(timeout: 5) && pageLoading.isHittable,
+            "A slow next page must expose a visible, reachable bottom progress state instead of looking frozen"
+        )
+        // iOS 26.4 can project this combined SwiftUI HStack's identifier onto
+        // the spinner while exposing its localized Text as a sibling node.
+        // Keep both the visible progress and the nearby explanation as oracles.
+        let loadingText = context.app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "正在加载更早的消息")
+        ).firstMatch
+        let nearbyLoadingTextIsVisible = loadingText.exists
+            && loadingText.frame.width > 0
+            && loadingText.frame.height > 0
+            && loadingText.frame.intersects(context.app.windows.firstMatch.frame)
+            && abs(loadingText.frame.midY - pageLoading.frame.midY) < 40
+        XCTAssertTrue(
+            pageLoading.label.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
+            "The visible bottom progress must include its nearby zh-Hans explanation, not only a spinner."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 75"].exists,
+            "The last row from page 1 must remain usable while page 2 is loading"
+        )
+        let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 8) && pageFailure.isHittable,
+            "A failed next page must expose a visible, reachable page-owned recovery state instead of silently stopping."
+        )
+        let pageFailureMessage = context.app.staticTexts["无法加载消息，请稍后重试。"]
+        XCTAssertTrue(
+            pageFailureMessage.waitForExistence(timeout: 3) && pageFailureMessage.isHittable,
+            "The page-owned failure state must expose a visible, reachable explanation of the load failure."
+        )
+        let retainedPageOneTail = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000004c"
+        )
+        // The failure inset is intentionally outside the List. Its appearance
+        // reduces the viewport, so the row that triggered pagination can remain
+        // in the data set while being just below the visible edge. Scroll it
+        // into the normal content area before judging the real user action;
+        // an existence check alone would not prove that the retained message
+        // can still be opened.
+        for _ in 0..<6 where !(retainedPageOneTail.exists && retainedPageOneTail.isHittable) {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            retainedPageOneTail.waitForExistence(timeout: 5) && retainedPageOneTail.isHittable,
+            "The accurate page-1 tail must remain reachable while page 2 is failed."
+        )
+        XCTAssertTrue(
+            retainedPageOneTail.label.contains("Quality workflow 75"),
+            "The retained page-1 tail must keep its canonical visible content while page 2 is failed."
+        )
+        tapWhenHittable(
+            retainedPageOneTail,
+            timeout: 5,
+            message: "The retained page-1 tail must open its real message detail while page 2 is failed."
+        )
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Cross-page deterministic workflow row 75."]
+                .waitForExistence(timeout: 5),
+            "Opening the retained page-1 tail must expose its exact canonical body."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The retained page-1 detail must close through its real action."
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 3),
+            "Returning from the retained page-1 detail must preserve the page-owned failure state."
+        )
+        let pageRetry = element(in: context.app, identifier: "action.messages.page.retry")
+        XCTAssertTrue(
+            pageRetry.waitForExistence(timeout: 3) && pageRetry.isHittable,
+            "Page Retry must be a real user action on the failed append owner."
+        )
+        pageRetry.tap()
+        let secondPageHead = context.app.staticTexts["Quality workflow 74"]
+        for _ in 0..<12 where !secondPageHead.exists {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            secondPageHead.waitForExistence(timeout: 5),
+            "The first canonical object from production page 2 was not reachable."
+        )
+        let secondPageTail = context.app.staticTexts["Quality workflow 25"]
+        for _ in 0..<14 where !secondPageTail.exists {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            secondPageTail.waitForExistence(timeout: 5),
+            "The last canonical object from production page 2 was not reachable."
+        )
+
+        let finalPagePredecessor = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000002"
+        )
+        let finalPageTarget = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        for _ in 0..<14 where !(finalPagePredecessor.exists && finalPageTarget.exists) {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            finalPageTarget.waitForExistence(timeout: 5),
+            "The oldest canonical object from production page 3 was not reachable"
+        )
+        XCTAssertTrue(
+            finalPagePredecessor.waitForExistence(timeout: 5),
+            "Production page 3 must not silently drop its penultimate canonical object."
+        )
+        XCTAssertTrue(
+            finalPagePredecessor.label.contains("Quality workflow 1"),
+            "The penultimate identity must remain bound to its accurate visible title."
+        )
+        XCTAssertTrue(
+            finalPageTarget.label.contains("Quality workflow 0"),
+            "The oldest identity must remain bound to its accurate visible title."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 1"].exists &&
+                context.app.staticTexts["Quality workflow 0"].exists,
+            "Both canonical final-page titles must be visibly rendered, not merely exposed as identifiers."
+        )
+        for identifier in [
+            "message.row.00000000-0000-0000-0000-000000000002",
+            "message.row.00000000-0000-0000-0000-000000000001",
+        ] {
+            XCTAssertEqual(
+                context.app.descendants(matching: .any).matching(identifier: identifier).count,
+                1,
+                "Repeated scroll pressure must append every final-page object exactly once."
+            )
+        }
+        XCTAssertLessThan(
+            finalPagePredecessor.frame.minY,
+            finalPageTarget.frame.minY,
+            "Production page 3 must preserve canonical newest-first ordering."
+        )
+        recordVisibleWorkflowRows()
+        XCTAssertEqual(
+            observedWorkflowIndices,
+            Set(0..<125),
+            "The production paging journey must render every canonical object exactly once without gaps."
+        )
+
+        let messagesTab = messagesTab(in: context.app)
+        messagesTab.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
+            "Reselecting Messages once must reach the nearest unread canonical object"
+        )
+        XCTAssertFalse(context.app.staticTexts["Quality workflow 124"].exists)
+
+        messagesTab.doubleTap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 5),
+            "Double-tapping Messages must reach the newest canonical object"
+        )
+        RunLoop.current.run(until: Date().addingTimeInterval(0.45))
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 124"].exists,
+            "The canceled single-tap task must not move the list after a double-tap"
+        )
+        XCTAssertFalse(context.app.staticTexts["Quality workflow 39"].exists)
+
+        messagesTab.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
+            "A later single reselect must still reach the nearest unread object"
+        )
+        let unreadRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000028"
+        )
+        XCTAssertTrue(unreadRow.waitForExistence(timeout: 5))
+        let unreadLabel = unreadRow.label
+        unreadRow.tap()
+        let detail = element(in: context.app, identifier: "sheet.message.detail")
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        let closeDetail = element(in: context.app, identifier: "action.message.close")
+        XCTAssertTrue(closeDetail.waitForExistence(timeout: 5))
+        closeDetail.tap()
+        XCTAssertTrue(detail.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(unreadRow.waitForExistence(timeout: 5))
+        let readStateChanged = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", unreadLabel),
+            object: unreadRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [readStateChanged], timeout: 5),
+            .completed,
+            "Opening the real detail must change the row's accessible read state"
+        )
+        context.app.terminate()
+
+        let afterSingleRead = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
+        afterSingleRead.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow"
+        )
+        launch(afterSingleRead.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
+        assertQualityRuntimeReady(in: afterSingleRead.app, timeout: 15)
+        assertMessagesTabBadgeCount(
+            38,
+            in: afterSingleRead.app,
+            message: "Reading one real message must persist and decrement the navigation badge exactly once"
+        )
+        let persistentMarkAll = element(
+            in: afterSingleRead.app,
+            identifier: "action.messages.mark_all_read"
+        )
+        XCTAssertTrue(persistentMarkAll.waitForExistence(timeout: 5))
+        persistentMarkAll.tap()
+        XCTAssertTrue(
+            persistentMarkAll.waitForNonExistence(timeout: 8),
+            "All unread messages were not cleared"
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: afterSingleRead.app,
+            message: "Marking all messages read must remove the navigation badge"
+        )
+        afterSingleRead.app.terminate()
+
+        let relaunched = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow"
+        )
+        launch(relaunched.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "action.messages.mark_all_read")
+                .waitForExistence(timeout: 3),
+            "Read state was reset when the App relaunched"
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: relaunched.app,
+            message: "The cleared unread badge must not return after process relaunch"
+        )
+        element(in: relaunched.app, identifier: "action.messages.filter").tap()
+        let unreadFilter = element(in: relaunched.app, identifier: "filter.unread_only")
+        XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
+        unreadFilter.tap()
+        assertElementExists("state.messages.empty", in: relaunched.app, timeout: 8)
+
+        if !unreadFilter.waitForExistence(timeout: 1) {
+            let filterButton = element(in: relaunched.app, identifier: "action.messages.filter")
+            XCTAssertTrue(filterButton.waitForExistence(timeout: 5))
+            filterButton.tap()
+            XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
+        }
+        unreadFilter.tap()
+        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+    }
+
+    func testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist() {
+        let sessionID = "ios-message-filters-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.filters"
+        )
+        let allTitles = [
+            "Quality filter alpha even",
+            "Quality filter alpha odd",
+            "Quality filter beta odd",
+            "Quality filter beta even",
+            "Quality filter ungrouped orphan",
+        ]
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertMessageTitles(allTitles, excluding: [], in: context.app)
+        assertMessagesTabBadgeCount(4, in: context.app)
+
+        // This diagnostic snapshots the real foreground/window geometry before
+        // the first filter action. A failed XCTest hit-point report can render
+        // every ancestor as an infinite-origin, zero-size failure snapshot;
+        // these earlier measurements distinguish that from the live UI state.
+        func attachFilterProbe(_ name: String, _ body: String) {
+            let attachment = XCTAttachment(string: body)
+            attachment.name = "message-facet-filter-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        attachFilterProbe(
+            "app-state",
+            "epoch=\(Date().timeIntervalSince1970) state=\(context.app.state)"
+        )
+        let filterGeometry: [(String, XCUIElement)] = [
+            ("main-window", context.app.windows.firstMatch),
+            ("filter-button", context.app.buttons["action.messages.filter"]),
+            ("filter-any", element(in: context.app, identifier: "action.messages.filter")),
+            ("messages-tab", context.app.buttons["tab.messages"]),
+            ("refresh-button", context.app.buttons["action.messages.refresh"]),
+            ("mark-all-read-button", context.app.buttons["action.messages.mark_all_read"]),
+        ]
+        for (name, target) in filterGeometry {
+            let started = Date().timeIntervalSince1970
+            let exists = target.exists
+            let frame = exists ? String(describing: target.frame) : "<missing>"
+            attachFilterProbe(
+                name,
+                "query_start_epoch=\(started) query_end_epoch=\(Date().timeIntervalSince1970) "
+                    + "exists=\(exists) frame=\(frame)"
+            )
+        }
+        let filterPixels = XCTAttachment(screenshot: context.app.screenshot())
+        filterPixels.name = "message-facet-filter-before-first-tap"
+        filterPixels.lifetime = .keepAlways
+        add(filterPixels)
+
+        openMessageFilters(in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.tag.even"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter alpha even"],
+            excluding: [
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+                "Quality filter ungrouped orphan",
+            ],
+            in: context.app
+        )
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-filter-alpha", towardTags: false, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.tag.even"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-ungrouped"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: [
+                "Quality filter alpha even",
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+            ],
+            in: context.app
+        )
+
+        let ungroupedRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000f005"
+        )
+        XCTAssertTrue(ungroupedRow.waitForExistence(timeout: 5))
+        let unreadUngroupedLabel = ungroupedRow.label
+        let markCurrentScopeRead = element(
+            in: context.app,
+            identifier: "action.messages.mark_all_read"
+        )
+        tapWhenHittable(markCurrentScopeRead, timeout: 5)
+        XCTAssertTrue(markCurrentScopeRead.waitForNonExistence(timeout: 8))
+        assertMessagesTabBadgeCount(
+            3,
+            in: context.app,
+            message: "Only the selected ungrouped unread message may be marked read"
+        )
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.filters"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        assertMessagesTabBadgeCount(3, in: relaunched.app)
+        let relaunchedUngroupedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000f005"
+        )
+        XCTAssertTrue(relaunchedUngroupedRow.waitForExistence(timeout: 8))
+        XCTAssertNotEqual(
+            relaunchedUngroupedRow.label,
+            unreadUngroupedLabel,
+            "The scoped read result was not preserved across process relaunch"
+        )
+
+        openMessageFilters(in: relaunched.app)
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: relaunched.app)
+        tapWhenHittable(element(in: relaunched.app, identifier: "filter.channel-ungrouped"), timeout: 5)
+        dismissMessageFilters(in: relaunched.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: Array(allTitles.dropLast()),
+            in: relaunched.app
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "action.messages.mark_all_read")
+                .waitForExistence(timeout: 2),
+            "The already-read ungrouped scope must not offer another unread bulk action"
+        )
+    }
+
+    func testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-search-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            failMessageSearchOnce: true
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let searchField = runtimeQualitySearchField(in: context.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        replaceText(in: searchField, with: "P2 Split")
+        XCTAssertEqual(searchField.value as? String, "P2 Split")
+        let target = context.app.staticTexts["P2 Split Seed Message"]
+        assertElementExists("state.messages.search.failed", in: context.app, timeout: 8)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "state.messages.search.empty").exists,
+            "A failed search must not masquerade as a genuine no-results state."
+        )
+        XCTAssertFalse(
+            target.exists,
+            "The pre-search list must not remain visible as if it were a result for the failed query."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.search.retry"),
+            timeout: 5,
+            message: "A search failure must offer a real retry action."
+        )
+        XCTAssertTrue(target.waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.failed").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.empty").exists)
+        target.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+    }
+
+    func testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch() {
+        let sessionID = "ios-delete-undo-\(UUID().uuidString.lowercased())"
+        let qualityReadinessTimeout: TimeInterval = 30
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: qualityReadinessTimeout)
+        let title = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        title.tap()
+        let delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8))
+        delete.tap()
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(row.waitForNonExistence(timeout: 2))
+        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
+        context.app.terminate()
+
+        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
+        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
+        )
+        launch(afterTermination.app)
+        assertQualityRuntimeReady(in: afterTermination.app, timeout: qualityReadinessTimeout)
+        let restoredPendingDeletion = element(
+            in: afterTermination.app,
+            identifier: "state.pending_deletion"
+        )
+        XCTAssertTrue(
+            restoredPendingDeletion.waitForExistence(timeout: 8),
+            "A pending deletion must remain undoable after the original process terminates"
+        )
+        XCTAssertFalse(
+            element(
+                in: afterTermination.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "The restored pending scope must continue suppressing the target until Undo"
+        )
+        tapWhenHittable(
+            element(in: afterTermination.app, identifier: "action.pending_deletion.undo"),
+            timeout: 8,
+            message: "A restored pending deletion must expose a real Undo action"
+        )
+        XCTAssertTrue(
+            afterTermination.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Undo after process termination must restore the canonical object"
+        )
+        afterTermination.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: qualityReadinessTimeout)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Undo must restore the canonical object, not only the visible row"
+        )
+    }
+
+    func testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch() {
+        let sessionID = "ios-delete-commit-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        let targetTitle = context.app.staticTexts["Quality Delete History Message"]
+        let controlTitle = context.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(
+            targetRow.waitForExistence(timeout: 8) && targetTitle.exists,
+            "The exact target row must exist before its later absence can prove deletion"
+        )
+        XCTAssertTrue(controlTitle.exists, "The unrelated control message must exist before deletion")
+        tapWhenHittable(
+            targetRow,
+            timeout: 8,
+            message: "The exact target row must be a real actionable message entry"
+        )
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].exists,
+            "The delete action must start from the exact target detail"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.delete"),
+            timeout: 8
+        )
+
+        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
+            "The test must observe a real undo opportunity before deliberately letting it expire"
+        )
+
+        // An explicit XCTest process termination is the cheapest real
+        // interruption boundary available to this UI lane. The durable pending record must
+        // survive the termination, remain visible/suppressed after the next
+        // launch, and then complete exactly once at its original deadline.
+        context.app.terminate()
+        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
+        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+        launch(afterTermination.app)
+        assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
+        let restoredPendingDeletion = element(
+            in: afterTermination.app,
+            identifier: "state.pending_deletion"
+        )
+        XCTAssertTrue(
+            restoredPendingDeletion.waitForExistence(timeout: 8),
+            "A pending deletion must survive a process termination before its deadline"
+        )
+        XCTAssertFalse(
+            element(
+                in: afterTermination.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "The restored pending scope must continue suppressing the target row"
+        )
+        XCTAssertTrue(
+            restoredPendingDeletion.waitForNonExistence(timeout: 15),
+            "The real undo deadline did not commit and clear the pending deletion"
+        )
+        XCTAssertFalse(
+            afterTermination.app.staticTexts["Quality Delete History Message"].exists,
+            "The committed target must stay absent"
+        )
+        XCTAssertTrue(
+            afterTermination.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 5),
+            "Committing one deletion must not remove an unrelated message"
+        )
+        let afterTerminationControlRow = element(
+            in: afterTermination.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        tapWhenHittable(
+            afterTerminationControlRow,
+            timeout: 5,
+            message: "The unrelated canonical message must remain a real actionable row after commit"
+        )
+        assertElementExists("sheet.message.detail", in: afterTermination.app, timeout: 5)
+        XCTAssertTrue(
+            afterTermination.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists,
+            "The control message must retain its exact canonical content"
+        )
+        tapWhenHittable(
+            element(in: afterTermination.app, identifier: "action.message.close"),
+            timeout: 5
+        )
+        afterTermination.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A committed deletion must not revive when the App rebuilds its canonical list"
+        )
+        XCTAssertFalse(relaunched.app.staticTexts["Quality Delete History Message"].exists)
+        let relaunchedControlRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        let relaunchedControl = relaunched.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(relaunchedControl.waitForExistence(timeout: 8))
+        tapWhenHittable(
+            relaunchedControlRow,
+            timeout: 5,
+            message: "The unrelated canonical message must remain a real actionable row after relaunch"
+        )
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 5)
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists,
+            "The unrelated canonical message must remain accurate after relaunch"
+        )
+        relaunched.app.terminate()
+
+        let unavailableTarget = configuredLaunchContext(
+            runtimeRoot: context.runtimeRoot,
+            requestName: "message.open",
+            args: ["message_id": "01H00000000000000000000002"]
+        )
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+        launch(unavailableTarget.app)
+        assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
+        assertElementExists("screen.messages.list", in: unavailableTarget.app, timeout: 8)
+        let unavailableFeedback = element(
+            in: unavailableTarget.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Message must visibly explain the fallback instead of leaving a pending target."
+        )
+        let unavailableTargetMessages = [
+            "The requested item was not found or has expired.",
+            "目标不存在，或已失效。",
+            "目標不存在，或已失效。",
+        ]
+        let unavailableTargetText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            unavailableTargetMessages.contains(where: { message in
+                unavailableTargetText.contains(message)
+                    || unavailableTarget.app.staticTexts[message].exists
+            }),
+            "The fallback must explain that the exact Message target is unavailable."
+        )
+        XCTAssertFalse(
+            unavailableTarget.app.staticTexts["Quality Delete History Message"].exists,
+            "Routing to the deleted Message must not revive its committed record or stale detail."
+        )
+        let survivingMessage = unavailableTarget.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(
+            survivingMessage.waitForExistence(timeout: 5),
+            "After the deleted-target fallback, the canonical Messages list must remain usable."
+        )
+        survivingMessage.tap()
+        assertElementExists("sheet.message.detail", in: unavailableTarget.app, timeout: 8)
+        XCTAssertTrue(
+            unavailableTarget.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 5),
+            "The surviving Message must still open its exact canonical detail after fallback."
+        )
+    }
+
+    func testSlowMessageLoadBecomesVisibleBeforeDataCompletes() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-slow-\(UUID().uuidString.lowercased())",
+            fixture: "empty.clean",
+            messageLoadDelayMilliseconds: 8_000
+        )
+
+        launch(context.app)
+
+        assertElementExists("state.messages.loading.slow", in: context.app, timeout: 4)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 10)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+    }
+
+    func testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-refresh-slow-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let title = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        let refresh = context.app.buttons["action.messages.refresh"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        refresh.tap()
+
+        XCTAssertTrue(title.exists, "Refresh must not blank the last accurate snapshot")
+        assertElementExists("state.messages.refresh.slow", in: context.app, timeout: 2)
+        XCTAssertTrue(title.exists, "Slow-state feedback must coexist with the last accurate snapshot")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForNonExistence(timeout: 5)
+        )
+        XCTAssertTrue(title.exists, "Successful refresh must end on accurate content")
+    }
+
+    func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {
+        let sessionID = "ios-refresh-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let originalTitle = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(originalTitle.waitForExistence(timeout: 8))
+        context.app.buttons["action.messages.refresh"].tap()
+
+        assertElementExists("state.messages.refresh.failed", in: context.app, timeout: 5)
+        XCTAssertTrue(originalTitle.exists)
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not report the provider result as persisted."
+        )
+        let retry = context.app.buttons["action.messages.refresh"]
+        XCTAssertTrue(retry.isHittable)
+        retry.tap()
+
+        let refreshedTitle = context.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(refreshedTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForNonExistence(timeout: 5)
+        )
+        refreshedTitle.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The failed refresh must not lose the prior canonical message after relaunch."
+        )
+        let persistedRefresh = relaunched.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            persistedRefresh.waitForExistence(timeout: 8),
+            "The successful retry must persist the new canonical message across relaunch."
+        )
+        XCTAssertEqual(
+            relaunched.app.staticTexts
+                .matching(NSPredicate(format: "label == %@", "P2 Refresh Result")).count,
+            1,
+            "Retry must persist the provider result once, without a duplicate row."
+        )
+        persistedRefresh.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted retry result must reopen its exact body after relaunch."
+        )
+    }
+
+    func testMessageLoadFailureShowsRetryAndRecoversToRealDataState() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-retry-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failMessageLoad: true
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(
+            in: context.app,
+            timeout: 15,
+            expectedSessionID: sessionID
+        )
+
+        assertElementExists("state.messages.load_failed", in: context.app, timeout: 5)
+        let retryCandidates = context.app.descendants(matching: .any)
+            .matching(identifier: "action.messages.retry")
+            .allElementsBoundByIndex
+        let retry = retryCandidates.first(where: { $0.exists && $0.isHittable })
+        XCTAssertNotNil(
+            retry,
+            "Retry must expose at least one visible, hittable production interaction"
+        )
+        retry?.tap()
+        let targetTitle = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(
+            targetTitle.waitForExistence(timeout: 8),
+            "Retry must restore the canonical non-empty Message result, not only clear the error state."
+        )
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            targetRow.waitForExistence(timeout: 5) && targetRow.isHittable,
+            "Retry must restore the stable canonical Message row, not a title-only lookalike."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any)
+                .matching(identifier: "message.row.00000000-0000-0000-0000-000000000001")
+                .count,
+            1,
+            "Retry must expose exactly one stable canonical Message row."
+        )
+        XCTAssertEqual(
+            context.app.staticTexts.matching(
+                NSPredicate(format: "label == %@", "P2 Split Seed Message")
+            ).count,
+            1,
+            "Retry must restore exactly one canonical target row."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+        targetRow.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Retry must open the restored canonical Message and expose its exact body."
+        )
+    }
+
+    func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
         let context = configuredLaunchContext(
             requestName: "nav.switch_tab",
             args: ["tab": "channels"]
@@ -195,7 +1910,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(element(in: context.app, identifier: "screen.channels").waitForExistence(timeout: 8))
     }
 
-    func testNavSwitchTabMatrixCoversPrimaryScreens() {
+    func legacyDiagnosticNavSwitchTabMatrixCoversPrimaryScreens() {
         let routeMatrix: [(tab: String, screen: String)] = [
             ("messages", "screen.messages.list"),
             ("events", "screen.events.list"),
@@ -213,58 +1928,2078 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    func testImportedEventFixtureCanOpenEventDetail() {
-        let context = configuredLaunchContext(
-            startupFixturePath: eventFixturePath,
-            requestName: "entity.open",
-            args: ["entity_type": "event", "entity_id": eventFixtureId]
+    func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() throws {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-navigation-\(UUID().uuidString.lowercased())"
+        context.app.launchArguments += [
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US",
+        ]
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "core.positive",
+            eventCloseScenario: "accepted_and_delivered"
         )
         launch(context.app)
 
-        assertVisibleScreen("screen.events.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "entity.opened",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    return (details["entity_type"] as? String) == "event"
-                        && (details["entity_id"] as? String) == self.eventFixtureId
-                }
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        let tabs = context.app.tabBars.buttons
+        XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
+        let messagesTab = messagesTab(in: context.app)
+        let messagesTabActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: messagesTab
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [messagesTabActionable], timeout: 8),
+            .completed,
+            "The real Messages tab must remain readable and actionable with a high unread badge."
+        )
+        XCTAssertEqual(messagesTab.label, "Messages")
+        XCTAssertEqual(
+            messagesTab.value as? String,
+            "99+",
+            "The broad positive fixture must expose the real capped high-unread state."
+        )
+        XCTAssertGreaterThanOrEqual(messagesTab.frame.width, 44, "The high badge compressed the tab target.")
+        XCTAssertTrue(
+            hasReadableLowerTitleContrast(in: messagesTab.screenshot()),
+            "The high unread badge may have hidden the Messages title."
+        )
+
+        context.app.open(
+            try XCTUnwrap(
+                URL(string: "pushgo://open?kind=message&id=00000000-0000-0000-0000-000000000001")
             )
         )
-        XCTAssertTrue(waitForFileNonEmpty(context.eventsURL, timeout: 10))
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The real system URL must resolve the exact canonical Message."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The system-routed Message detail must return to the App"
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=quality-event-active"))
+        )
+        let routedEventDetail = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(routedEventDetail.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5),
+            "The real system URL must resolve the exact canonical Event detail."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.event.close"),
+            timeout: 5,
+            message: "The system-routed Event must expose its real positive action"
+        )
+        tapWhenHittable(
+            context.app.alerts.buttons.element(boundBy: 1),
+            timeout: 5,
+            message: "The system-routed Event confirmation must complete the positive state change"
+        )
+        XCTAssertTrue(
+            routedEventDetail.waitForNonExistence(timeout: 12),
+            "The system-routed Event must return only after the canonical projection accepts the change."
+        )
+
+        tabs.element(boundBy: 0).tap()
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The real Messages tab must return to the canonical list after system routing."
+        )
+
+        tabs.element(boundBy: 1).tap()
+        assertElementExists("screen.events.list", in: context.app, timeout: 8)
+        let event = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(
+            event.waitForExistence(timeout: 8),
+            "The system-routed Event state change must return to the canonical Events list."
+        )
+        tapWhenHittable(
+            event,
+            timeout: 8,
+            message: "The Event changed through the system route must remain actionable"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.event.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "PR navigation must prove the routed close reached canonical closed state, not only that the row still exists."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close").exists,
+            "A canonically closed Event must not continue offering the close action."
+        )
+        let verifiedClosedDetail = element(in: context.app, identifier: "sheet.event.detail")
+        verifiedClosedDetail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
+            .press(
+                forDuration: 0.2,
+                thenDragTo: verifiedClosedDetail.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)
+                )
+            )
+        XCTAssertTrue(
+            verifiedClosedDetail.waitForNonExistence(timeout: 5),
+            "The verified closed Event detail must return to navigation"
+        )
+
+        tabs.element(boundBy: 2).tap()
+        assertElementExists("screen.things.list", in: context.app, timeout: 8)
+        let thing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(thing.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            thing.label.contains("P2 Thing Rich")
+                || context.app.staticTexts["P2 Thing Rich"].exists,
+            "Things must render the exact canonical object; deep relations remain impact-selected."
+        )
+
+        tabs.element(boundBy: 3).tap()
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
+        let channel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(channel.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Quality Keep History"].exists || channel.label.contains("Quality Keep History"),
+            "Channels must render the exact canonical subscription, not merely an empty screen."
+        )
+
+        let settings = element(in: context.app, identifier: "action.channels.settings")
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+        assertElementExists("screen.settings", in: context.app, timeout: 8)
+
+        let gettingStarted = scrollToHittableElement(
+            identifier: "action.settings.open_getting_started_docs",
+            in: context.app
+        )
+        let safari = resetSafariBeforeExternalRoute()
+        tapWhenHittable(
+            gettingStarted,
+            timeout: 8,
+            message: "The real Settings documentation action must remain usable"
+        )
+        assertSafariDestination(
+            safari,
+            compactURL: "pushgo.dev/guides/getting-started/",
+            fullURL: "https://pushgo.dev/guides/getting-started/",
+            compactAddressMessage: "Safari must expose a bounded address-bar expansion interaction",
+            destinationMessage: "Safari must expose the exact Getting Started destination, not merely any pushgo.dev page."
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=quality-thing-rich"))
+        )
+        let routedThingDetail = element(in: context.app, identifier: "sheet.thing.detail")
+        XCTAssertTrue(routedThingDetail.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5),
+            "The real system URL must resolve the exact canonical Thing detail."
+        )
     }
 
-    func testImportedThingFixtureCanOpenThingDetail() {
-        let context = configuredLaunchContext(
-            startupFixturePath: thingFixturePath,
-            requestName: "entity.open",
-            args: ["entity_type": "thing", "entity_id": thingFixtureId]
+    func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-visibility-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertDataTabVisibility(
+            messagesVisible: true,
+            eventsVisible: true,
+            thingsVisible: true,
+            in: context.app
+        )
+
+        openSettingsFromChannels(in: context.app)
+        let soundSettingsAction = scrollToHittableElement(
+            identifier: "action.settings.notification_sounds",
+            in: context.app
+        )
+        tapWhenHittable(
+            soundSettingsAction,
+            timeout: 8,
+            message: "Notification sounds must open through the real Settings action"
+        )
+        let soundSettingsScreen = element(
+            in: context.app,
+            identifier: "screen.settings.notification_sounds"
+        )
+        XCTAssertTrue(soundSettingsScreen.waitForExistence(timeout: 8))
+        let lowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        tapWhenHittable(
+            lowPrioritySound,
+            timeout: 8,
+            message: "The low-priority sound selector must be operable"
+        )
+        tapWhenHittable(
+            context.app.buttons["Alert Beacon"],
+            timeout: 8,
+            message: "A real built-in sound must be selectable"
+        )
+        XCTAssertEqual(
+            lowPrioritySound.value as? String,
+            "Alert Beacon",
+            "The sound editor must project the user's selected low-priority sound."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.notification_sounds.close"),
+            timeout: 8,
+            message: "Saving the selected sound must provide a reliable way back to Settings"
+        )
+        XCTAssertTrue(
+            soundSettingsScreen.waitForNonExistence(timeout: 8),
+            "Dismissing the sound editor must return to Settings before lifecycle checks."
+        )
+
+        let messageToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.messages",
+            in: context.app
+        )
+        XCTAssertTrue(messageToggle.isHittable)
+        messageToggle.tap()
+        let eventToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.events",
+            in: context.app
+        )
+        XCTAssertTrue(eventToggle.isHittable)
+        eventToggle.tap()
+        let thingToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.things",
+            in: context.app
+        )
+        XCTAssertTrue(thingToggle.isHittable)
+        thingToggle.tap()
+        leaveSettings(in: context.app)
+        assertDataTabVisibility(
+            messagesVisible: false,
+            eventsVisible: false,
+            thingsVisible: false,
+            in: context.app
+        )
+        XCTAssertFalse(
+            messagesTab(in: context.app).exists,
+            "Hiding Messages must remove the badge-owning navigation destination, not orphan its unread state"
+        )
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertDataTabVisibility(
+            messagesVisible: false,
+            eventsVisible: false,
+            thingsVisible: false,
+            in: context.app
+        )
+        XCTAssertFalse(
+            messagesTab(in: context.app).exists,
+            "The hidden Messages badge owner must not return after process relaunch"
+        )
+
+        openSettingsFromChannels(in: context.app)
+        let persistedSoundSettingsAction = scrollToHittableElement(
+            identifier: "action.settings.notification_sounds",
+            in: context.app
+        )
+        tapWhenHittable(
+            persistedSoundSettingsAction,
+            timeout: 8,
+            message: "Notification sound settings must remain reachable after relaunch"
+        )
+        let persistedSoundSettingsScreen = element(
+            in: context.app,
+            identifier: "screen.settings.notification_sounds"
+        )
+        XCTAssertTrue(persistedSoundSettingsScreen.waitForExistence(timeout: 8))
+        let persistedLowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        XCTAssertTrue(persistedLowPrioritySound.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            persistedLowPrioritySound.value as? String,
+            "Alert Beacon",
+            "The selected sound must be restored from App-owned settings after process relaunch."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.notification_sounds.close"),
+            timeout: 8,
+            message: "The restored sound editor must remain dismissible"
+        )
+        XCTAssertTrue(persistedSoundSettingsScreen.waitForNonExistence(timeout: 8))
+
+        let persistedOffMessageToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.messages",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffMessageToggle.isHittable)
+        persistedOffMessageToggle.tap()
+        let persistedOffToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.events",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffToggle.isHittable)
+        persistedOffToggle.tap()
+        let persistedOffThingToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.things",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffThingToggle.isHittable)
+        persistedOffThingToggle.tap()
+        leaveSettings(in: context.app)
+        assertMessagesTabBadgeCount(
+            1,
+            in: context.app,
+            message: "Restoring Messages must project the still-unread canonical message back into its badge owner"
+        )
+        assertDataTabVisibility(
+            messagesVisible: true,
+            eventsVisible: true,
+            thingsVisible: true,
+            in: context.app,
+            openWhenVisible: true
+        )
+    }
+
+    func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-server-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-settings.invalid/api"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForExistence(timeout: 8),
+            "The original gateway-scoped fixture must exist before the server change"
+        )
+        openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        tapWhenHittable(
+            serverManagementAction,
+            timeout: 8
+        )
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let gatewayCredential = String(repeating: "g", count: 24)
+        let gatewayFieldID = ["field", "settings", "server", "token"].joined(separator: ".")
+        var credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        enterSecureText(in: credentialField, with: gatewayCredential)
+        let credentialVisibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        )
+        tapWhenHittable(credentialVisibilityAction, timeout: 5)
+        var revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
+        revealedCredentialField.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.settings.server.token.toggle_visibility"
+            ),
+            timeout: 5
+        )
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        addressField.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 10),
+            "A successfully persisted server address must close the editor"
+        )
+        leaveSettings(in: context.app)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Changing servers must immediately scope channel data to the new gateway"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "New Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdChannel.waitForExistence(timeout: 8),
+            "A post-commit Channel operation must use the newly active Gateway transport."
+        )
+        XCTAssertTrue(createdChannel.label.contains("New Gateway Channel"))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000001"
+            ).waitForNonExistence(timeout: 8),
+            "Relaunch must not reload channel data owned by the previous gateway"
+        )
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).waitForExistence(timeout: 8),
+            "The exact post-switch Channel result must remain under the new gateway after relaunch."
+        )
+        openSettingsFromChannels(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server_management"),
+            timeout: 8
+        )
+        let restoredAddressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredAddressField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredAddressField.value as? String,
+            normalizedAddress,
+            "The normalized server address must survive a full app relaunch"
+        )
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.token.toggle_visibility"),
+            timeout: 5
+        )
+        revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
+    }
+
+    func testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-gateway-save-dismiss-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-saving-dismiss.invalid/api"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            pauseGatewaySwitchBeforeCommit: true,
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let originalChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(originalChannel.waitForExistence(timeout: 8))
+        openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        let originalGatewayLabel = serverManagementAction.label
+        XCTAssertFalse(originalGatewayLabel.isEmpty)
+        tapWhenHittable(serverManagementAction, timeout: 8)
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        let paused = element(
+            in: context.app,
+            identifier: "quality-runtime.gateway_switch_precommit_paused"
+        )
+        XCTAssertTrue(
+            paused.waitForExistence(timeout: 8),
+            "QUALITY_PRECONDITION: candidate registration did not reach the pre-commit observation point"
+        )
+        context.app.swipeDown()
+        XCTAssertTrue(
+            addressField.waitForExistence(timeout: 3),
+            "Interactive dismissal during a prepared gateway switch must keep the editor open"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.settings.server.save").isEnabled,
+            "A prepared gateway switch must not accept a second Save"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
+            "A prepared gateway switch must not allow cancellation through the editor"
+        )
+        XCTAssertTrue(
+            serverManagementAction.label == originalGatewayLabel,
+            "The old gateway must remain authoritative before local commit"
+        )
+        let continueAction = element(
+            in: context.app,
+            identifier: "action.quality.gateway_switch.continue"
+        )
+        XCTAssertTrue(
+            continueAction.waitForExistence(timeout: 3),
+            "QUALITY_PRECONDITION: the typed session did not expose its explicit pre-commit release control"
+        )
+        continueAction.tap()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(serverManagementAction.label.contains(normalizedAddress))
+
+        leaveSettings(in: context.app)
+        XCTAssertTrue(originalChannel.waitForNonExistence(timeout: 8))
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Prepared Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(createdChannel.waitForExistence(timeout: 8))
+        XCTAssertTrue(createdChannel.label.contains("Prepared Gateway Channel"))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(originalChannel.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(createdChannel.waitForExistence(timeout: 8))
+        openSettingsFromChannels(in: context.app)
+        tapWhenHittable(serverManagementAction, timeout: 8)
+        let restoredAddressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredAddressField.waitForExistence(timeout: 8))
+        XCTAssertEqual(restoredAddressField.value as? String, normalizedAddress)
+    }
+
+    func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-server-reject-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        let originalGatewayLabel = serverManagementAction.label
+        tapWhenHittable(serverManagementAction, timeout: 8)
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "not a valid url")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 5),
+            "An invalid address must remain in the editor with actionable inline feedback"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure belongs to the sheet and must not also appear on the host page"
+        )
+
+        let rejectedAddress = "https://quality-settings.invalid/api"
+        replaceText(in: addressField, with: "\(rejectedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A candidate gateway registration failure must stay in the editor"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "Candidate registration failure must not leak into the host Settings page"
+        )
+        XCTAssertTrue(addressField.exists, "A rejected candidate gateway must not dismiss the editor")
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "The old gateway must remain active until candidate registration succeeds"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.cancel"),
+            timeout: 8
+        )
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A dismissed sheet-owned error must never reappear on the host Settings page"
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "Dismissing a rejected candidate must leave the saved gateway unchanged"
+        )
+    }
+
+    func testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-server-sync-pending-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-sync-pending.invalid/api"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewayPostCommitSyncOnce: true,
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        openSettingsFromChannels(in: context.app)
+        let serverAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        tapWhenHittable(serverAction, timeout: 8)
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        let pendingFeedback = element(in: context.app, identifier: "feedback.settings.gateway.result")
+        XCTAssertTrue(
+            pendingFeedback.waitForExistence(timeout: 8),
+            "A committed gateway with recoverable sync work must still report a user-visible result."
+        )
+        let pendingText = pendingFeedback.label.lowercased()
+        XCTAssertTrue(
+            pendingText.contains("sync") || pendingFeedback.label.contains("同步"),
+            "The result must say that gateway sync is pending, not claim an atomic failure."
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 8),
+            "A committed gateway must close the editor after reporting pending reconciliation."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The settings row must expose the newly committed gateway, even when sync is pending."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A post-commit sync failure must not be surfaced as a host-page form failure."
+        )
+
+        context.app.terminate()
+        let relaunchedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = relaunchedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        // Channels entry is the recovery point.  It must execute the real
+        // controller reconciliation before a new-gateway mutation is allowed
+        // to establish its canonical result.
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Recovery must retain the newly committed gateway's data scope."
+        )
+        let recoveredSyncRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000004"
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.waitForExistence(timeout: 8),
+            "Recovery must sync a candidate-scoped subscription, not only reload the list."
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.label.contains("Quality Recovery Sync Completed"),
+            "The recovery sync must produce the expected business update."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Recovered Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let recoveredChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            recoveredChannel.waitForExistence(timeout: 8),
+            "Channels-entry recovery must permit a real mutation on the committed gateway."
+        )
+        XCTAssertTrue(recoveredChannel.label.contains("Recovered Gateway Channel"))
+
+        openSettingsFromChannels(in: context.app)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The committed gateway must remain authoritative after recovery and a real mutation."
+        )
+    }
+
+    func testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-decryption-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let initialDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        let initialStatusLabel = initialDecryptionAction.label
+        tapWhenHittable(initialDecryptionAction, timeout: 8)
+
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: "short")
+        XCTAssertEqual(keyField.elementType, .secureTextField)
+        let visibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        )
+        tapWhenHittable(visibilityAction, timeout: 5)
+        let visibleKeyField = element(in: context.app, identifier: keyField.identifier)
+        XCTAssertEqual(visibleKeyField.elementType, .textField)
+        XCTAssertEqual(visibleKeyField.value as? String, "short")
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.settings.decryption.toggle_visibility"
+            ),
+            timeout: 5
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: keyField.identifier).elementType,
+            .secureTextField
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 5),
+            "An invalid key must remain visible as inline validation feedback"
+        )
+        XCTAssertTrue(keyField.exists, "Invalid key input must not leave the decryption editor")
+
+        let validKey = String(repeating: "k", count: 32)
+        enterSecureText(in: keyField, with: validKey)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            keyField.waitForNonExistence(timeout: 8),
+            "A valid key must dismiss the editor only after persistence succeeds"
+        )
+        let configuredDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertTrue(configuredDecryptionAction.waitForExistence(timeout: 8))
+        let configuredStatusLabel = configuredDecryptionAction.label
+        XCTAssertNotEqual(
+            configuredStatusLabel,
+            initialStatusLabel,
+            "The user-visible decryption status must change after persistence"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let restoredDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            restoredDecryptionAction.label,
+            configuredStatusLabel,
+            "The configured status must survive a full app relaunch"
+        )
+        tapWhenHittable(restoredDecryptionAction, timeout: 8)
+        let restoredKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(restoredKeyField.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(
+            restoredKeyField.value as? String,
+            validKey,
+            "The persisted secret must never be echoed back into the UI"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(restoredKeyField.waitForNonExistence(timeout: 8))
+        let preservedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(preservedAction.label, configuredStatusLabel)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let relaunchedPreservedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            relaunchedPreservedAction.label,
+            configuredStatusLabel,
+            "A blank save must not remove the non-echoed configuration after relaunch"
+        )
+        tapWhenHittable(relaunchedPreservedAction, timeout: 8)
+        let clearAction = element(in: context.app, identifier: "action.settings.decryption.clear")
+        tapWhenHittable(clearAction, timeout: 8)
+        XCTAssertTrue(
+            clearAction.waitForNonExistence(timeout: 8),
+            "Clearing must finish before the editor closes"
+        )
+        let clearedDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            clearedDecryptionAction.label,
+            initialStatusLabel,
+            "Clearing must restore the not-configured state"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let relaunchedClearedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            relaunchedClearedAction.label,
+            initialStatusLabel,
+            "The cleared configuration must remain absent after relaunch"
+        )
+    }
+
+    func testGatewayLocalCommitFailureRollsBackBeforeRetryCommits() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-server-commit-\(UUID().uuidString.lowercased())"
+        let failingSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchCommitOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        let retrySession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = failingSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        let originalGatewayLabel = serverAction.label
+        tapWhenHittable(serverAction, timeout: 8)
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let normalizedAddress = "https://quality-commit.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A local commit failure must remain actionable in the server sheet"
+        )
+        XCTAssertTrue(addressField.exists, "A failed local commit must not dismiss the editor")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "The candidate must not become the active gateway after a partial local commit"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = retrySession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let restoredServerAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        XCTAssertEqual(
+            restoredServerAction.label,
+            originalGatewayLabel,
+            "Rollback must keep the old gateway authoritative after process restart"
+        )
+        tapWhenHittable(restoredServerAction, timeout: 8)
+        let retryField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        replaceText(in: retryField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "Only the successful retry may expose the candidate as active"
+        )
+    }
+
+    func testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-key-store-\(UUID().uuidString.lowercased())"
+        let failingSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failNotificationMaterialPersistenceOnce: true
+        )
+        let retrySession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = failingSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let initialAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        let initialLabel = initialAction.label
+        tapWhenHittable(initialAction, timeout: 8)
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: String(repeating: "p", count: 32))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 8),
+            "Protected-store failure must be owned by the decryption sheet"
+        )
+        XCTAssertTrue(keyField.exists, "Failed secret persistence must keep the editor open")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = retrySession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let restoredAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            restoredAction.label,
+            initialLabel,
+            "A failed protected write must not appear configured after restart"
+        )
+        tapWhenHittable(restoredAction, timeout: 8)
+        let retryField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        enterSecureText(in: retryField, with: String(repeating: "p", count: 32))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 8))
+        let configuredAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertNotEqual(configuredAction.label, initialLabel)
+    }
+
+    func testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch() {
+        let sessionID = "ios-encrypted-recovery-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.valid"
+        )
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        XCTAssertTrue(context.app.staticTexts["Encrypted Quality Message"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].waitForExistence(timeout: 5)
+        )
+        context.app.staticTexts["Encrypted Quality Message"].tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        assertElementExists("status.message.decryption.notConfigured", in: context.app, timeout: 5)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.configure_decryption"),
+            timeout: 8
+        )
+
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: String(repeating: "Z", count: 16))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(keyField.waitForNonExistence(timeout: 8))
+
+        let settingsScreen = element(in: context.app, identifier: "screen.settings")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.close"),
+            timeout: 8
+        )
+        XCTAssertTrue(settingsScreen.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "A wrong but valid-length key must preserve the safe original fallback"
+        )
+        assertElementExists("status.message.decryption.decryptFailed", in: context.app, timeout: 5)
+        XCTAssertFalse(
+            context.app.staticTexts["Recovered from the original encrypted payload."].exists,
+            "A wrong key must never fabricate successful plaintext"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.configure_decryption"),
+            timeout: 8
+        )
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: ["Quality", "Key", "123456"].joined())
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(keyField.waitForNonExistence(timeout: 8))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.close"),
+            timeout: 8
+        )
+        XCTAssertTrue(settingsScreen.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Recovered from the original encrypted payload."]
+                .waitForExistence(timeout: 8),
+            "The original persisted message must become readable after saving its valid key"
+        )
+        assertElementExists("status.message.decryption.decryptOk", in: context.app, timeout: 5)
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(relaunched.app.staticTexts["Recovered Quality Message"].waitForExistence(timeout: 8))
+        relaunched.app.staticTexts["Recovered Quality Message"].tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists
+        )
+        assertElementExists("status.message.decryption.decryptOk", in: relaunched.app, timeout: 5)
+    }
+
+    func testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch() {
+        let sessionID = "ios-encrypted-corrupt-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        XCTAssertTrue(context.app.staticTexts["Corrupt Encrypted Message"].waitForExistence(timeout: 8))
+        context.app.staticTexts["Corrupt Encrypted Message"].tap()
+        assertElementExists("status.message.decryption.notConfigured", in: context.app, timeout: 5)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.configure_decryption"),
+            timeout: 8
+        )
+        let fieldIdentifier = ["field.settings.decryption", "key"].joined(separator: ".")
+        let field = element(in: context.app, identifier: fieldIdentifier)
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        enterSecureText(in: field, with: ["Quality", "Key", "123456"].joined())
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(field.waitForNonExistence(timeout: 8))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.close"),
+            timeout: 8
+        )
+        assertElementExists("status.message.decryption.decryptFailed", in: context.app, timeout: 5)
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(context.app.staticTexts["Recovered Quality Message"].exists)
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(relaunched.app.staticTexts["Corrupt Encrypted Message"].waitForExistence(timeout: 8))
+        relaunched.app.staticTexts["Corrupt Encrypted Message"].tap()
+        assertElementExists("status.message.decryption.decryptFailed", in: relaunched.app, timeout: 5)
+        XCTAssertTrue(relaunched.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(relaunched.app.staticTexts["Recovered Quality Message"].exists)
+    }
+
+    func testEventClosePersistsAndOngoingFilterReflectsRealProjection() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-event-close-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
         )
         launch(context.app)
 
-        assertVisibleScreen("screen.things.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "entity.opened",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    return (details["entity_type"] as? String) == "thing"
-                        && (details["entity_id"] as? String) == self.thingFixtureId
-                }
-            )
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openEventsTab(in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        let offscreenEvent = element(
+            in: context.app,
+            identifier: "event.row.quality-event-navigation-08"
+        )
+        let eventList = runtimeQualityScrollableList(in: context.app)
+        for _ in 0..<12 where !offscreenEvent.exists {
+            eventList.swipeUp()
+        }
+        XCTAssertTrue(
+            offscreenEvent.waitForExistence(timeout: 5),
+            "The Event fixture must establish a real off-top position before testing reselection."
+        )
+        XCTAssertFalse(
+            eventRow.exists,
+            "The Events list must remain genuinely away from its newest object before the double-tap."
+        )
+        let collapsedEventsTab = context.app.tabBars.buttons.firstMatch
+        XCTAssertTrue(collapsedEventsTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(collapsedEventsTab.isHittable)
+        collapsedEventsTab.tap()
+        let expandedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(expandedEventsTab.waitForExistence(timeout: 5))
+        expandedEventsTab.doubleTap()
+        XCTAssertTrue(
+            eventRow.waitForExistence(timeout: 5),
+            "Double-tapping the current Events tab must return to the newest canonical Event."
+        )
+        XCTAssertFalse(
+            offscreenEvent.exists,
+            "The Events list must actually leave its off-top control position."
+        )
+        eventRow.tap()
+        let detailSheet = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 10))
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        let closeAction = element(in: context.app, identifier: "action.event.close")
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5))
+        XCTAssertTrue(closeAction.isHittable)
+        closeAction.tap()
+        let cancel = context.app.alerts.buttons.element(boundBy: 0)
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing")
+                .waitForExistence(timeout: 5),
+            "Cancelling close must leave the canonical Event ongoing."
+        )
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.tap()
+        let confirm = context.app.alerts.buttons.element(boundBy: 1)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(
+            detailSheet.waitForNonExistence(timeout: 15),
+            "Closing is complete only after the real async action succeeds and the detail dismisses"
+        )
+        let closedEventRow = element(
+            in: context.app,
+            identifier: "event.row.quality-event-active"
+        )
+        XCTAssertTrue(closedEventRow.waitForExistence(timeout: 10))
+        let filters = context.app.buttons["action.events.filters"]
+        tapWhenHittable(filters, timeout: 5, message: "Event filters must be an actionable control")
+        let ongoingOnly = element(in: context.app, identifier: "filter.events.ongoing")
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5))
+        ongoingOnly.tap()
+        XCTAssertEqual(ongoingOnly.value as? String, "selected")
+        context.app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.75)).tap()
+        let filteredEventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(filteredEventRow.waitForNonExistence(timeout: 8))
+
+        let thingsTab = element(in: context.app, identifier: "tab.things")
+        tapWhenHittable(thingsTab, timeout: 8, message: "The linked Thing must remain reachable")
+        let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        tapWhenHittable(linkedThing, timeout: 8, message: "The exact linked Thing must open")
+        let linkedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-event-active"
+        )
+        XCTAssertTrue(linkedEvent.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            linkedEvent.value as? String,
+            "closed",
+            "The Thing consumer must converge to the same closed Event."
+        )
+        XCTAssertTrue(linkedEvent.label.contains("P2 Event Active"))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openEventsTab(in: context.app)
+        let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        let persistedRowActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: persistedRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [persistedRowActionable], timeout: 8),
+            .completed,
+            "The persisted closed Event row must remain a real navigation target."
+        )
+        // Deliberately touch the visual center, which is blank for the short
+        // closed-state copy. This proves the whole visible row is actionable,
+        // rather than succeeding only when XCTest happens to target its text.
+        persistedRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.event.detail").waitForExistence(timeout: 8),
+            "Opening the persisted closed Event must reach its real detail before status is asserted."
+        )
+        let persistedStatus = element(in: context.app, identifier: "field.event.detail.status.closed")
+        XCTAssertTrue(persistedStatus.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close")
+                .waitForExistence(timeout: 2)
         )
     }
 
-    func testPushSettingsCanOpenDecryptionScreen() {
+    func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-event-close-retry-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openEventsTab(in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        eventRow.tap()
+        let detailSheet = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."].waitForExistence(timeout: 5)
+        )
+
+        func confirmClose() {
+            let closeAction = element(in: context.app, identifier: "action.event.close")
+            XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+            closeAction.tap()
+            let confirm = context.app.alerts.buttons.element(boundBy: 1)
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+            confirm.tap()
+        }
+
+        confirmClose()
+        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
+        XCTAssertFalse(
+            closing.isEnabled,
+            "A close already in flight must not allow a duplicate submission."
+        )
+        XCTAssertTrue(detailSheet.exists)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.event.close").waitForExistence(timeout: 5),
+            "The first boundary failure must remain owned by the Event detail."
+        )
+        XCTAssertTrue(detailSheet.exists, "A failed close must keep the actionable detail open.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing").exists,
+            "A failed close must not pretend the canonical Event is closed."
+        )
+
+        confirmClose()
+        XCTAssertTrue(closing.waitForExistence(timeout: 2))
+        XCTAssertFalse(closing.isEnabled)
+        XCTAssertTrue(
+            detailSheet.waitForNonExistence(timeout: 12),
+            "Retry succeeds only after the production-shaped delivery updates the canonical projection."
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openEventsTab(in: context.app)
+        let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            persistedRow.label.localizedCaseInsensitiveContains("closed"),
+            "Relaunch must render the canonical Event as closed in the user-visible list."
+        )
+    }
+
+    func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        let encodedSession = qualitySessionPayload(
+            sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
+            fixture: "thing.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let thingsTab = element(in: context.app, identifier: "tab.things")
+        XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
+        thingsTab.tap()
+        let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        let distractorRow = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-distractor"
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        let crossChannelControl = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-navigation-15"
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForExistence(timeout: 8),
+            "The fixture must expose an other-channel Thing sharing the target tag."
+        )
+
+        let filters = element(in: context.app, identifier: "action.things.filters")
+        tapWhenHittable(filters, timeout: 5, message: "Thing filters must be actionable")
+        let qualityChannel = element(
+            in: context.app,
+            identifier: "filter.things.channel.quality"
+        )
+        tapWhenHittable(qualityChannel, timeout: 5)
+        let sharedTag = element(
+            in: context.app,
+            identifier: "filter.things.tag.filter-shared"
+        )
+        tapWhenHittable(sharedTag, timeout: 5)
+        context.app.swipeDown()
+        XCTAssertTrue(
+            sharedTag.waitForNonExistence(timeout: 5),
+            "The production Thing filter popover did not dismiss after the platform gesture."
+        )
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 8),
+            "Channel AND tag filters must retain the unique accurate Thing."
+        )
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 5),
+            "The same-channel Thing with a different tag must not survive the combined filter."
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForNonExistence(timeout: 5),
+            "The same-tag Thing from a different channel must not survive the combined filter."
+        )
+
+        tapWhenHittable(filters, timeout: 5, message: "Thing filters must reopen for clearing")
+        tapWhenHittable(
+            element(in: context.app, identifier: "filter.things.channel.all"),
+            timeout: 5
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "filter.things.tag.filter-shared"),
+            timeout: 5
+        )
+        context.app.swipeDown()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "filter.things.tag.filter-shared")
+                .waitForNonExistence(timeout: 5),
+            "Clearing must dismiss through the same production filter surface."
+        )
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 8),
+            "Clearing the combined filter must retain the accurate target."
+        )
+        XCTAssertTrue(
+            distractorRow.waitForExistence(timeout: 8),
+            "Clearing must restore the same-channel control Thing."
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForExistence(timeout: 8),
+            "Clearing must restore the other-channel control Thing."
+        )
+        let offscreenThing = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-navigation-08"
+        )
+        let thingList = runtimeQualityScrollableList(in: context.app)
+        for _ in 0..<12 where !offscreenThing.exists {
+            thingList.swipeUp()
+        }
+        XCTAssertTrue(
+            offscreenThing.waitForExistence(timeout: 5),
+            "The Thing fixture must establish a real off-top position before testing reselection."
+        )
+        XCTAssertFalse(
+            thingRow.exists,
+            "The Things list must remain genuinely away from its newest object before the double-tap."
+        )
+        let collapsedThingsTab = context.app.tabBars.buttons.firstMatch
+        XCTAssertTrue(collapsedThingsTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(collapsedThingsTab.isHittable)
+        collapsedThingsTab.tap()
+        let expandedThingsTab = element(in: context.app, identifier: "tab.things")
+        XCTAssertTrue(expandedThingsTab.waitForExistence(timeout: 5))
+        expandedThingsTab.doubleTap()
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 5),
+            "Double-tapping the current Things tab must return to the newest canonical Thing."
+        )
+        XCTAssertFalse(
+            offscreenThing.exists,
+            "The Things list must actually leave its off-top control position."
+        )
+        tapWhenHittable(
+            distractorRow,
+            timeout: 8,
+            message: "The distractor Thing must open before deletion"
+        )
+        assertElementExists("sheet.thing.detail", in: context.app, timeout: 8)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.thing.delete"),
+            timeout: 8,
+            message: "The real Thing detail delete action must be reachable"
+        )
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "Deleting one Thing must immediately remove only that target from the user-visible list."
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
+        let searchField = runtimeQualitySearchField(in: context.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("thing-rich")
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 5),
+            "Thing search must keep the exact target while excluding a real distractor."
+        )
+        let thingRowActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: thingRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [thingRowActionable], timeout: 8),
+            .completed,
+            "The Thing row must expose its full visible width as one navigation target."
+        )
+        thingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.thing.detail")
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Thing Rich"].waitForExistence(timeout: 8))
+        XCTAssertTrue(context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5))
+
+        let messagesTab = element(in: context.app, identifier: "tab.thing.detail.messages")
+        tapWhenHittable(messagesTab, timeout: 8, message: "Thing Messages tab must be actionable")
+        let relatedMessage = element(
+            in: context.app,
+            identifier: "thing.related.message.quality-related-message"
+        )
+        tapWhenHittable(relatedMessage, timeout: 8, message: "Related Message must open")
+        assertElementExists("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Related Message"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["The linked Thing message opens its canonical detail."]
+                .waitForExistence(timeout: 8)
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "Related Message detail must return to the Thing"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "thing.related.message.quality-related-message")
+                .waitForExistence(timeout: 8),
+            "Returning from Message detail must preserve the same Thing Messages tab"
+        )
+
+        let updatesTab = element(in: context.app, identifier: "tab.thing.detail.updates")
+        tapWhenHittable(updatesTab, timeout: 8, message: "Thing Updates tab must be actionable")
+        let relatedUpdate = element(
+            in: context.app,
+            identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+        )
+        tapWhenHittable(relatedUpdate, timeout: 8, message: "Related Update must open")
+        assertElementExists("screen.thing.update.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 8)
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.thing.update.close"),
+            timeout: 8,
+            message: "Related Update detail must return to the Thing"
+        )
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+            ).waitForExistence(timeout: 8),
+            "Returning from Update detail must preserve the same Thing Updates tab"
+        )
+
+        let unavailableTarget = configuredLaunchContext(
+            runtimeRoot: context.runtimeRoot,
+            requestName: "entity.open",
+            args: [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+            ],
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(unavailableTarget.app)
+        assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
+        assertElementExists("screen.things.list", in: unavailableTarget.app, timeout: 8)
+        XCTAssertTrue(
+            element(in: unavailableTarget.app, identifier: "thing.row.quality-thing-distractor")
+                .waitForNonExistence(timeout: 8),
+            "The deleted Thing must not return after the pending deletion commits and the App relaunches."
+        )
+        let unavailableFeedback = element(
+            in: unavailableTarget.app,
+            identifier: "feedback.entity.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Thing must visibly explain the fallback instead of leaving a pending target."
+        )
+        XCTAssertTrue(
+            unavailableFeedback.label.contains("The requested item was not found or has expired."),
+            "The fallback must explain that the exact target is unavailable."
+        )
+        let survivingThing = element(
+            in: unavailableTarget.app,
+            identifier: "thing.row.quality-thing-rich"
+        )
+        XCTAssertTrue(
+            survivingThing.waitForExistence(timeout: 5),
+            "After the deleted-target fallback, the canonical Things list must remain usable."
+        )
+        tapWhenHittable(survivingThing, timeout: 8, message: "The same Thing must survive relaunch")
+        let relatedEvent = element(
+            in: unavailableTarget.app,
+            identifier: "thing.related.event.quality-related-event"
+        )
+        tapWhenHittable(relatedEvent, timeout: 8, message: "Related Event must open")
+        assertElementExists("screen.events.detail", in: unavailableTarget.app, timeout: 8)
+        XCTAssertTrue(unavailableTarget.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
+    }
+
+    func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
+            allowCrossAppDataAccess: true
+        )
+        let encodedSession = qualitySessionPayload(
+            sessionID: "ios-channels-\(UUID().uuidString.lowercased())",
+            fixture: "channels.standard",
+            channelMutationScenario: "rename_reject_once_then_accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(
+            channelsTab(in: context.app),
+            timeout: 8,
+            message: "Channels must be reachable"
+        )
+        let keepActivity = element(
+            in: context.app,
+            identifier: "channel.stats.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepActivity.waitForExistence(timeout: 8))
+        XCTAssertTrue(keepActivity.label.contains("1 messages"))
+        XCTAssertTrue(keepActivity.label.contains("1 unread"))
+        let keepLatestDate = ISO8601DateFormatter().date(from: "2026-01-15T08:01:00Z")!
+        let keepLatestText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened)
+                .locale(Locale(identifier: "en_US"))
+        )
+        XCTAssertTrue(
+            keepActivity.label.contains(keepLatestText),
+            "The Channel row must expose the latest canonical message time, not only its subscription."
+        )
+        let subscribedChannelID = "01H00000000000000000000004"
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8,
+            message: "Add Channel must be actionable"
+        )
+        let entryMode = element(in: context.app, identifier: "select.channels.entry.mode")
+        XCTAssertTrue(entryMode.waitForExistence(timeout: 8))
+        tapWhenHittable(entryMode.buttons["Subscribe Channel"], timeout: 5)
+        replaceText(
+            in: element(in: context.app, identifier: "field.channels.subscribe.id"),
+            with: subscribedChannelID
+        )
+        enterSecureText(
+            in: element(in: context.app, identifier: "field.channels.subscribe.password"),
+            with: "qualityx"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "Subscribe Channel must submit through the real form"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "An accepted existing-channel subscription must enter the canonical Channel list"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8,
+            message: "Add Channel must remain usable after subscribing"
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createCredential = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Quality Created Channel")
+        enterSecureText(in: createCredential, with: "qualityx")
+        let credentialLength = element(
+            in: context.app,
+            identifier: "quality.channels.create.credential_length"
+        )
+        XCTAssertTrue(credentialLength.waitForExistence(timeout: 3))
+        XCTAssertEqual(credentialLength.value as? String, "8")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "Create Channel must submit through the real form"
+        )
+
+        var createdRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 8))
+
+        createdRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000003.rename"
+            ),
+            timeout: 5
+        )
+        var renameField = element(in: context.app, identifier: "field.channel.rename.alias")
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceText(in: renameField, with: "Cancelled Rename")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.cancel"),
+            timeout: 5
+        )
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 5))
+
+        createdRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000003.rename"
+            ),
+            timeout: 5,
+            message: "Created Channel must expose Rename"
+        )
+        renameField = element(in: context.app, identifier: "field.channel.rename.alias")
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceText(in: renameField, with: String(repeating: "x", count: 129))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.save"),
+            timeout: 5
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Channel name is too long (max 128)."].waitForExistence(timeout: 8),
+            "Invalid rename feedback must remain owned by the rename alert."
+        )
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].exists)
+
+        replaceText(in: renameField, with: "Quality Renamed Channel")
+        let renameButton = element(in: context.app, identifier: "action.channel.rename.save")
+        XCTAssertTrue(renameButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(renameButton.isEnabled, "Rename confirmation must be enabled")
+        renameButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            context.app.staticTexts["The channel rename was rejected. Check the name and retry."]
+                .waitForExistence(timeout: 8),
+            "Remote rejection must reopen the owning rename alert."
+        )
+        XCTAssertEqual(renameField.value as? String, "Quality Renamed Channel")
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].exists)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.save"),
+            timeout: 5
+        )
+        XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "The existing-channel subscription must survive process relaunch"
+        )
+
+        let keepRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepRow.waitForExistence(timeout: 8))
+        keepRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000001.unsubscribe"
+            ),
+            timeout: 5
+        )
+        tapWhenHittable(
+            context.app.buttons["Unsubscribe and keep history"].firstMatch,
+            timeout: 5
+        )
+        XCTAssertTrue(keepRow.waitForNonExistence(timeout: 8))
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertFalse(keepRow.exists)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let deleteRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000002"
+        )
+        XCTAssertTrue(deleteRow.waitForExistence(timeout: 8))
+        deleteRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000002.unsubscribe"
+            ),
+            timeout: 5
+        )
+        tapWhenHittable(
+            context.app.buttons["Unsubscribe and delete history"].firstMatch,
+            timeout: 5
+        )
+        XCTAssertTrue(deleteRow.waitForNonExistence(timeout: 8))
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
+
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let copiedChannelID = "01H00000000000000000000003"
+        createdRow = element(
+            in: context.app,
+            identifier: "channel.row.\(copiedChannelID)"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(deleteRow.exists)
+        tapWhenHittable(
+            createdRow,
+            timeout: 8,
+            message: "The canonical Channel row must remain a real copy action after relaunch"
+        )
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
+    }
+
+    func testChannelRemoteRejectionStaysInSheetAndRetryPersists() {
+        assertChannelCreateFailureThenRetry(
+            sessionPrefix: "ios-channel-rejected",
+            scenario: "reject_once_then_accepted",
+            failLocalPersistenceOnce: false,
+            expectedFailureText: "Channel password is incorrect"
+        )
+    }
+
+    func testChannelCreateLocalFailureCompensatesRemoteBeforeRetry() {
+        assertChannelCreateFailureThenRetry(
+            sessionPrefix: "ios-channel-compensation",
+            scenario: "require_create_compensation",
+            failLocalPersistenceOnce: true,
+            expectedFailureText: nil
+        )
+    }
+
+    func testExistingChannelLocalFailureDoesNotCompensateBeforeRetry() {
+        assertChannelCreateFailureThenRetry(
+            sessionPrefix: "ios-existing-channel",
+            scenario: "existing_subscribe_must_not_compensate",
+            failLocalPersistenceOnce: true,
+            expectedFailureText: nil,
+            existingChannelID: "01H00000000000000000000004"
+        )
+    }
+
+    private func assertChannelCreateFailureThenRetry(
+        sessionPrefix: String,
+        scenario: String,
+        failLocalPersistenceOnce: Bool,
+        expectedFailureText: String?,
+        existingChannelID: String? = nil
+    ) {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        let encodedSession = qualitySessionPayload(
+            sessionID: "\(sessionPrefix)-\(UUID().uuidString.lowercased())",
+            fixture: "channels.standard",
+            failChannelSubscriptionPersistenceOnce: failLocalPersistenceOnce,
+            channelMutationScenario: scenario
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
+
+        let isExistingSubscription = existingChannelID != nil
+        if isExistingSubscription {
+            tapWhenHittable(element(in: context.app, identifier: "mode.channels.entry.subscribe"), timeout: 5)
+        }
+        let identifierInput = element(
+            in: context.app,
+            identifier: isExistingSubscription
+                ? "field.channels.subscribe.id"
+                : "field.channels.create.name"
+        )
+        let passwordInput = element(
+            in: context.app,
+            identifier: isExistingSubscription
+                ? "field.channels.subscribe.password"
+                : "field.channels.create.password"
+        )
+        let expectedChannelID = existingChannelID ?? "01H00000000000000000000003"
+        replaceText(in: identifierInput, with: existingChannelID ?? "Quality Retry Channel")
+        enterSecureText(in: passwordInput, with: String(repeating: "q", count: 8))
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.submit"), timeout: 8)
+
+        let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(sheetFeedback.waitForExistence(timeout: 8), "Failure must remain owned by the Channel sheet")
+        XCTAssertTrue(element(in: context.app, identifier: "sheet.channels.entry").exists)
+        XCTAssertEqual(identifierInput.value as? String, existingChannelID ?? "Quality Retry Channel")
+        XCTAssertTrue(element(in: context.app, identifier: "action.channels.entry.submit").isEnabled)
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(expectedChannelID)").exists)
+        if let expectedFailureText {
+            XCTAssertTrue(sheetFeedback.label.contains(expectedFailureText))
+        }
+
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.cancel"), timeout: 5)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "Closing the Channel sheet must not replay its business error on the host page"
+        )
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "channel.row.\(expectedChannelID)").exists,
+            "Reloading Channels after the failed commit must not reveal a partially persisted row"
+        )
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
+        if isExistingSubscription {
+            tapWhenHittable(element(in: context.app, identifier: "mode.channels.entry.subscribe"), timeout: 5)
+        }
+        replaceText(
+            in: element(
+                in: context.app,
+                identifier: isExistingSubscription ? "field.channels.subscribe.id" : "field.channels.create.name"
+            ),
+            with: existingChannelID ?? "Quality Retry Channel"
+        )
+        enterSecureText(
+            in: element(
+                in: context.app,
+                identifier: isExistingSubscription ? "field.channels.subscribe.password" : "field.channels.create.password"
+            ),
+            with: String(repeating: "q", count: 8)
+        )
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.submit"), timeout: 8)
+        let createdRow = element(in: context.app, identifier: "channel.row.\(expectedChannelID)")
+        XCTAssertTrue(
+            createdRow.waitForExistence(timeout: 8),
+            "Retry must succeed after a rejected, compensated, or preserved existing remote subscription"
+        )
+
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(expectedChannelID)")
+                .waitForExistence(timeout: 8),
+            "The accepted retry must survive a real app relaunch"
+        )
+    }
+
+    func legacyDiagnosticPushSettingsCanOpenDecryptionScreen() {
         let context = configuredLaunchContext(
             requestName: "settings.open_decryption"
         )
@@ -274,7 +4009,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
+    func legacyDiagnosticInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
         let context = configuredLaunchContext(
             requestName: "nav.switch_tab",
             args: ["tab": "settings"]
@@ -299,7 +4034,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testFixtureSeedMessagesRefreshesMessageList() {
+    func legacyDiagnosticFixtureSeedMessagesRefreshesMessageList() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_messages",
             args: ["path": messageSeedFixturePath]
@@ -339,7 +4074,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testSubmittingPopulatedSearchResultsKeepsAppRunning() {
+    func legacyDiagnosticSubmittingPopulatedSearchResultsKeepsAppRunning() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_messages",
             args: ["path": messageSeedFixturePath]
@@ -388,7 +4123,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
+    func legacyDiagnosticFixtureSeedEntityRecordsPublishesProjectionCounts() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_entity_records",
             args: ["path": entityRecordFixturePath]
@@ -423,7 +4158,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testFixtureSeedSubscriptionsPublishesImportState() {
+    func legacyDiagnosticFixtureSeedSubscriptionsPublishesImportState() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_subscriptions",
             args: ["path": subscriptionFixturePath]
@@ -458,109 +4193,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testSettingsPageVisibilityCommandCanHideEventPage() {
-        let context = configuredLaunchContext(
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "false"]
-        )
-        launch(context.app)
-
-        let state = waitForAutomationState(
-            at: context.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == false }
-        )
-        XCTAssertNotNil(state)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "false"
-                }
-            )
-        )
-        XCTAssertTrue(waitForFileNonEmpty(context.eventsURL, timeout: 8))
-    }
-
-    func testSettingsPageVisibilityCommandCanRoundTripEventPage() {
-        let sharedRuntimeRoot = makeRuntimeRoot()
-        let disableContext = configuredLaunchContext(
-            runtimeRoot: sharedRuntimeRoot,
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "false"]
-        )
-        launch(disableContext.app)
-        let disabledState = waitForAutomationState(
-            at: disableContext.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == false }
-        )
-        XCTAssertNotNil(disabledState)
-        XCTAssertTrue(
-            waitForAutomationResponse(
-                at: disableContext.responseURL,
-                timeout: 12,
-                matching: { $0.ok }
-            ) != nil
-        )
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: disableContext.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "false"
-                }
-            )
-        )
-
-        let enableContext = configuredLaunchContext(
-            runtimeRoot: sharedRuntimeRoot,
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "true"]
-        )
-        launch(enableContext.app)
-        let enabledState = waitForAutomationState(
-            at: enableContext.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == true }
-        )
-        XCTAssertNotNil(enabledState)
-        XCTAssertTrue(
-            waitForAutomationResponse(
-                at: enableContext.responseURL,
-                timeout: 12,
-                matching: { $0.ok }
-            ) != nil
-        )
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: enableContext.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "true"
-                }
-            )
-        )
-    }
-
-    func testEntityOpenPublishesEntityStateAndProjectionCounts() {
+    func legacyDiagnosticEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredLaunchContext(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -622,7 +4255,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testMessageOpenPublishesMessageDetailState() {
+    func legacyDiagnosticMessageOpenPublishesMessageDetailState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "message.open",
@@ -657,7 +4290,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testNotificationOpenPublishesMessageDetailState() {
+    func legacyDiagnosticNotificationOpenPublishesMessageDetailState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.open",
@@ -679,7 +4312,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testNotificationMarkReadCommandUpdatesUnreadState() {
+    func legacyDiagnosticNotificationMarkReadCommandUpdatesUnreadState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.mark_read",
@@ -714,7 +4347,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -749,7 +4382,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testGatewaySetServerCommandUpdatesConfigurationState() {
+    func legacyDiagnosticGatewaySetServerCommandUpdatesConfigurationState() {
         let context = configuredLaunchContext(
             requestName: "gateway.set_server",
             args: [
@@ -786,7 +4419,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testBaselineAutomationStateHasNoRuntimeErrors() {
+    func legacyDiagnosticBaselineAutomationStateHasNoRuntimeErrors() {
         let context = configuredLaunchContext()
         launch(context.app)
 
@@ -800,7 +4433,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(state?.localStoreMode, "persistent")
     }
 
-    func testWatchResyncReceiverCommandPublishesReceiverState() {
+    func legacyDiagnosticWatchResyncReceiverCommandPublishesReceiverState() {
         let context = configuredLaunchContext(
             requestName: "watch.resync_receiver"
         )
@@ -815,7 +4448,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testSettingsSetDecryptionKeyRejectsInvalidLength() {
+    func legacyDiagnosticSettingsSetDecryptionKeyRejectsInvalidLength() {
         let context = configuredLaunchContext(
             requestName: "settings.set_decryption_key",
             args: ["key": "abcd", "encoding": "plain"]
@@ -831,7 +4464,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(response?.error?.contains("key") == true)
     }
 
-    func testSettingsSetDecryptionKeyAcceptsBase64Key() {
+    func legacyDiagnosticSettingsSetDecryptionKeyAcceptsBase64Key() {
         let context = configuredLaunchContext(
             requestName: "settings.set_decryption_key",
             args: ["key": "MDEyMzQ1Njc4OWFiY2RlZg==", "encoding": "base64"]
@@ -862,7 +4495,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
+    func legacyDiagnosticRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
         try XCTSkipUnless(
             runtimeQualityUIEnabled(),
             "Set PUSHGO_RUNTIME_QUALITY_UI=1 to run large UI runtime quality validation."
@@ -1224,7 +4857,7 @@ final class PushGo_iOSUITests: XCTestCase {
         thingDetailContext.app.terminate()
     }
 
-    func testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
+    func legacyDiagnosticRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
         let gatewayBodyLimitBytes = 32 * 1024
         let markdownSafetyCapBytes = 27 * 1024
         let fixtures: [(name: String, body: String)] = [
@@ -1249,7 +4882,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    func testCaptureLocalizedPrimaryScreens() throws {
+    func legacyDiagnosticCaptureLocalizedPrimaryScreens() throws {
         let envOutputRootPath = ProcessInfo.processInfo.environment["PUSHGO_IOS_UI_SCREENSHOT_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let outputRoot: URL
         if envOutputRootPath.isEmpty {
@@ -1359,14 +4992,16 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    private func configuredLaunchContext(
+    func configuredLaunchContext(
         runtimeRoot: URL? = nil,
         startupFixturePath: String? = nil,
         requestName: String? = nil,
         args: [String: String] = [:],
-        launchArguments: [String] = []
+        launchArguments: [String] = [],
+        allowCrossAppDataAccess: Bool = false
     ) -> LaunchContext {
         let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchArguments += launchArguments
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         try? FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
@@ -1384,7 +5019,7 @@ final class PushGo_iOSUITests: XCTestCase {
         app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = resolvedRuntimeRoot.path
         app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         app.launchEnvironment["PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"] = "1"
-        app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
+        app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = allowCrossAppDataAccess ? "1" : "0"
         app.launchEnvironment["PUSHGO_AUTOMATION_RESPONSE_PATH"] = responseURL.path
         app.launchEnvironment["PUSHGO_AUTOMATION_STATE_PATH"] = stateURL.path
         app.launchEnvironment["PUSHGO_AUTOMATION_EVENTS_PATH"] = eventsURL.path
@@ -1422,8 +5057,554 @@ final class PushGo_iOSUITests: XCTestCase {
             .appendingPathComponent("PushGo-iOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
-    private func launch(_ app: XCUIApplication) {
+    func qualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
+        messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
+        legacyStore: String? = nil,
+        failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        pauseGatewaySwitchBeforeCommit: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false,
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil
+    ) -> String {
+        var faults: [String: Any] = [
+            "fail_local_store_initialization": failLocalStoreInitialization,
+            "fail_message_load": failMessageLoad,
+            "fail_message_page_load_once": failMessagePageLoadOnce,
+            "fail_message_search_once": failMessageSearchOnce,
+            "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
+            "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "pause_gateway_switch_before_commit": pauseGatewaySwitchBeforeCommit,
+            "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
+            "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
+            "fail_channel_subscription_persistence_once": failChannelSubscriptionPersistenceOnce,
+        ]
+        if let messageLoadDelayMilliseconds {
+            faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let messagePageLoadDelayMilliseconds {
+            faults["message_page_load_delay_ms"] = messagePageLoadDelayMilliseconds
+        }
+        if let localStoreFailureStreakThreshold {
+            faults["local_store_failure_streak_threshold"] = localStoreFailureStreakThreshold
+        }
+        if let messageRefreshDelayMilliseconds {
+            faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
+        }
+        if let messageSearchDelayMilliseconds {
+            faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
+        }
+        let payload: [String: Any] = [
+            "schema_version": 1,
+            "session_id": sessionID,
+            "fixture": fixture,
+            "faults": faults,
+        ]
+            .merging(legacyStore.map { ["legacy_store": $0] } ?? [:]) { _, new in new }
+            .merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(eventCloseScenario.map { ["event_close_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(channelMutationScenario.map { ["channel_mutation_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(expectedChannelMutationGatewayURL.map { ["expected_channel_mutation_gateway_url": $0] } ?? [:]) { _, new in new }
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return data.base64EncodedString()
+    }
+
+    private func pendingDeletionQualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        timeoutMilliseconds: Int = 15_000
+    ) -> String {
+        let encoded = qualitySessionPayload(sessionID: sessionID, fixture: fixture)
+        let data = try! XCTUnwrap(Data(base64Encoded: encoded))
+        var payload = try! XCTUnwrap(
+            try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+        )
+        var faults = try! XCTUnwrap(payload["faults"] as? [String: Any])
+        faults["pending_deletion_timeout_ms"] = timeoutMilliseconds
+        payload["faults"] = faults
+        let updatedData = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return updatedData.base64EncodedString()
+    }
+
+    func launch(_ app: XCUIApplication, qualityHandshakeTimeout: TimeInterval = 15) {
+        let qualitySessionKey = "PUSHGO_QUALITY_SESSION_BASE64"
+        let qualitySessionArgument = "-\(qualitySessionKey)"
+        var launchArguments = app.launchArguments
+        while let index = launchArguments.firstIndex(of: qualitySessionArgument) {
+            launchArguments.remove(at: index)
+            if launchArguments.indices.contains(index) {
+                launchArguments.remove(at: index)
+            }
+        }
+        if let encodedSession = app.launchEnvironment[qualitySessionKey], !encodedSession.isEmpty {
+            launchArguments.append(contentsOf: [qualitySessionArgument, encodedSession])
+        }
+        app.launchArguments = launchArguments
+        let requiresQualityHandshake = app.launchEnvironment[qualitySessionKey]?.isEmpty == false
+
+        if app.state != .notRunning {
+            app.terminate()
+            XCTAssertEqual(
+                app.state,
+                .notRunning,
+                "The app must be fully stopped so the next quality session receives fresh launch inputs"
+            )
+        }
         app.launch()
+        guard requiresQualityHandshake else { return }
+
+        let runtimeHandshake = app.descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ OR identifier == %@",
+                "quality-runtime.",
+                "state.storage.unavailable"
+            ))
+            .firstMatch
+        // Fixture-backed sessions may spend the first few seconds opening the
+        // isolated store and applying migrations before publishing their
+        // readiness marker. Keep this bounded by the same finite budget used
+        // by the explicit readiness oracle instead of failing a valid session
+        // at an arbitrary shorter boundary.
+        XCTAssertTrue(
+            runtimeHandshake.waitForExistence(timeout: qualityHandshakeTimeout),
+            "QUALITY_PRECONDITION: App-owned runtime handshake did not become observable after one launch."
+        )
+    }
+
+    func tapWhenHittable(
+        _ element: XCUIElement,
+        timeout: TimeInterval,
+        message: String = "Expected control to become hittable",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: element
+        )
+        let result = XCTWaiter.wait(for: [actionable], timeout: timeout)
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
+        guard result == .completed else { return }
+        element.tap()
+    }
+
+    private func resetSafariBeforeExternalRoute() -> XCUIApplication {
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        guard safari.state != .notRunning else { return safari }
+        safari.terminate()
+        XCTAssertTrue(
+            safari.wait(for: .notRunning, timeout: 5),
+            "Safari must be stopped before a product-owned external URL is opened"
+        )
+        return safari
+    }
+
+    private func assertSafariDestination(
+        _ safari: XCUIApplication,
+        compactURL: String,
+        fullURL: String,
+        compactAddressMessage: String,
+        destinationMessage: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            safari.wait(for: .runningForeground, timeout: 10),
+            "Opening the product URL must hand off to the real system browser.",
+            file: file,
+            line: line
+        )
+
+        let exactAddress = safari.textFields.matching(
+            NSPredicate(
+                format: "value ==[c] %@ OR value ==[c] %@",
+                compactURL,
+                fullURL
+            )
+        ).firstMatch
+        // Give the real browser a bounded settling window before reaching for
+        // any system-private accessibility node. In a multi-test batch Safari
+        // can report a foreground process while its web snapshot is still
+        // being rebuilt; refreshing the foreground snapshot is cheaper and
+        // more reliable than immediately relying on `TabBarItemTitle`.
+        if !exactAddress.waitForExistence(timeout: 5) {
+            safari.activate()
+            XCTAssertTrue(
+                safari.wait(for: .runningForeground, timeout: 3),
+                "Safari must remain foreground while its exact URL field settles",
+                file: file,
+                line: line
+            )
+        }
+        if !exactAddress.exists && !exactAddress.waitForExistence(timeout: 5) {
+            // iOS may initially keep Safari's address bar compact. This is the
+            // only system-private interaction we permit; the exact URL field
+            // below remains the decisive business oracle. A fresh Safari launch
+            // is prepared by resetSafariBeforeExternalRoute() to avoid a stale
+            // lowered-bar snapshot racing this tap.
+            let compactAddress = safari.descendants(matching: .any)
+                .matching(identifier: "TabBarItemTitle")
+                .firstMatch
+            tapWhenHittable(
+                compactAddress,
+                timeout: 8,
+                message: compactAddressMessage,
+                file: file,
+                line: line
+            )
+        }
+
+        XCTAssertTrue(
+            exactAddress.waitForExistence(timeout: 8),
+            destinationMessage,
+            file: file,
+            line: line
+        )
+        guard let observedURL = exactAddress.value as? String else {
+            XCTFail(
+                "Safari's exact URL field must expose a readable value",
+                file: file,
+                line: line
+            )
+            return
+        }
+        XCTAssertTrue(
+            [compactURL, fullURL].contains(observedURL),
+            "Safari exposed an unexpected external URL: \(observedURL)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertMessagesTabBadgeCount(
+        _ expectedCount: Int?,
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        message: String = "The Messages navigation badge did not match canonical unread state",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: timeout),
+            "The production TabBar must exist before its Messages badge can be verified",
+            file: file,
+            line: line
+        )
+        let messagesTab = messagesTab(in: app)
+        XCTAssertTrue(
+            messagesTab.waitForExistence(timeout: timeout),
+            "The production Messages tab must exist before its badge can be verified",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            ["Messages", "消息", "訊息"].contains(messagesTab.label),
+            "The first production tab must remain the localized Messages destination",
+            file: file,
+            line: line
+        )
+        let deadline = Date().addingTimeInterval(timeout)
+        var actualCount = messagesTabBadgeCount(messagesTab)
+        while actualCount != expectedCount, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            actualCount = messagesTabBadgeCount(messagesTab)
+        }
+        XCTAssertEqual(actualCount, expectedCount, message, file: file, line: line)
+    }
+
+    private func messagesTabBadgeCount(_ messagesTab: XCUIElement) -> Int? {
+        guard let value = messagesTab.value as? String else { return nil }
+        let digits = value.filter(\.isNumber)
+        return digits.isEmpty ? nil : Int(digits)
+    }
+
+    private func openMessageFilters(in app: XCUIApplication) {
+        tapWhenHittable(
+            app.buttons["action.messages.filter"],
+            timeout: 5,
+            message: "The production message filter control must be reachable"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.unread_only").waitForExistence(timeout: 5),
+            "The production filter surface did not open"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.surface").waitForExistence(timeout: 5),
+            "The production filter surface has no stable scroll owner"
+        )
+    }
+
+    private func revealFilterOption(
+        _ identifier: String,
+        towardTags: Bool,
+        in app: XCUIApplication
+    ) {
+        let option = element(in: app, identifier: identifier)
+        let surface = element(in: app, identifier: "filter.surface")
+        for _ in 0..<4 {
+            if option.exists, option.isHittable { return }
+            let visibleProbe = towardTags
+                ? element(in: app, identifier: "filter.unread_only")
+                : ["filter.tag.even", "filter.tag.odd"]
+                    .map { element(in: app, identifier: $0) }
+                    .first(where: { $0.exists && $0.isHittable })
+            let gestureSource = visibleProbe?.exists == true && visibleProbe?.isHittable == true
+                ? visibleProbe!
+                : surface
+            if towardTags {
+                gestureSource.swipeUp()
+            } else {
+                gestureSource.swipeDown()
+            }
+        }
+        XCTAssertTrue(option.exists && option.isHittable, "Filter option remained unreachable: \(identifier)")
+    }
+
+    private func dismissMessageFilters(in app: XCUIApplication) {
+        let filterSurfaceProbe = element(in: app, identifier: "filter.unread_only")
+        guard filterSurfaceProbe.exists else { return }
+        app.swipeDown()
+        XCTAssertTrue(
+            filterSurfaceProbe.waitForNonExistence(timeout: 5),
+            "The production filter surface did not dismiss after the platform gesture"
+        )
+    }
+
+    private func assertMessageTitles(
+        _ expected: [String],
+        excluding unexpected: [String],
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var matched = false
+        repeat {
+            matched = expected.allSatisfy { app.staticTexts[$0].exists }
+                && unexpected.allSatisfy { !app.staticTexts[$0].exists }
+            if matched { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        XCTAssertTrue(
+            matched,
+            "The visible message set did not match the exact selected facets",
+            file: file,
+            line: line
+        )
+        for title in expected {
+            XCTAssertTrue(app.staticTexts[title].exists, "Missing expected message: \(title)", file: file, line: line)
+        }
+        for title in unexpected {
+            XCTAssertFalse(app.staticTexts[title].exists, "Unexpected message remained visible: \(title)", file: file, line: line)
+        }
+    }
+
+    private func channelsTab(in app: XCUIApplication) -> XCUIElement {
+        let identified = element(in: app, identifier: "tab.channels")
+        if identified.waitForExistence(timeout: 2) {
+            return identified
+        }
+        let tabBar = app.tabBars.firstMatch
+        guard tabBar.waitForExistence(timeout: 8), tabBar.buttons.count > 0 else {
+            return identified
+        }
+        // Channels is the only mandatory destination and is always the final
+        // tab, even when optional data pages are hidden.
+        return tabBar.buttons.element(boundBy: tabBar.buttons.count - 1)
+    }
+
+    private func messagesTab(in app: XCUIApplication) -> XCUIElement {
+        let tabBar = app.tabBars.firstMatch
+        let identified = tabBar.buttons["tab.messages"]
+        if identified.exists {
+            return identified
+        }
+        guard tabBar.waitForExistence(timeout: 8) else { return identified }
+
+        // iOS 27 may omit an identifier attached to a custom SwiftUI tab item
+        // from the final UITabBarButton. Resolve the same user-facing
+        // destination by its localized title, scoped to the production tab
+        // bar. Do not fall back to an ordinal: optional tabs can change order.
+        let labels = Set(["Messages", "消息", "訊息"])
+        let deadline = Date().addingTimeInterval(2)
+        repeat {
+            let candidates = tabBar.buttons.allElementsBoundByIndex.filter {
+                labels.contains($0.label)
+            }
+            if candidates.count == 1 {
+                return candidates[0]
+            }
+            // More than one localized title would make the semantic selector
+            // ambiguous; keep the identifier query so the caller fails closed
+            // instead of tapping an arbitrary tab.
+            if candidates.count > 1 { return identified }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        return identified
+    }
+
+    private func openSettingsFromChannels(in app: XCUIApplication) {
+        let channels = channelsTab(in: app)
+        tapWhenHittable(channels, timeout: 8, message: "Channels must remain reachable")
+        let settings = element(in: app, identifier: "action.channels.settings")
+        tapWhenHittable(settings, timeout: 8, message: "Settings must open through the real Channels action")
+        assertElementExists("screen.settings", in: app, timeout: 8)
+    }
+
+    private func ensureSettingsVisible(in app: XCUIApplication) {
+        let settingsScreen = element(in: app, identifier: "screen.settings")
+        if settingsScreen.waitForExistence(timeout: 1) {
+            return
+        }
+        let settingsAction = element(in: app, identifier: "action.channels.settings")
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: settingsAction
+        )
+        if XCTWaiter.wait(for: [actionable], timeout: 2) == .completed {
+            settingsAction.tap()
+            assertElementExists("screen.settings", in: app, timeout: 8)
+            return
+        }
+        openSettingsFromChannels(in: app)
+    }
+
+    private func leaveSettings(in app: XCUIApplication) {
+        let settingsScreen = element(in: app, identifier: "screen.settings")
+        let back = app.navigationBars.buttons.firstMatch
+        tapWhenHittable(back, timeout: 8, message: "Settings must provide a real back navigation action")
+        XCTAssertTrue(
+            settingsScreen.waitForNonExistence(timeout: 8),
+            "Settings must finish dismissing before the next lifecycle assertion"
+        )
+        assertElementExists("screen.channels", in: app, timeout: 8)
+    }
+
+    private func scrollToHittableElement(
+        identifier: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        let target = element(in: app, identifier: identifier)
+        for _ in 0..<6 {
+            if target.exists, target.isHittable {
+                return target
+            }
+            if app.tables.firstMatch.exists {
+                app.tables.firstMatch.swipeUp()
+            } else if app.scrollViews.firstMatch.exists {
+                app.scrollViews.firstMatch.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+        }
+        return target
+    }
+
+    private func assertDataTabVisibility(
+        messagesVisible: Bool,
+        eventsVisible: Bool,
+        thingsVisible: Bool,
+        in app: XCUIApplication,
+        openWhenVisible: Bool = false,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let buttons = app.tabBars.buttons
+        let expectedCount = 1
+            + (messagesVisible ? 1 : 0)
+            + (eventsVisible ? 1 : 0)
+            + (thingsVisible ? 1 : 0)
+        let countExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "count == %d", expectedCount),
+            object: buttons
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [countExpectation], timeout: 8),
+            .completed,
+            "The real navigation destinations must match the saved Messages/Events/Things visibility settings",
+            file: file,
+            line: line
+        )
+        guard messagesVisible,
+              eventsVisible,
+              thingsVisible,
+              openWhenVisible,
+              buttons.count == expectedCount else { return }
+        let messagesButton = buttons.element(boundBy: 0)
+        tapWhenHittable(
+            messagesButton,
+            timeout: 5,
+            message: "The restored Messages entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.messages.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The restored Messages destination must reach its accurate App-owned content",
+            file: file,
+            line: line
+        )
+        let eventButton = buttons.element(boundBy: 1)
+        tapWhenHittable(
+            eventButton,
+            timeout: 5,
+            message: "The restored Events entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.events.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["No events yet"].waitForExistence(timeout: 8),
+            "The restored Events destination must reach its functional empty state",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(app.staticTexts["Track issues from open to close."].exists)
+        XCTAssertTrue(app.staticTexts["Add a channel."].exists)
+        XCTAssertTrue(app.staticTexts["Close it when finished."].exists)
+        XCTAssertTrue(
+            app.buttons["Event API docs"].exists && app.buttons["Event API docs"].isHittable,
+            "The Events empty state must give the user an actionable next step"
+        )
+        let thingButton = buttons.element(boundBy: 2)
+        tapWhenHittable(
+            thingButton,
+            timeout: 5,
+            message: "The restored Things entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.things.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["No objects yet"].waitForExistence(timeout: 8),
+            "The restored Things destination must reach its functional empty state",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(app.staticTexts["Track changing state by object."].exists)
+        XCTAssertTrue(app.staticTexts["Create or subscribe to a channel."].exists)
+        XCTAssertTrue(app.staticTexts["Update related events and messages."].exists)
+        XCTAssertTrue(
+            app.buttons["Object API docs"].exists && app.buttons["Object API docs"].isHittable,
+            "The Things empty state must give the user an actionable next step"
+        )
     }
 
     private func assertVisibleScreen(
@@ -1447,18 +5628,149 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTFail("Expected visible screen \(screenIdentifier), current state: \(stateText)", file: file, line: line)
     }
 
-    private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
+    func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    private func eventsTab(in app: XCUIApplication) -> XCUIElement {
+        let identifiedTab = app.buttons["tab.events"]
+        if identifiedTab.exists {
+            return identifiedTab
+        }
+        // Keep a narrow compatibility fallback for iOS releases that omit the
+        // tab-item identifier from the accessibility tree. The post-tap screen
+        // assertion below prevents a positional match from being treated as a
+        // successful navigation when it did not actually switch pages.
+        return app.tabBars.buttons.element(boundBy: 1)
+    }
+
+    private func openEventsTab(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let target = eventsTab(in: app)
+        XCTAssertTrue(
+            target.waitForExistence(timeout: timeout),
+            "The real Events tab must exist before opening the Events page",
+            file: file,
+            line: line
+        )
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: target
+        )
+        let result = XCTWaiter.wait(for: [actionable], timeout: timeout)
+        XCTAssertEqual(
+            result,
+            .completed,
+            "The real Events tab must be actionable before opening the Events page",
+            file: file,
+            line: line
+        )
+        guard result == .completed else { return }
+        target.tap()
+        XCTAssertTrue(
+            element(in: app, identifier: "screen.events.list").waitForExistence(timeout: timeout),
+            "The Events tab tap must reach the production Events list",
+            file: file,
+            line: line
+        )
+    }
+
+    private func storageRecoveryButton(
+        in app: XCUIApplication,
+        identifier: String,
+        fallbackLabel: String
+    ) -> XCUIElement {
+        let semanticButton = element(in: app, identifier: identifier)
+        return semanticButton.exists ? semanticButton : app.buttons[fallbackLabel]
     }
 
     private func replaceText(in field: XCUIElement, with text: String) {
         field.tap()
-        let existingLength = (field.value as? String)?.count ?? 0
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: max(existingLength, 80)))
+        let existing = (field.value as? String) ?? ""
+        // XCUI can report an actual field value that happens to equal its
+        // placeholder. Treat every non-empty value as replaceable; selecting
+        // and deleting a placeholder-only empty field is harmless, while
+        // skipping this step appends input to real persisted content.
+        let hasEnteredText = !existing.isEmpty
+        if hasEnteredText {
+            field.typeKey("a", modifierFlags: .command)
+            field.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+            // If selection was not honored by the current software keyboard,
+            // move to the end and apply a bounded fallback clear. XCUI may
+            // expose only the first whitespace-delimited token as `value`.
+            field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
+            field.typeText(
+                String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
+            )
+        }
+        if !text.isEmpty {
+            field.typeText(text)
+        }
+    }
+
+    private func enterSecureText(
+        in field: XCUIElement,
+        with text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: field
+        )
+        let actionableResult = XCTWaiter.wait(for: [actionable], timeout: 8)
+        XCTAssertEqual(
+            actionableResult,
+            .completed,
+            "The secure field must be visible and reachable before its single focus tap",
+            file: file,
+            line: line
+        )
+        guard actionableResult == .completed else { return }
+        field.tap()
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: field
+        )
+        let focusResult = XCTWaiter.wait(for: [focused], timeout: 2)
+        XCTAssertEqual(
+            focusResult,
+            .completed,
+            "A single tap must move keyboard focus to the requested secure field",
+            file: file,
+            line: line
+        )
+        guard focusResult == .completed else { return }
+        let existing = (field.value as? String) ?? ""
+        let placeholder = field.placeholderValue ?? ""
+        if !existing.isEmpty && existing != placeholder {
+            field.typeKey("a", modifierFlags: .command)
+            field.typeText(XCUIKeyboardKey.delete.rawValue)
+            // iOS Simulator secure fields can acknowledge Command-A while leaving
+            // the underlying value selected-but-not-deleted. Delete a bounded
+            // maximum credential length as a deterministic fallback, then prove
+            // the field is actually empty before typing the replacement.
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 128))
+            let cleared = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@ OR value == ''", placeholder),
+                object: field
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [cleared], timeout: 2),
+                .completed,
+                "The secure field must be observably empty before replacement input",
+                file: file,
+                line: line
+            )
+        }
         field.typeText(text)
     }
 
-    private func assertElementExists(
+    func assertElementExists(
         _ identifier: String,
         in app: XCUIApplication,
         timeout: TimeInterval = 8,
@@ -1467,6 +5779,61 @@ final class PushGo_iOSUITests: XCTestCase {
     ) {
         let target = element(in: app, identifier: identifier)
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing element: \(identifier)", file: file, line: line)
+    }
+
+    func assertQualityRuntimeReady(
+        in app: XCUIApplication,
+        timeout: TimeInterval,
+        expectedSessionID: String? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let ready = element(in: app, identifier: "quality-runtime.ready")
+        if ready.waitForExistence(timeout: timeout) {
+            if let expectedSessionID {
+                XCTAssertEqual(
+                    ready.value as? String,
+                    expectedSessionID,
+                    "QUALITY_PRECONDITION: App-owned quality session identity did not match the requested session.",
+                    file: file,
+                    line: line
+                )
+            }
+            return
+        }
+        let observedStatus = [
+            "invalid",
+            "missing",
+            "failed",
+            "seeding.messages.system_snapshot.end",
+            "seeding.messages.live_activity.end",
+            "seeding.messages.notification_snapshot.end",
+            "seeding.messages.system_search.end",
+            "seeding.messages.metadata.end",
+            "seeding.messages.search.end",
+            "seeding.messages.search.start",
+            "seeding.messages.backend.end",
+            "seeding.messages.backend.start",
+            "seeding.messages.saved",
+            "seeding.messages",
+            "seeding.entities",
+            "seeding.entities.saved",
+            "seeding.channels",
+            "seeding.channels.saved",
+            "seeding.refresh",
+            "seeding.complete",
+            "seeding",
+            "executing",
+            "finalizing",
+            "initializing",
+        ]
+            .first { element(in: app, identifier: "quality-runtime.\($0)").exists }
+            ?? "missing"
+        XCTFail(
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus)",
+            file: file,
+            line: line
+        )
     }
 
     private func localizationFixtureIDs(at fixturePath: String) throws -> LocalizationFixtureIDs {
@@ -2264,5 +6631,52 @@ final class PushGo_iOSUITests: XCTestCase {
         formatter.formatOptions = [.withInternetDateTime]
         let baseTimestamp = 1_767_225_600
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(baseTimestamp - offsetSeconds)))
+    }
+
+    private func hasReadableLowerTitleContrast(in screenshot: XCUIScreenshot) -> Bool {
+        guard let image = screenshot.image.cgImage else { return false }
+        let cropRect = CGRect(
+            x: CGFloat(image.width) * 0.20,
+            y: CGFloat(image.height) * 0.58,
+            width: CGFloat(image.width) * 0.60,
+            height: CGFloat(image.height) * 0.32
+        ).integral
+        guard let crop = image.cropping(to: cropRect), crop.width * crop.height >= 10 else { return false }
+        let bytesPerPixel = 4
+        let bytesPerRow = crop.width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: bytesPerRow * crop.height)
+        let rendered = pixels.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress,
+                  let context = CGContext(
+                      data: baseAddress,
+                      width: crop.width,
+                      height: crop.height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: bytesPerRow,
+                      space: CGColorSpaceCreateDeviceRGB(),
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  )
+            else {
+                return false
+            }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+            return true
+        }
+        guard rendered else { return false }
+        var luminances: [CGFloat] = []
+        luminances.reserveCapacity(crop.width * crop.height)
+        for y in 0 ..< crop.height {
+            for x in 0 ..< crop.width {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let red = CGFloat(pixels[offset]) / 255
+                let green = CGFloat(pixels[offset + 1]) / 255
+                let blue = CGFloat(pixels[offset + 2]) / 255
+                luminances.append(0.2126 * red + 0.7152 * green + 0.0722 * blue)
+            }
+        }
+        luminances.sort()
+        let darkSample = luminances[luminances.count / 20]
+        let lightSample = luminances[luminances.count * 19 / 20]
+        return lightSample - darkSample >= 0.25
     }
 }

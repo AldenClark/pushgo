@@ -94,6 +94,12 @@ struct SearchQuerySemantics {
         .lowercased(with: normalizationLocale)
     }
 
+    static func matchesEntityFields(_ fields: [String], rawQuery: String) -> Bool {
+        let query = normalizeText(rawQuery.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !query.isEmpty else { return true }
+        return normalizeText(fields.joined(separator: " ")).contains(query)
+    }
+
     private static func representativeTrigrams(in token: String) -> [String] {
         let scalars = Array(token.unicodeScalars)
         let trigramCount = scalars.count - 2

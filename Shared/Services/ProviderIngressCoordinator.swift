@@ -88,6 +88,12 @@ enum ProviderIngressPersistenceResult {
     }
 }
 
+enum ProviderInboxProgress: Sendable, Equatable {
+    case processing(completed: Int, total: Int)
+    case waitingRetry(remaining: Int)
+    case completed(processed: Int)
+}
+
 #if !os(watchOS)
 extension ProviderIngressPersistenceResult {
     init(_ outcome: NotificationPersistenceOutcome) {
@@ -111,32 +117,66 @@ struct ProviderIngressIdentity: Sendable, Equatable {
     let requestIdentifier: String?
     let entityType: String?
     let entityId: String?
+    let sourceBaseURL: String?
+    let isWakeup: Bool
 
     init(
         messageId: String?,
         deliveryId: String?,
         requestIdentifier: String? = nil,
         entityType: String? = nil,
-        entityId: String? = nil
+        entityId: String? = nil,
+        sourceBaseURL: String? = nil,
+        isWakeup: Bool = false
     ) {
         self.messageId = messageId
         self.deliveryId = deliveryId
         self.requestIdentifier = requestIdentifier
         self.entityType = entityType
         self.entityId = entityId
+        self.sourceBaseURL = sourceBaseURL
+        self.isWakeup = isWakeup
+    }
+
+    func matchesPersisted(_ message: PushMessage) -> Bool {
+        if let sourceBaseURL {
+            return message.providerSourceBaseURL == sourceBaseURL
+        }
+        // A source-less wakeup is only a hint. A globally equal delivery ID
+        // cannot prove that its Gateway's payload was stored.
+        return !isWakeup
     }
 }
 
-/// Mutable coordination is confined to the host application's main actor. The
-/// type remains nonisolated because legacy notification dictionaries are not
-/// `Sendable`; every production owner is `@MainActor`, and tests give each
-/// instance to at most one task at a time.
-final class ProviderIngressCoordinator: @unchecked Sendable {
+/// Owns all host-process ingress coordination on the main actor. Storage and
+/// network APIs suspend without blocking it, while legacy notification
+/// dictionaries never cross an unchecked Sendable boundary.
+@MainActor
+final class ProviderIngressCoordinator {
+    // Payloads are sanitized and treated as immutable before entering a batch.
+    // Foundation's heterogeneous dictionary cannot express that guarantee.
+    struct PersistenceInput: @unchecked Sendable {
+        let payload: [AnyHashable: Any]
+        let requestIdentifier: String?
+    }
+
     private struct DurablePulledItem {
         let payload: [AnyHashable: Any]
         let deliveryID: String
         let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
         let ingressIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity
+    }
+
+    private enum InboxFinalization {
+        case direct
+        case pulled(requestIdentifier: String, context: ProviderPullContext)
+    }
+
+    private struct ResolvedInboxItem {
+        let claimed: NotificationIngressInbox.ClaimedEntry
+        let payload: [AnyHashable: Any]
+        let requestIdentifier: String?
+        let finalization: InboxFinalization
     }
 
     private struct AckBatch {
@@ -173,8 +213,9 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
         let serverConfig: @MainActor () -> ServerConfig?
         let cachedDeviceKey: @MainActor () async -> String?
         let hasPersistedNotification: @MainActor (ProviderIngressIdentity) async -> Bool
-        let persistPayload: ([AnyHashable: Any], String?) async -> ProviderIngressPersistenceResult
-        let applyPersistenceResult: @MainActor (ProviderIngressPersistenceResult) -> Void
+        let persistPayloads: @MainActor ([PersistenceInput]) async -> [ProviderIngressPersistenceResult]
+        let applyPersistenceResults: @MainActor ([ProviderIngressPersistenceResult]) -> Void
+        let reportInboxProgress: @MainActor (ProviderInboxProgress) -> Void
         let recordProviderError: @MainActor (Error, String) -> Void
     }
 
@@ -190,6 +231,13 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
     private var isDrainingAckMarkers = false
     private var isFullSyncInFlight = false
     private var lastFullSyncAttemptAt = Date.distantPast
+    private var inboxMergeTask: Task<Int, Never>?
+    private var inboxMergeRequested = false
+    private var pendingInboxAllowsFallbackPull = false
+    private var pendingInboxLimit = 64
+    private var pendingInboxReason = "unspecified"
+    private var qualityMessageRefreshAttempt = 0
+    private let inboxApplyOwner = "app.ingress.\(UUID().uuidString.lowercased())"
     private static let recentFullSyncInterval: TimeInterval = 3
     // NSE never owns correctness-critical network work. The host may claim a
     // freshly durable ACK immediately; duplicate workers are fenced by lease.
@@ -229,51 +277,114 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
             deliveryId: providerDeliveryId(from: sanitized),
             requestIdentifier: requestIdentifier,
             entityType: entityTarget?.entityType,
-            entityId: entityTarget?.entityId
+            entityId: entityTarget?.entityId,
+            sourceBaseURL: normalizedText(sanitized["base_url"] as? String),
+            isWakeup: NotificationHandling.providerWakeupPullDeliveryId(from: sanitized) != nil
         )
     }
 
     @discardableResult
+    @MainActor
     func mergeInbox(
         reason: String,
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        guard !Task.isCancelled, await hooks.isEnabled() else { return 0 }
-        let batchSize = max(1, min(limit, 512))
+        inboxMergeRequested = true
+        pendingInboxAllowsFallbackPull = pendingInboxAllowsFallbackPull || allowFallbackPull
+        pendingInboxLimit = max(pendingInboxLimit, min(512, max(1, limit)))
+        pendingInboxReason = reason
+        if let inboxMergeTask {
+            return await inboxMergeTask.value
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return 0 }
+            var totalApplied = 0
+            repeat {
+                inboxMergeRequested = false
+                let runAllowsFallbackPull = pendingInboxAllowsFallbackPull
+                let runLimit = pendingInboxLimit
+                let runReason = pendingInboxReason
+                pendingInboxAllowsFallbackPull = false
+                pendingInboxLimit = 64
+                totalApplied += await performMergeInbox(
+                    reason: runReason,
+                    allowFallbackPull: runAllowsFallbackPull,
+                    limit: runLimit
+                )
+            } while inboxMergeRequested && !Task.isCancelled
+            inboxMergeTask = nil
+            return totalApplied
+        }
+        inboxMergeTask = task
+        return await task.value
+    }
+
+    @MainActor
+    private func performMergeInbox(
+        reason: String,
+        allowFallbackPull: Bool,
+        limit: Int
+    ) async -> Int {
+        guard !Task.isCancelled, hooks.isEnabled() else { return 0 }
+        let steadyStateBatchSize = max(1, min(limit, 200))
+        var batchSize = min(64, steadyStateBatchSize)
         let maximumEntriesPerDrain = 8_192
         var applied = 0
         var visited = 0
+        var settled = 0
+        await notificationIngressInbox.prepareForDrain()
+        let initialCounts = await notificationIngressInbox.queueCounts(
+            importLegacyState: false
+        )
+        var progressTotal = initialCounts.outstanding
+        if initialCounts.due > 0 {
+            hooks.reportInboxProgress(
+                .processing(completed: 0, total: progressTotal)
+            )
+        } else if initialCounts.outstanding > 0 {
+            hooks.reportInboxProgress(
+                .waitingRetry(remaining: initialCounts.outstanding)
+            )
+        }
 
         while visited < maximumEntriesPerDrain {
             guard !Task.isCancelled else { return applied }
-            let pendingEntries = await notificationIngressInbox.pendingEntries(limit: batchSize)
-            guard !pendingEntries.isEmpty else { break }
-            for pendingEntry in pendingEntries {
+            let claimedEntries = await notificationIngressInbox.claimPendingEntries(
+                owner: inboxApplyOwner,
+                leaseDuration: 60,
+                limit: batchSize,
+                importLegacyState: false
+            )
+            guard !claimedEntries.isEmpty else { break }
+            var resolvedItems: [ResolvedInboxItem] = []
+            resolvedItems.reserveCapacity(claimedEntries.count)
+            var completedClaims: [NotificationIngressInbox.ClaimedEntry] = []
+            completedClaims.reserveCapacity(claimedEntries.count)
+            for claimedEntry in claimedEntries {
                 guard !Task.isCancelled else { return applied }
                 visited += 1
-                let payload = pendingEntry.payload
+                let payload = claimedEntry.payload
                 let identity = identity(
                     from: payload,
-                    fallbackRequestIdentifier: pendingEntry.record.requestIdentifier
+                    fallbackRequestIdentifier: claimedEntry.record.requestIdentifier
                 )
 
                 if await hooks.hasPersistedNotification(identity) {
-                    await notificationIngressInbox.markCompleted(pendingEntry)
+                    completedClaims.append(claimedEntry)
                     continue
                 }
 
                 let ingress = await NotificationHandling.resolveNotificationIngress(
                     from: payload,
                     dataStore: dataStore,
-                    fallbackServerConfig: await hooks.serverConfig(),
+                    fallbackServerConfig: hooks.serverConfig(),
                     channelSubscriptionService: channelSubscriptionService,
                     notificationIngressInbox: notificationIngressInbox,
                     allowLegacyFallback: allowFallbackPull
                 )
                 guard !Task.isCancelled else { return applied }
 
-                let shouldRemove: Bool
                 switch ingress {
                 case let .pulled(resolvedPayload, requestIdentifier, context):
                     guard await journalPulledPayload(
@@ -282,47 +393,67 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                         context: context,
                         source: "provider.inbox.pull.\(platformSuffix)"
                     ) else {
-                        await notificationIngressInbox.markRetry(
-                            pendingEntry,
+                        _ = await notificationIngressInbox.markRetry(
+                            claimedEntry,
                             reason: "pulled_payload_journal_failed"
                         )
                         continue
                     }
-                    let result = await hooks.persistPayload(resolvedPayload, requestIdentifier)
-                    await hooks.applyPersistenceResult(result)
-                    if result.isApplied { applied += 1 }
-                    await finalizePulledIngress(
-                        deliveryId: requestIdentifier,
-                        context: context,
-                        result: result,
-                        source: "provider.inbox.pulled.\(platformSuffix)"
+                    resolvedItems.append(
+                        ResolvedInboxItem(
+                            claimed: claimedEntry,
+                            payload: resolvedPayload,
+                            requestIdentifier: requestIdentifier,
+                            finalization: .pulled(
+                                requestIdentifier: requestIdentifier,
+                                context: context
+                            )
+                        )
                     )
-                    shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
                 case let .direct(resolvedPayload, requestIdentifier):
-                    let effectiveRequestIdentifier = requestIdentifier ?? pendingEntry.record.requestIdentifier
-                    let result = await hooks.persistPayload(resolvedPayload, effectiveRequestIdentifier)
-                    await hooks.applyPersistenceResult(result)
-                    if result.isApplied { applied += 1 }
-                    await ackDirectDeliveryIfNeeded(
-                        payload: resolvedPayload,
-                        result: result,
-                        source: "provider.inbox.direct.\(platformSuffix)"
+                    resolvedItems.append(
+                        ResolvedInboxItem(
+                            claimed: claimedEntry,
+                            payload: resolvedPayload,
+                            requestIdentifier: requestIdentifier
+                                ?? claimedEntry.record.requestIdentifier,
+                            finalization: .direct
+                        )
                     )
-                    shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
                 case .claimedByPeer:
-                    shouldRemove = await hooks.hasPersistedNotification(identity)
+                    if await hooks.hasPersistedNotification(identity) {
+                        completedClaims.append(claimedEntry)
+                    } else {
+                        _ = await notificationIngressInbox.markRetry(
+                            claimedEntry,
+                            reason: "canonical_claimed_by_peer"
+                        )
+                    }
                 case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
                     guard allowFallbackPull else {
-                        shouldRemove = false
+                        _ = await notificationIngressInbox.markRetry(
+                            claimedEntry,
+                            reason: "fallback_pull_disabled"
+                        )
                         break
                     }
                     let unresolvedDeliveryId = requestIdentifier
                         ?? NotificationHandling.providerWakeupPullDeliveryId(from: unresolvedPayload)
-                        ?? pendingEntry.record.requestIdentifier
+                        ?? claimedEntry.record.requestIdentifier
                     guard let unresolvedDeliveryId else {
-                        shouldRemove = false
+                        _ = await notificationIngressInbox.markRetry(
+                            claimedEntry,
+                            reason: "unresolved_delivery_identity"
+                        )
                         break
                     }
+                    // Provider I/O is owned by the separate pull-claim lease. Do
+                    // not hold the canonical-apply lease across the network.
+                    _ = await notificationIngressInbox.markRetry(
+                        claimedEntry,
+                        reason: "handoff_to_provider_pull",
+                        retryAfter: Date().addingTimeInterval(30)
+                    )
                     let pulled = await syncProviderIngress(
                         deliveryId: unresolvedDeliveryId,
                         reason: "inbox_unresolved_\(reason)",
@@ -330,25 +461,80 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                     )
                     if pulled > 0 {
                         applied += pulled
-                        shouldRemove = true
-                    } else {
-                        shouldRemove = false
                     }
                 }
-
-                if shouldRemove {
-                    await notificationIngressInbox.markCompleted(pendingEntry)
-                } else {
-                    await notificationIngressInbox.markRetry(
-                        pendingEntry,
-                        reason: "canonical_or_resolution_retry"
-                    )
-                }
             }
-            if pendingEntries.count < batchSize { break }
+
+            if !resolvedItems.isEmpty {
+                let results = await persistPayloads(
+                    resolvedItems.map {
+                        PersistenceInput(
+                            payload: $0.payload,
+                            requestIdentifier: $0.requestIdentifier
+                        )
+                    }
+                )
+                hooks.applyPersistenceResults(results)
+                for (item, result) in zip(resolvedItems, results) {
+                    if result.isApplied { applied += 1 }
+                    let shouldRemove = shouldRemoveInboxEntry(
+                        payload: item.payload,
+                        result: result
+                    )
+                    if shouldRemove {
+                        completedClaims.append(item.claimed)
+                    } else {
+                        _ = await notificationIngressInbox.markRetry(
+                            item.claimed,
+                            reason: "canonical_or_resolution_retry"
+                        )
+                    }
+                }
+                settled += await notificationIngressInbox.markCompleted(completedClaims)
+                for (item, result) in zip(resolvedItems, results) {
+                    switch item.finalization {
+                    case .direct:
+                        await ackDirectDeliveryIfNeeded(
+                            payload: item.payload,
+                            result: result,
+                            source: "provider.inbox.direct.\(platformSuffix)"
+                        )
+                    case let .pulled(requestIdentifier, context):
+                        await finalizePulledIngress(
+                            deliveryId: requestIdentifier,
+                            context: context,
+                            result: result,
+                            source: "provider.inbox.pulled.\(platformSuffix)"
+                        )
+                    }
+                }
+            } else {
+                settled += await notificationIngressInbox.markCompleted(completedClaims)
+            }
+            let currentCounts = await notificationIngressInbox.queueCounts(
+                importLegacyState: false
+            )
+            progressTotal = max(progressTotal, settled + currentCounts.outstanding)
+            if progressTotal > 0 {
+                hooks.reportInboxProgress(
+                    .processing(completed: settled, total: progressTotal)
+                )
+            }
+            if claimedEntries.count < batchSize { break }
+            batchSize = steadyStateBatchSize
         }
 
         _ = await notificationIngressInbox.performMaintenance()
+        let finalCounts = await notificationIngressInbox.queueCounts(
+            importLegacyState: false
+        )
+        if finalCounts.outstanding > 0 {
+            hooks.reportInboxProgress(
+                .waitingRetry(remaining: finalCounts.outstanding)
+            )
+        } else if progressTotal > 0 {
+            hooks.reportInboxProgress(.completed(processed: settled))
+        }
         return applied
     }
 
@@ -371,7 +557,12 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
         reason: String,
         skipInboxMerge: Bool = false
     ) async -> SyncOutcome {
-        guard !Task.isCancelled, await hooks.isEnabled() else { return .skipped }
+        guard !Task.isCancelled, hooks.isEnabled() else { return .skipped }
+#if DEBUG
+        if let outcome = await consumeQualityMessageRefreshScenario(reason: reason) {
+            return outcome
+        }
+#endif
         let normalizedDeliveryId = normalizedText(deliveryId)
         let shouldCoalesceFullSync = normalizedDeliveryId == nil && !bypassesRecentFullSyncCoalescing(reason: reason)
         if shouldCoalesceFullSync {
@@ -395,7 +586,7 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
             )
         }
         guard !Task.isCancelled else { return .skipped }
-        guard let config = await hooks.serverConfig() else { return .skipped }
+        guard let config = hooks.serverConfig() else { return .skipped }
         guard !Task.isCancelled else { return .skipped }
         guard let deviceKey = await hooks.cachedDeviceKey() else { return .skipped }
         guard !Task.isCancelled else { return .skipped }
@@ -441,6 +632,8 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                         result[element.key] = element.value
                     }
                     payload["delivery_id"] = item.deliveryId
+                    payload["base_url"] = config.baseURL.absoluteString
+                    payload["provider_device_key"] = deviceKey
                     guard let ingressIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
                         deliveryId: item.deliveryId,
                         baseURL: config.baseURL,
@@ -476,10 +669,17 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                 }
 
                 try Task.checkCancellation()
-                for item in durableItems {
+                let persistenceResults = await persistPayloads(
+                    durableItems.map {
+                        PersistenceInput(
+                            payload: $0.payload,
+                            requestIdentifier: $0.deliveryID
+                        )
+                    }
+                )
+                hooks.applyPersistenceResults(persistenceResults)
+                for (item, result) in zip(durableItems, persistenceResults) {
                     try Task.checkCancellation()
-                    let result = await hooks.persistPayload(item.payload, item.deliveryID)
-                    await hooks.applyPersistenceResult(result)
                     if result.isApplied {
                         applied += 1
                     }
@@ -592,7 +792,7 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                                 postNotification: false
                             )
                         }
-                        await hooks.recordProviderError(
+                        hooks.recordProviderError(
                             error,
                             "provider.ingress.ack_batch.\(reason)"
                         )
@@ -613,14 +813,80 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
             if let wakeupPullLease {
                 await wakeupPullClaimStore.releaseLease(wakeupPullLease)
             }
-            await hooks.recordProviderError(error, "provider.ingress.\(reason)")
+            hooks.recordProviderError(error, "provider.ingress.\(reason)")
             return .failed
         }
     }
 
+#if DEBUG
+    private func consumeQualityMessageRefreshScenario(reason: String) async -> SyncOutcome? {
+        guard reason == "messages_pull_to_refresh",
+              let session = PushGoAutomationContext.qualitySession,
+              session.messageRefreshScenario != .none
+        else {
+            return nil
+        }
+
+        qualityMessageRefreshAttempt += 1
+        if session.messageRefreshScenario == .failOnceThenNewMessage,
+           qualityMessageRefreshAttempt == 1 {
+            return .failed
+        }
+        guard qualityMessageRefreshAttempt == 1
+                || (session.messageRefreshScenario == .failOnceThenNewMessage
+                    && qualityMessageRefreshAttempt == 2)
+        else {
+            return .succeeded(appliedCount: 0)
+        }
+
+        let messageID = "quality-refresh-result"
+        let deliveryID = "quality-delivery-refresh-result"
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "message",
+            "entity_id": messageID,
+            "message_id": messageID,
+            "delivery_id": deliveryID,
+            "title": "P2 Refresh Result",
+            "body": "Persisted through the provider refresh ingress path.",
+            "channel": "quality",
+            "received_at": "2026-01-16T08:00:00Z",
+            "aps": [
+                "alert": [
+                    "title": "P2 Refresh Result",
+                    "body": "Persisted through the provider refresh ingress path.",
+                ],
+            ],
+        ]
+        let results = await persistPayloads([
+            PersistenceInput(payload: payload, requestIdentifier: deliveryID),
+        ])
+        hooks.applyPersistenceResults(results)
+        guard let result = results.first else { return .failed }
+        switch result {
+        case .persisted:
+            return .succeeded(appliedCount: 1)
+        case .duplicate:
+            return .succeeded(appliedCount: 0)
+        case .rejected, .failed:
+            return .failed
+        }
+    }
+#endif
+
+    private func persistPayloads(
+        _ inputs: [PersistenceInput]
+    ) async -> [ProviderIngressPersistenceResult] {
+        guard !inputs.isEmpty else { return [] }
+        let results = await hooks.persistPayloads(inputs)
+        guard results.count == inputs.count else {
+            return Array(repeating: .failed, count: inputs.count)
+        }
+        return results
+    }
+
     @discardableResult
     func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
-        guard await hooks.isEnabled() else { return 0 }
+        guard hooks.isEnabled() else { return 0 }
         let pendingEntries = await notificationIngressInbox.pendingEntries(limit: limit)
         guard !pendingEntries.isEmpty else { return 0 }
 
@@ -753,9 +1019,9 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
             : nil
         if requiresAck, identity == nil { return false }
         var durablePayload = UserInfoSanitizer.sanitize(payload)
+        durablePayload["base_url"] = baseURL.absoluteString
+        durablePayload["provider_device_key"] = deviceKey
         if !requiresAck {
-            durablePayload["base_url"] = baseURL.absoluteString
-            durablePayload["provider_device_key"] = deviceKey
             durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
                 ProviderLegacyDestructivePullMetadata.markerValue
         }
@@ -774,7 +1040,7 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
     }
 
     func drainAckMarkers(source: String, now: Date = Date()) async {
-        guard !Task.isCancelled, await hooks.isEnabled(), !isDrainingAckMarkers else { return }
+        guard !Task.isCancelled, hooks.isEnabled(), !isDrainingAckMarkers else { return }
         isDrainingAckMarkers = true
         defer { isDrainingAckMarkers = false }
 
@@ -826,7 +1092,7 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                         retryAfter: Date().addingTimeInterval(60),
                         postNotification: false
                     )
-                    await hooks.recordProviderError(error, source)
+                    hooks.recordProviderError(error, source)
                 }
                 guard !Task.isCancelled else { return }
                 continue
@@ -888,7 +1154,7 @@ final class ProviderIngressCoordinator: @unchecked Sendable {
                         postNotification: false
                     )
                 }
-                await hooks.recordProviderError(error, source)
+                hooks.recordProviderError(error, source)
             }
         }
         _ = await notificationIngressInbox.performMaintenance()

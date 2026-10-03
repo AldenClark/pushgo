@@ -7,9 +7,96 @@ import SwiftUI
 import UserNotifications
 import UIKit
 
+#if DEBUG
+private actor QualityGatewaySwitchPreCommitGate {
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    func wait() async throws {
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+            }
+        }, onCancel: {
+            Task { await self.cancel() }
+        })
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    private func cancel() {
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+}
+#endif
+
+#if DEBUG
+private let pushGoIngressPerformanceProcessStartUptime = ProcessInfo.processInfo.systemUptime
+
+private struct PushGoIngressPerformanceMeasurement {
+    enum Mode: String {
+        case baseline
+        case seed
+        case measure
+        case cleanup
+    }
+
+    enum PayloadKind: String {
+        case short
+        case long
+    }
+
+    let mode: Mode
+    let runID: String
+    let pendingCount: Int
+    let payloadKind: PayloadKind
+    let processStartUptime: TimeInterval
+    var baselineMessageCount: Int?
+    var didLogFirstBatchCommit = false
+    var didLogCachedUI = false
+    var didLogFirstBatchUI = false
+    var didLogAllPendingUI = false
+
+    var fixtureChannel: String { "__pushgo_ingress_perf_\(runID)__" }
+
+    static func fromEnvironment() -> Self? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let mode = environment["PUSHGO_INGRESS_PERF_MODE"].flatMap(Mode.init(rawValue:)),
+              let rawRunID = environment["PUSHGO_INGRESS_PERF_RUN_ID"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawRunID.isEmpty,
+              let pendingCount = Int(environment["PUSHGO_INGRESS_PERF_COUNT"] ?? ""),
+              (0...1_000).contains(pendingCount),
+              let payloadKind = PayloadKind(
+                rawValue: environment["PUSHGO_INGRESS_PERF_PAYLOAD"] ?? "short"
+              )
+        else { return nil }
+        let safeRunID = rawRunID.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        guard !safeRunID.isEmpty else { return nil }
+        return Self(
+            mode: mode,
+            runID: safeRunID,
+            pendingCount: pendingCount,
+            payloadKind: payloadKind,
+            processStartUptime: pushGoIngressPerformanceProcessStartUptime
+        )
+    }
+}
+#endif
+
 @MainActor
 @Observable
 final class AppEnvironment {
+    enum MessageIngressNotice: Equatable {
+        case processing(completed: Int, total: Int)
+        case processingSlow(completed: Int, total: Int)
+        case waitingRetry(remaining: Int)
+        case completed
+    }
+
     enum SettingsPresentationRequest: String, Identifiable {
         case settings
         case decryption
@@ -33,6 +120,15 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var isCountsRefreshRequested = false
+    @ObservationIgnored private var ingressNoticeRevealTask: Task<Void, Never>?
+    @ObservationIgnored private var ingressNoticeWatchdogTask: Task<Void, Never>?
+    @ObservationIgnored private var ingressNoticeDismissTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingInboxProgress: ProviderInboxProgress?
+#if DEBUG
+    @ObservationIgnored private var ingressPerformanceMeasurement =
+        PushGoIngressPerformanceMeasurement.fromEnvironment()
+#endif
     @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
@@ -41,6 +137,19 @@ final class AppEnvironment {
     @ObservationIgnored private var pendingDeletionBackgroundTask: Task<Void, Never>?
     @ObservationIgnored private var pendingDeletionBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     @ObservationIgnored private var pendingDeletionBackgroundDrainID: UUID?
+#if DEBUG
+    @ObservationIgnored private var remainingQualityGatewaySwitchValidationFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
+    @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+    @ObservationIgnored private let qualityGatewaySwitchPreCommitGate = QualityGatewaySwitchPreCommitGate()
+    private(set) var isQualityGatewaySwitchPreCommitPaused = false
+    @ObservationIgnored private var qualityGatewayPostCommitSyncFailurePending =
+        PushGoAutomationContext.qualitySession?.faults.failGatewayPostCommitSyncOnce == true
+    @ObservationIgnored private var remainingQualityGatewayPostCommitSyncFailures = 0
+    @ObservationIgnored private var qualityEventCloseAttemptCount = 0
+    @ObservationIgnored private var isQualityEventCloseRoundTripInFlight = false
+#endif
 
     private var toastDismissTask: Task<Void, Never>?
 
@@ -49,7 +158,11 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+    private(set) var messageIngressNotice: MessageIngressNotice?
     private(set) var isDeletionRecoveryReady = false
+#if DEBUG
+    private(set) var qualityRuntimeReadiness = "inactive"
+#endif
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -78,9 +191,103 @@ final class AppEnvironment {
     var pendingSettingsPresentation: SettingsPresentationRequest?
     private(set) var channelListFeedbackMessage: String?
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
+    private var isQualityChannelMutationSession: Bool {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario else {
+            return false
+        }
+        return scenario != .none
+#else
+        false
+#endif
+    }
+
+    /// Quality gateway recovery must survive the ordinary process restart used by
+    /// the UI suite.  Keep that state inside the already session-scoped quality
+    /// storage root so debug automation never writes a production preference.
+    private var qualityGatewayRecoveryMarkerURL: URL? {
+#if DEBUG
+        guard isQualityChannelMutationSession,
+              let rootURL = PushGoAutomationContext.storageRootURL
+        else {
+            return nil
+        }
+        return rootURL.appendingPathComponent("gateway-recovery-pending", isDirectory: false)
+#else
+        nil
+#endif
+    }
+
+    private func markQualityGatewayRecoveryPending() {
+        guard let markerURL = qualityGatewayRecoveryMarkerURL else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: markerURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("pending".utf8).write(to: markerURL, options: .atomic)
+        } catch {
+            recordAutomationRuntimeError(error, source: "quality.gateway_recovery.marker_write")
+        }
+    }
+
+    private var hasQualityGatewayRecoveryPending: Bool {
+        guard isQualityChannelMutationSession else { return false }
+        if let markerURL = qualityGatewayRecoveryMarkerURL,
+           FileManager.default.fileExists(atPath: markerURL.path)
+        {
+            return true
+        }
+#if DEBUG
+        do {
+            // The protected committed journal is the fallback source of truth
+            // when marker persistence failed or the process died between the
+            // two writes.  This prevents a missing marker from silently
+            // skipping the actual recovery controller.
+            return try gatewayTransitionJournal.load(platform: platformIdentifier())?.phase == .committed
+        } catch {
+            recordAutomationRuntimeError(error, source: "quality.gateway_recovery.journal_read")
+            return false
+        }
+#else
+        return false
+#endif
+    }
+
+    private func clearQualityGatewayRecoveryPending(expectedTransitionID: UUID? = nil) throws {
+#if DEBUG
+        // Do not let a recovery that started for transition A clear a newer
+        // transition B that was written while the sync awaited the gateway.
+        let current = try gatewayTransitionJournal.load(platform: platformIdentifier())
+        if let expectedTransitionID {
+            if let current, current.transitionID != expectedTransitionID {
+                return
+            }
+        } else if current != nil {
+            return
+        }
+#endif
+        if let markerURL = qualityGatewayRecoveryMarkerURL,
+           FileManager.default.fileExists(atPath: markerURL.path)
+        {
+            try FileManager.default.removeItem(at: markerURL)
+        }
+#if DEBUG
+        if let expectedTransitionID {
+            _ = try gatewayTransitionJournal.clear(
+                platform: platformIdentifier(),
+                expectedTransitionID: expectedTransitionID
+            )
+        }
+#endif
+    }
     private let channelSubscriptionService = ChannelSubscriptionService()
+    @ObservationIgnored private let gatewayTransitionJournal = GatewayTransitionJournal()
     private let networkPermissionChecker = NetworkPermissionChecker()
-    @ObservationIgnored private let localStoreFailureStreakThreshold = 3
+    // Quality may compress repeated process launches, but still exercises the
+    // production recovery surface and destructive Store implementation.
+    @ObservationIgnored private let localStoreFailureStreakThreshold =
+        PushGoAutomationContext.qualitySession?.faults.localStoreFailureStreakThreshold ?? 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
     // Keep AppEnvironment as the composition root. Feature-specific behavior
@@ -145,6 +352,7 @@ final class AppEnvironment {
         pushRegistrationService: pushRegistrationService,
         channelSubscriptionService: channelSubscriptionService,
         providerRouteController: providerRouteController,
+        subscriptionSyncRoundTrip: Self.makeQualityChannelSyncRoundTrip(),
         localizationManager: localizationManager,
         serverConfigProvider: { [weak self] in
             self?.serverConfig
@@ -177,10 +385,14 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
-        }
+        },
+        channelMutationRoundTrip: Self.makeQualityChannelMutationRoundTrip()
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
+        timeout: PushGoAutomationContext.qualitySession?.faults.pendingDeletionTimeoutMilliseconds.map {
+            TimeInterval($0) / 1_000
+        } ?? 5,
         channelCommitHandler: { [weak self] record, owner in
             guard let self else { throw CancellationError() }
             return try await self.channelSubscriptionController.commitPendingChannelRemoval(
@@ -240,17 +452,58 @@ final class AppEnvironment {
                 await self.reloadMessagesFromStore()
             }
         }
-        notificationIngressObserver = DarwinNotificationObserver(
-            name: AppConstants.notificationIngressChangedNotificationName
-        ) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.notificationIngressController.handleNotificationIngressChanged(
-                    reason: "darwin_notification"
-                )
+#if DEBUG
+        let suppressIngressObserver = ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+#else
+        let suppressIngressObserver = false
+#endif
+        if !suppressIngressObserver {
+            notificationIngressObserver = DarwinNotificationObserver(
+                name: AppConstants.notificationIngressChangedNotificationName
+            ) { [weak self] in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.notificationIngressController.handleNotificationIngressChanged(
+                        reason: "darwin_notification"
+                    )
+                }
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    private static func makeQualityChannelMutationRoundTrip() -> (any ChannelMutationRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
+#else
+        return nil
+#endif
+    }
+
+    private static func makeQualityChannelSyncRoundTrip() -> (any ChannelSubscriptionSyncRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
+#else
+        return nil
+#endif
     }
 
     private func makeNotificationIngressController() -> NotificationIngressController {
@@ -272,6 +525,9 @@ final class AppEnvironment {
             },
             scheduleCountsRefresh: { [weak self] in
                 self?.scheduleCountsRefresh()
+            },
+            reportInboxProgress: { [weak self] progress in
+                self?.handleInboxProgress(progress)
             },
             recordProviderError: { [weak self] error, source in
                 self?.recordAutomationRuntimeError(error, source: source, category: "provider")
@@ -302,9 +558,34 @@ final class AppEnvironment {
         bootstrapTask = nil
     }
 
+#if DEBUG
+    func markQualityRuntimeReadiness(_ status: String?) {
+        qualityRuntimeReadiness = status ?? "inactive"
+    }
+#endif
+
     private func performBootstrap() async {
+#if DEBUG
+        if await runIngressPerformancePreparationIfNeeded() {
+            isDeletionRecoveryReady = true
+            return
+        }
+#endif
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+        guard dataStore.storageState.mode == .persistent else {
+            finishProviderIngressBootstrapRecovery()
+            isDeletionRecoveryReady = true
+            return
+        }
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .measure {
+            ingressPerformanceMeasurement?.baselineMessageCount = totalMessageCount
+            logIngressPerformancePhase("canonical_baseline", details: [
+                "message_count": "\(totalMessageCount)",
+            ])
+        }
+#endif
         startMessageStoreObservationIfNeeded()
         await pendingLocalDeletionController.restorePendingState()
         isDeletionRecoveryReady = true
@@ -318,10 +599,17 @@ final class AppEnvironment {
             defer {
                 finishProviderIngressBootstrapRecovery()
             }
-            _ = await mergeNotificationIngressInbox(
+            let applied = await mergeNotificationIngressInbox(
                 reason: "bootstrap",
                 allowFallbackPull: false
             )
+#if DEBUG
+            if self.ingressPerformanceMeasurement?.mode == .measure {
+                self.logIngressPerformancePhase("canonical_drain_complete", details: [
+                    "applied": "\(applied)",
+                ])
+            }
+#endif
             await dataStore.scheduleDerivedWorkDrain()
             await preparePushInfrastructure()
             let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
@@ -387,14 +675,296 @@ final class AppEnvironment {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
-        serverConfig = normalized
-        await refreshChannelSubscriptions(syncWatch: false)
-        requestWatchStandaloneProvisioningSync(immediate: true)
-        providerRouteController.schedulePreviousGatewayDeviceCleanup(
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+        // A committed quality gateway is authoritative even if the following
+        // subscription reconciliation fails.  Arm a durable marker before the
+        // caller performs that work so the next Channels entry retries through
+        // ChannelSyncController rather than merely reloading cached rows.
+        markQualityGatewayRecoveryPending()
+    }
+
+    /// A user-initiated gateway switch is a prepare/commit operation. The
+    /// candidate must accept device registration and the active APNs route
+    /// before it can replace the current local identity or trigger cleanup.
+    func validateAndUpdateServerConfig(_ config: ServerConfig) async throws {
+        try Task.checkCancellation()
+        let normalized = config.normalized()
+        let previousConfig = serverConfig
+        if gatewayIdentity(previousConfig) == gatewayIdentity(normalized) {
+            try Task.checkCancellation()
+            try await updateServerConfig(normalized)
+            return
+        }
+        // Do not overwrite a durable cleanup obligation from an earlier gateway
+        // switch.  If it cannot be reconciled now, keep both the old snapshot
+        // and the new candidate out of the active identity rather than silently
+        // forgetting the old remote route.
+        try await reconcileCommittedGatewayTransitionCleanup()
+        try Task.checkCancellation()
+        let previousDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try Task.checkCancellation()
+        let preparedDeviceKey = try await prepareCandidateGateway(normalized)
+        // The candidate has been validated, but no local identity has been
+        // changed yet. Cancellation here must leave the old gateway active.
+        try Task.checkCancellation()
+#if DEBUG
+        try await pauseQualityGatewaySwitchBeforeCommitIfRequested()
+#endif
+
+        var transition = GatewayTransitionJournal.Record(
+            platform: platformIdentifier(),
             previousConfig: previousConfig,
             previousDeviceKey: previousDeviceKey,
-            nextConfig: normalized
+            nextConfig: normalized,
+            nextDeviceKey: preparedDeviceKey
         )
+        // The rollback snapshot is protected and durable before either active
+        // store changes.  A cancellation or crash at any later stage therefore
+        // has an unambiguous old identity to restore on the next bootstrap.
+        try gatewayTransitionJournal.save(transition)
+        do {
+            try Task.checkCancellation()
+            try await dataStore.saveServerConfig(normalized)
+            try Task.checkCancellation()
+            try gatewayTransitionJournal.advance(&transition, to: .configPersisted)
+#if DEBUG
+            if remainingQualityGatewaySwitchCommitFailures > 0 {
+                remainingQualityGatewaySwitchCommitFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_local_commit_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway commit failed after candidate config persistence"
+                )
+            }
+#endif
+            try await providerRouteController.persistProviderDeviceKey(
+                preparedDeviceKey,
+                source: "provider.device_key.gateway_switch"
+            )
+            try Task.checkCancellation()
+            try gatewayTransitionJournal.advance(&transition, to: .deviceKeyPersisted)
+        } catch {
+            do {
+                try await restoreGatewayTransition(transition)
+            } catch let rollbackError {
+                throw AppError.typedLocal(
+                    code: "gateway_local_commit_rollback_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "commit=\(error.localizedDescription); rollback=\(rollbackError.localizedDescription)"
+                )
+            }
+            throw error
+        }
+        try gatewayTransitionJournal.advance(&transition, to: .committed)
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+        // The gateway switch has crossed its local commit boundary.  Arm the
+        // session-scoped hand-off before the caller performs post-commit
+        // subscription reconciliation (which may fail or be interrupted).
+        markQualityGatewayRecoveryPending()
+        armQualityGatewayPostCommitSyncFailureIfNeeded()
+        Task(priority: .utility) { @MainActor [weak self] in
+            do {
+                try await self?.reconcileCommittedGatewayTransitionCleanup()
+            } catch {
+                // The new gateway is already the only local identity. Preserve
+                // the committed journal for bootstrap/Channels retry instead of
+                // misreporting cleanup as a candidate-registration failure.
+                self?.recordAutomationRuntimeError(error, source: "gateway.transition.cleanup.commit")
+            }
+        }
+    }
+
+#if DEBUG
+    /// A quality-only barrier makes the candidate-registration/local-commit
+    /// boundary observable to UI tests without a timing delay or production
+    /// behavior. It is reachable only from a typed quality session.
+    private func pauseQualityGatewaySwitchBeforeCommitIfRequested() async throws {
+        guard PushGoAutomationContext.qualitySession?.faults.pauseGatewaySwitchBeforeCommit == true else {
+            return
+        }
+        isQualityGatewaySwitchPreCommitPaused = true
+        defer { isQualityGatewaySwitchPreCommitPaused = false }
+        try await qualityGatewaySwitchPreCommitGate.wait()
+    }
+
+    func continueQualityGatewaySwitchPreCommitPhase() {
+        guard PushGoAutomationContext.qualitySession?.faults.pauseGatewaySwitchBeforeCommit == true else {
+            return
+        }
+        Task {
+            await qualityGatewaySwitchPreCommitGate.release()
+        }
+    }
+#endif
+
+    private func activatePersistedServerConfig(
+        _ normalized: ServerConfig?,
+        previousConfig: ServerConfig?,
+        previousDeviceKey: String?
+    ) async {
+        serverConfig = normalized
+        await refreshChannelSubscriptions(syncWatch: false)
+        if isQualityChannelMutationSession {
+            return
+        }
+        requestWatchStandaloneProvisioningSync(immediate: true)
+    }
+
+    /// Restores both protected stores before this environment consumes gateway
+    /// state.  The journal is left in place when either write fails so the next
+    /// bootstrap retries instead of exposing a mixed address/device identity.
+    private func restoreGatewayTransition(
+        _ transition: GatewayTransitionJournal.Record
+    ) async throws {
+        var failures: [Error] = []
+        do {
+            try await dataStore.saveServerConfig(transition.previousConfig)
+        } catch {
+            failures.append(error)
+        }
+        do {
+            try await providerRouteController.restoreProviderDeviceKey(
+                transition.previousDeviceKey,
+                source: "provider.device_key.gateway_switch.rollback"
+            )
+        } catch {
+            failures.append(error)
+        }
+        guard failures.isEmpty else {
+            throw AppError.typedLocal(
+                code: "gateway_local_commit_rollback_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: failures.map(\.localizedDescription).joined(separator: "; ")
+            )
+        }
+        _ = try gatewayTransitionJournal.clear(
+            platform: transition.platform,
+            expectedTransitionID: transition.transitionID
+        )
+    }
+
+    /// Completes a committed transition's remote cleanup. This is deliberately
+    /// separate from local commit: cleanup failure keeps a durable retry record
+    /// while the new gateway remains authoritative.
+    private func reconcileCommittedGatewayTransitionCleanup() async throws {
+        guard let transition = try gatewayTransitionJournal.load(platform: platformIdentifier()),
+              transition.phase == .committed
+        else {
+            return
+        }
+        let persistedConfig = try await dataStore.loadServerConfig()?.normalized()
+        let persistedDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard gatewayIdentity(persistedConfig) == gatewayIdentity(transition.nextConfig),
+              persistedDeviceKey == transition.nextDeviceKey
+        else {
+            throw AppError.typedLocal(
+                code: "gateway_transition_active_identity_mismatch",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "committed gateway transition does not match protected active identity"
+            )
+        }
+#if DEBUG
+        // The quality candidate is an app-owned, in-process gateway contract;
+        // it never creates an old external provider route to retire. Preserve
+        // production cleanup semantics without leaking the test session into a
+        // real gateway merely to clear test-only transition state.
+        if isQualityChannelMutationSession {
+            // Keep the protected committed record until the recovery
+            // controller has produced its business result.  It is the durable
+            // fallback if the lightweight marker cannot be written.
+            return
+        }
+#endif
+        try await providerRouteController.cleanupPreviousGatewayDeviceRoute(
+            previousConfig: transition.previousConfig,
+            previousDeviceKey: transition.previousDeviceKey,
+            nextConfig: transition.nextConfig
+        )
+        _ = try gatewayTransitionJournal.clear(
+            platform: transition.platform,
+            expectedTransitionID: transition.transitionID
+        )
+    }
+
+    /// Returns false only when recovery itself cannot make both protected
+    /// values coherent. Callers must then avoid consuming gateway state.
+    private func recoverIncompleteGatewayTransitionIfNeeded() async -> Bool {
+        do {
+            guard let transition = try gatewayTransitionJournal.load(platform: platformIdentifier()) else {
+                return true
+            }
+            guard transition.phase != .committed else { return true }
+            try await restoreGatewayTransition(transition)
+            return true
+        } catch {
+            recordAutomationRuntimeError(error, source: "gateway.transition.recover")
+            return false
+        }
+    }
+
+    private func armQualityGatewayPostCommitSyncFailureIfNeeded() {
+#if DEBUG
+        guard qualityGatewayPostCommitSyncFailurePending else { return }
+        qualityGatewayPostCommitSyncFailurePending = false
+        remainingQualityGatewayPostCommitSyncFailures = 1
+#endif
+    }
+
+    private func prepareCandidateGateway(_ config: ServerConfig) async throws -> String {
+#if DEBUG
+        if PushGoAutomationContext.qualitySession != nil {
+            if remainingQualityGatewaySwitchValidationFailures > 0 {
+                remainingQualityGatewaySwitchValidationFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_registration_rejected",
+                    category: .network,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality candidate gateway rejected device registration"
+                )
+            }
+            guard isQualityChannelMutationSession else {
+                throw AppError.typedLocal(
+                    code: "quality_gateway_validation_unconfigured",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway switch requires an explicit accepted round trip"
+                )
+            }
+            return "quality-gateway-device"
+        }
+#endif
+        let providerToken = try await pushRegistrationService.awaitToken()
+        return try await providerRouteController.prepareProviderRoute(
+            config: config,
+            providerToken: providerToken,
+            reuseExistingDeviceKey: false
+        )
+    }
+
+    private func gatewayIdentity(_ config: ServerConfig?) -> String {
+        guard let config else { return "" }
+        let normalized = config.normalized()
+        let token = normalized.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(normalized.baseURL.absoluteString)|\(token)"
     }
 
     func replaceMessages(_ newMessages: [PushMessage]) async {
@@ -537,6 +1107,34 @@ final class AppEnvironment {
             return severity
         }()
 
+#if DEBUG
+        if let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario,
+           scenario != .none
+        {
+            var boundaryPayload: [String: Any] = [
+                "channel_id": normalizedChannelId,
+                "op_id": OpaqueId.generateHex128(),
+                "event_id": normalizedEventId,
+                "event_time": Int64(Date().timeIntervalSince1970),
+                "status": resolvedStatus,
+                "message": resolvedMessage,
+                "attrs": [String: Any](),
+                "severity": resolvedSeverity,
+            ]
+            if let normalizedThingId {
+                boundaryPayload["thing_id"] = normalizedThingId
+            }
+            let boundaryPath: String
+            if let normalizedThingId {
+                boundaryPath = "/thing/\(escapedGatewayPathComponent(normalizedThingId))/event/close"
+            } else {
+                boundaryPath = "/event/close"
+            }
+            try await postGatewayPayload(boundaryPayload, endpointPath: boundaryPath, config: config)
+            return
+        }
+#endif
+
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
             throw AppError.typedLocal(
                 code: "channel_password_missing",
@@ -589,15 +1187,333 @@ final class AppEnvironment {
     }
 
     private func scheduleCountsRefresh() {
-        pendingCountsRefreshTask?.cancel()
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .measure,
+           ingressPerformanceMeasurement?.didLogFirstBatchCommit == false
+        {
+            ingressPerformanceMeasurement?.didLogFirstBatchCommit = true
+            logIngressPerformancePhase("first_batch_canonical_commit")
+        }
+#endif
+        isCountsRefreshRequested = true
+        guard pendingCountsRefreshTask == nil else { return }
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            await self?.refreshMessageCountsAndNotify()
+            guard let self else { return }
+            repeat {
+                self.isCountsRefreshRequested = false
+                await self.refreshMessageCountsAndNotify()
+            } while self.isCountsRefreshRequested && !Task.isCancelled
+            self.pendingCountsRefreshTask = nil
+        }
+    }
+
+    private func handleInboxProgress(_ progress: ProviderInboxProgress) {
+        pendingInboxProgress = progress
+        switch progress {
+        case let .processing(completed, total):
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = nil
+            if messageIngressNotice != nil {
+                messageIngressNotice = .processing(completed: completed, total: total)
+            } else if ingressNoticeRevealTask == nil {
+                scheduleIngressNoticeReveal(total: total)
+            }
+            scheduleIngressNoticeWatchdog()
+
+        case let .waitingRetry(remaining):
+            ingressNoticeRevealTask?.cancel()
+            ingressNoticeRevealTask = nil
+            ingressNoticeWatchdogTask?.cancel()
+            ingressNoticeWatchdogTask = nil
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = nil
+            let wasWaiting: Bool
+            if case .waitingRetry = messageIngressNotice {
+                wasWaiting = true
+            } else {
+                wasWaiting = false
+            }
+            messageIngressNotice = .waitingRetry(remaining: remaining)
+            if !wasWaiting {
+                announceAccessibility(messageIngressNoticeText())
+            }
+            ingressNoticeDismissTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .seconds(4))
+                } catch {
+                    return
+                }
+                guard self?.messageIngressNotice == .waitingRetry(remaining: remaining) else {
+                    return
+                }
+                self?.messageIngressNotice = nil
+                self?.ingressNoticeDismissTask = nil
+            }
+
+        case .completed:
+            ingressNoticeRevealTask?.cancel()
+            ingressNoticeRevealTask = nil
+            ingressNoticeWatchdogTask?.cancel()
+            ingressNoticeWatchdogTask = nil
+            pendingInboxProgress = nil
+            guard messageIngressNotice != nil else { return }
+            messageIngressNotice = .completed
+            announceAccessibility(messageIngressNoticeText())
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(800))
+                } catch {
+                    return
+                }
+                guard self?.messageIngressNotice == .completed else { return }
+                self?.messageIngressNotice = nil
+                self?.ingressNoticeDismissTask = nil
+            }
+        }
+    }
+
+    private func scheduleIngressNoticeReveal(total: Int) {
+        let delay: Duration = total >= 500 ? .milliseconds(350) : .milliseconds(900)
+        ingressNoticeRevealTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            guard let self,
+                  case let .processing(completed, latestTotal) = pendingInboxProgress,
+                  messageIngressNotice == nil
+            else { return }
+            messageIngressNotice = .processing(completed: completed, total: latestTotal)
+            ingressNoticeRevealTask = nil
+            announceAccessibility(messageIngressNoticeText())
+        }
+    }
+
+    private func scheduleIngressNoticeWatchdog() {
+        ingressNoticeWatchdogTask?.cancel()
+        ingressNoticeWatchdogTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                return
+            }
+            guard let self,
+                  case let .processing(completed, total) = pendingInboxProgress
+            else { return }
+            messageIngressNotice = .processingSlow(completed: completed, total: total)
+            ingressNoticeWatchdogTask = nil
+            announceAccessibility(messageIngressNoticeText())
+        }
+    }
+
+    func messageIngressNoticeText(
+        for notice: MessageIngressNotice? = nil
+    ) -> String {
+        let resolvedNotice = notice ?? messageIngressNotice
+        switch resolvedNotice {
+        case .processing:
+            return localizationManager.localized("message_ingress_processing_progress")
+        case .processingSlow:
+            return localizationManager.localized("message_ingress_processing_slow")
+        case .waitingRetry:
+            return localizationManager.localized("message_ingress_waiting_retry")
+        case .completed:
+            return localizationManager.localized("message_ingress_completed")
+        case nil:
+            return ""
         }
     }
 
     private func scheduleMessageListRefresh() {
         messageStoreRevision = UUID()
     }
+
+#if DEBUG
+    func recordIngressPerformanceUIRefreshCompleted(
+        totalMessageCount displayedTotal: Int,
+        visibleMessageCount: Int
+    ) {
+        guard ingressPerformanceMeasurement?.mode == .measure,
+              let baseline = ingressPerformanceMeasurement?.baselineMessageCount,
+              let pendingCount = ingressPerformanceMeasurement?.pendingCount
+        else { return }
+        if ingressPerformanceMeasurement?.didLogCachedUI == false {
+            ingressPerformanceMeasurement?.didLogCachedUI = true
+            logIngressPerformancePhase("first_ui_refresh", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+        let firstBatchTarget = baseline + min(64, pendingCount)
+        if displayedTotal >= firstBatchTarget,
+           ingressPerformanceMeasurement?.didLogFirstBatchUI == false
+        {
+            ingressPerformanceMeasurement?.didLogFirstBatchUI = true
+            logIngressPerformancePhase("first_batch_ui_visible", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+        let allPendingTarget = baseline + pendingCount
+        if displayedTotal >= allPendingTarget,
+           ingressPerformanceMeasurement?.didLogAllPendingUI == false
+        {
+            ingressPerformanceMeasurement?.didLogAllPendingUI = true
+            logIngressPerformancePhase("all_pending_ui_visible", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+    }
+
+    private func runIngressPerformancePreparationIfNeeded() async -> Bool {
+        guard let measurement = ingressPerformanceMeasurement else { return false }
+        switch measurement.mode {
+        case .measure:
+            logIngressPerformancePhase("process_bootstrap_start")
+            return false
+        case .baseline:
+            return await seedIngressPerformanceBaseline(measurement)
+        case .seed:
+            return await seedIngressPerformanceFixture(measurement)
+        case .cleanup:
+            do {
+                let removed = try await dataStore.deleteMessages(channel: measurement.fixtureChannel)
+                let journalCleanup = await NotificationIngressInbox.shared.purgePerformanceFixtures()
+                logIngressPerformancePhase("cleanup_ready", details: [
+                    "journal_rows": "\(journalCleanup.rows)",
+                    "removed": "\(removed)",
+                    "shadows": "\(journalCleanup.shadows)",
+                ])
+            } catch {
+                logIngressPerformancePhase("cleanup_failed")
+            }
+            return true
+        }
+    }
+
+    private func seedIngressPerformanceBaseline(
+        _ measurement: PushGoIngressPerformanceMeasurement
+    ) async -> Bool {
+        do {
+            let before = try await dataStore.messageCounts().total
+            let requiredCount = max(0, measurement.pendingCount - before)
+            let inputs = (0..<requiredCount).map { index in
+                let identity = "ingress-baseline-\(measurement.runID)-\(index)"
+                return NotificationPersistenceCoordinator.RemotePayload(
+                    payload: [
+                        "message_id": identity,
+                        "delivery_id": identity,
+                        "title": "Baseline message \(index)",
+                        "body": "Baseline",
+                        "channel": measurement.fixtureChannel,
+                        "channel_id": measurement.fixtureChannel,
+                    ],
+                    requestIdentifier: identity
+                )
+            }
+            let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                inputs,
+                dataStore: dataStore
+            )
+            let accepted = outcomes.reduce(into: 0) { result, outcome in
+                switch outcome {
+                case .persistedMain, .persistedPending, .duplicate:
+                    result += 1
+                case .rejected, .failed:
+                    break
+                }
+            }
+            let after = try await dataStore.messageCounts().total
+            logIngressPerformancePhase("baseline_ready", details: [
+                "accepted": "\(accepted)",
+                "after": "\(after)",
+                "before": "\(before)",
+            ])
+        } catch {
+            logIngressPerformancePhase("baseline_failed")
+        }
+        return true
+    }
+
+    private func seedIngressPerformanceFixture(
+        _ measurement: PushGoIngressPerformanceMeasurement
+    ) async -> Bool {
+        let inbox = NotificationIngressInbox.shared
+        let preexistingPendingCount = await inbox.pendingEntries(limit: 10_000).count
+        guard preexistingPendingCount == 0 else {
+            logIngressPerformancePhase("seed_aborted", details: [
+                "preexisting_pending": "\(preexistingPendingCount)",
+            ])
+            return true
+        }
+        var acceptedCount = 0
+        let sentAtBase = Int64(Date().timeIntervalSince1970 * 1_000)
+        let fixtureBody: String
+        switch measurement.payloadKind {
+        case .short:
+            fixtureBody = "短消息实机性能测试"
+        case .long:
+            fixtureBody = String(
+                repeating: "长消息性能测试正文用于验证批量入库首屏加载数据库观察刷新与最终一致性。",
+                count: 40
+            )
+        }
+        for index in 0..<measurement.pendingCount {
+            let identity = "ingress-perf-\(measurement.runID)-\(index)"
+            let accepted = await inbox.enqueue(
+                codablePayload: [
+                    "message_id": AnyCodable(identity),
+                    "delivery_id": AnyCodable(identity),
+                    "title": AnyCodable("Ingress performance \(index)"),
+                    "body": AnyCodable(fixtureBody),
+                    "channel": AnyCodable(measurement.fixtureChannel),
+                    "channel_id": AnyCodable(measurement.fixtureChannel),
+                    "sent_at": AnyCodable("\(sentAtBase + Int64(index))"),
+                ],
+                requestIdentifier: identity,
+                source: "debug.ingress_performance",
+                postChangeNotification: false
+            )
+            if accepted { acceptedCount += 1 }
+        }
+        let duePendingCount = await inbox.pendingEntries(limit: 10_000).count
+        logIngressPerformancePhase("seed_ready", details: [
+            "accepted": "\(acceptedCount)",
+            "body_characters": "\(fixtureBody.count)",
+            "due_pending": "\(duePendingCount)",
+        ])
+        return true
+    }
+
+    private func logIngressPerformancePhase(
+        _ phase: String,
+        details: [String: String] = [:]
+    ) {
+        guard let measurement = ingressPerformanceMeasurement else { return }
+        let elapsedMilliseconds = max(
+            0,
+            Int(
+                (ProcessInfo.processInfo.systemUptime - measurement.processStartUptime) * 1_000
+            )
+        )
+        let detailText = details
+            .sorted { $0.key < $1.key }
+            .map { key, value in
+                "\(key)=\(value.replacingOccurrences(of: " ", with: "_"))"
+            }
+            .joined(separator: " ")
+        let suffix = detailText.isEmpty ? "" : " \(detailText)"
+        print(
+            "[PushGoIngressPerf] run=\(measurement.runID) count=\(measurement.pendingCount) "
+                + "payload=\(measurement.payloadKind.rawValue) "
+                + "phase=\(phase) elapsed_ms=\(elapsedMilliseconds)\(suffix)"
+        )
+        fflush(stdout)
+    }
+#endif
 
     func publishStoreRefreshForAutomation() {
         messageStoreRevision = UUID()
@@ -975,18 +1891,57 @@ final class AppEnvironment {
     }
 
     private func syncSubscriptionsOnLaunch() async {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnLaunch()
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
+        if isQualityChannelMutationSession {
+            channelListFeedbackMessage = nil
+            guard hasQualityGatewayRecoveryPending else {
+                await refreshChannelSubscriptions(syncProviderRoute: false)
+                return
+            }
+            do {
+                let recoveryTransitionID = try gatewayTransitionJournal
+                    .load(platform: platformIdentifier())?
+                    .transitionID
+                try await channelSyncController.syncSubscriptionsIfNeeded()
+                try clearQualityGatewayRecoveryPending(expectedTransitionID: recoveryTransitionID)
+            } catch {
+                recordAutomationRuntimeError(error, source: "channel.sync.entry.quality_recovery")
+                channelListFeedbackMessage = userFacingErrorMessage(error)
+            }
+            return
+        }
         await channelSyncController.syncSubscriptionsOnChannelListEntry()
     }
 
     func syncSubscriptionsIfNeeded() async throws {
+#if DEBUG
+        if remainingQualityGatewayPostCommitSyncFailures > 0 {
+            remainingQualityGatewayPostCommitSyncFailures -= 1
+            throw AppError.typedLocal(
+                code: "quality_gateway_post_commit_sync_failed",
+                category: .network,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality gateway switch committed but subscription sync failed"
+            )
+        }
+#endif
+        if isQualityChannelMutationSession {
+            try await channelSyncController.syncSubscriptionsIfNeeded()
+            // The marker is cleared only by the Channels-entry recovery boundary,
+            // after the user-visible business result has been produced.
+            return
+        }
         try await channelSyncController.syncSubscriptionsIfNeeded()
     }
 
-    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
+    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async throws {
         var config = serverConfig ?? (Self.makeDefaultServerConfig() ?? ServerConfig(
             id: UUID(),
             name: "Local Device",
@@ -997,13 +1952,13 @@ final class AppEnvironment {
         ))
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
-        do {
-            try await updateServerConfig(config)
-        } catch {
-            showToast(message: localizationManager.localized(
-                "failed_to_save_server_configuration_placeholder",
-                userFacingErrorMessage(error),
-            ))
+        try await updateServerConfig(config)
+        let recovery = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+            using: material,
+            dataStore: dataStore
+        )
+        if recovery.updatedCount > 0 {
+            await refreshMessageCountsAndNotify()
         }
     }
 
@@ -1038,7 +1993,7 @@ final class AppEnvironment {
         dataPageVisibilityController.setThingPageEnabled(isEnabled)
     }
 
-    private func autoEnableDataPageIfNeeded(for message: PushMessage) {
+    func autoEnableDataPageIfNeeded(for message: PushMessage) {
         dataPageVisibilityController.autoEnableDataPageIfNeeded(for: message)
     }
 
@@ -1063,6 +2018,11 @@ final class AppEnvironment {
             localStoreRecoveryController.clearFailureStreak()
             break
         }
+        guard await recoverIncompleteGatewayTransitionIfNeeded() else {
+            serverConfig = nil
+            bootstrapErrors.append(localizationManager.localized("server_configuration_read_failed"))
+            return
+        }
         do {
             serverConfig = try await dataStore.loadServerConfig()?.normalized()
         } catch {
@@ -1083,6 +2043,11 @@ final class AppEnvironment {
                     userFacingErrorMessage(error)
                 ))
             }
+        }
+        do {
+            try await reconcileCommittedGatewayTransitionCleanup()
+        } catch {
+            recordAutomationRuntimeError(error, source: "gateway.transition.cleanup.bootstrap")
         }
         await watchSyncController.loadPersistedState()
         await dataPageVisibilityController.loadPersistedState()
@@ -1394,7 +2359,15 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        await notificationIngressController.mergeNotificationIngressInbox(
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+        {
+            return 0
+        }
+#endif
+        return await notificationIngressController.mergeNotificationIngressInbox(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
@@ -1406,7 +2379,18 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> NotificationIngressController.MergeOutcome {
-        await notificationIngressController.mergeNotificationIngressInboxOutcome(
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+        {
+            return NotificationIngressController.MergeOutcome(
+                appliedCount: 0,
+                stageOutcome: .succeeded
+            )
+        }
+#endif
+        return await notificationIngressController.mergeNotificationIngressInboxOutcome(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
@@ -1553,6 +2537,14 @@ final class AppEnvironment {
         guard JSONSerialization.isValidJSONObject(payload) else {
             throw AppError.invalidURL
         }
+#if DEBUG
+        if try await persistQualityEventCloseRoundTripIfNeeded(
+            payload: payload,
+            endpointPath: endpointPath
+        ) {
+            return
+        }
+#endif
         guard var components = URLComponents(url: config.baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
@@ -1579,6 +2571,65 @@ final class AppEnvironment {
             response: response
         )
     }
+
+#if DEBUG
+    /// Replaces only the external Gateway round trip for an explicitly typed quality
+    /// session. The simulated delivery still enters through the production notification
+    /// parser, canonical event projection, and App-owned store.
+    private func persistQualityEventCloseRoundTripIfNeeded(
+        payload: [String: Any],
+        endpointPath: String
+    ) async throws -> Bool {
+        let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario ?? .none
+        guard let delivery = PushGoQualityEventCloseDelivery.make(
+            boundaryPayload: payload,
+            endpointPath: endpointPath,
+            scenario: scenario
+        )
+        else {
+            return false
+        }
+
+        if scenario == .failOnceThenAcceptedAndDelivered {
+            guard !isQualityEventCloseRoundTripInFlight else {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_duplicate_in_flight",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "a second event close crossed the boundary while the first was in flight"
+                )
+            }
+            isQualityEventCloseRoundTripInFlight = true
+            defer { isQualityEventCloseRoundTripInFlight = false }
+            qualityEventCloseAttemptCount += 1
+            try await Task.sleep(for: .milliseconds(2_500))
+            if qualityEventCloseAttemptCount == 1 {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_rejected_once",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality event close rejected once before retry"
+                )
+            }
+        }
+
+        let outcome = await persistRemotePayloadIfNeeded(
+            delivery.payload,
+            requestIdentifier: delivery.requestIdentifier
+        )
+        switch outcome {
+        case .persistedMain, .duplicate:
+            return true
+        case .persistedPending, .rejected, .failed:
+            throw AppError.typedLocal(
+                code: "quality_event_close_delivery_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality event close response did not reach the canonical store"
+            )
+        }
+    }
+#endif
 
     private func escapedGatewayPathComponent(_ raw: String) -> String {
         var allowed = CharacterSet.urlPathAllowed

@@ -2,12 +2,19 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
 #if os(iOS)
         @Bindable var bindableEnvironment = environment
 #endif
         mainContent
+#if DEBUG
+            .qualityRuntimeReadinessOverlay(
+                environment: environment,
+                dynamicTypeSize: dynamicTypeSize
+            )
+#endif
 #if os(iOS)
             .sheet(item: $bindableEnvironment.pendingSettingsPresentation) { presentation in
                 SettingsView(
@@ -21,6 +28,24 @@ struct RootView: View {
 
     @ViewBuilder
     private var mainContent: some View {
+        #if DEBUG
+        if PushGoAutomationContext.qualitySessionInputStatus == "invalid" {
+            ContentUnavailableView(
+                "Quality test preparation failed",
+                systemImage: "exclamationmark.triangle",
+                description: Text("The App-owned quality session is invalid. No product journey was started.")
+            )
+            .accessibilityIdentifier("quality-runtime.invalid")
+        } else {
+            productContent
+        }
+        #else
+        productContent
+        #endif
+    }
+
+    @ViewBuilder
+    private var productContent: some View {
         #if os(watchOS)
         EmptyView()
         #else
@@ -36,3 +61,78 @@ struct RootView: View {
         #endif
     }
 }
+
+#if DEBUG
+private extension View {
+    @ViewBuilder
+    func qualityRuntimeReadinessOverlay(
+        environment: AppEnvironment,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> some View {
+#if os(watchOS)
+        self
+#else
+        if PushGoAutomationContext.qualitySessionInputStatus == "invalid" {
+            self
+        } else if let session = PushGoAutomationContext.qualitySession {
+            let status = environment.qualityRuntimeReadiness == "inactive"
+                ? "initializing"
+                : environment.qualityRuntimeReadiness
+            overlay(alignment: .topLeading) {
+                Text("Quality runtime \(status)")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("quality-runtime.\(status)")
+                .accessibilityLabel(
+                    "Quality runtime \(status); dynamic type \(qualityDynamicTypeName(dynamicTypeSize))"
+                )
+                .accessibilityValue(session.sessionID)
+            }
+            .overlay(alignment: .topLeading) {
+                if let commandStatus = PushGoAutomationRuntime.shared.startupRequestStatus {
+                    Text("Quality command \(commandStatus)")
+                        .font(.system(size: 1))
+                        .foregroundStyle(.clear)
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("quality-command.\(commandStatus)")
+                        .accessibilityValue(
+                            PushGoAutomationRuntime.shared.startupRequestError ?? ""
+                        )
+                }
+            }
+        } else if PushGoAutomationContext.isActive {
+            overlay(alignment: .topLeading) {
+                Text("Quality runtime \(PushGoAutomationContext.qualitySessionInputStatus)")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier(
+                        "quality-runtime.\(PushGoAutomationContext.qualitySessionInputStatus)"
+                    )
+            }
+        } else {
+            self
+        }
+#endif
+    }
+
+    private func qualityDynamicTypeName(_ size: DynamicTypeSize) -> String {
+        switch size {
+        case .xSmall: "xSmall"
+        case .small: "small"
+        case .medium: "medium"
+        case .large: "large"
+        case .xLarge: "xLarge"
+        case .xxLarge: "xxLarge"
+        case .xxxLarge: "xxxLarge"
+        case .accessibility1: "accessibility1"
+        case .accessibility2: "accessibility2"
+        case .accessibility3: "accessibility3"
+        case .accessibility4: "accessibility4"
+        case .accessibility5: "accessibility5"
+        @unknown default: "unknown"
+        }
+    }
+}
+#endif

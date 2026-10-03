@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "platform": "apple",
+  "issues": [
+    {
+      "id": "apple-simulator-xctest-runner-launch",
+      "kind": "flake",
+      "status": "resolved",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-08-28",
+      "last_seen_on": "2026-08-28",
+      "expires_on": "2026-09-11",
+      "scope": ["iOS or watchOS Simulator XCTest runner launch before the first product action"],
+      "signatures": [
+        "Failed to launch app with identifier: .*xctrunner",
+        "Application launch for .* did not return a process handle",
+        "timed out waiting for simulator",
+        "Unable to boot the Simulator",
+        "Failed to initialize for UI testing",
+        "System authentication is running"
+      ],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "The former one-reboot compatibility retry was removed after 50 consecutive dedicated iOS Simulator XCTest-process relaunches reached the App-owned functional empty state without this classification.",
+      "exit_criteria": "Remove the retry after 50 consecutive dedicated Apple Simulator launches without this classification, or replace it with an upstream-fixed Xcode/runtime version contract.",
+      "evidence": ["build/quality-results/ios/run-1-20260828-044956.xcresult", "docs/quality/evidence/startup-reliability-2026-08-28.json", "scripts/run_ios_startup_reliability.sh"],
+      "resolved_on": "2026-08-28"
+    },
+    {
+      "id": "apple-quality-precondition",
+      "kind": "precondition",
+      "status": "active",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-08-28",
+      "last_seen_on": "2026-08-28",
+      "scope": ["Explicit QUALITY_PRECONDITION failures before product evidence begins"],
+      "signatures": ["QUALITY_PRECONDITION"],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "This is a permanent attribution boundary, not a waiver: session, Simulator, fixture, permission, or readiness preparation must stop before product actions and cannot become product green.",
+      "exit_criteria": "Keep the category while App-owned preparation exists; fix each concrete precondition failure at its source and never retry it as a product assertion.",
+      "evidence": ["Tests/PushGo-iOSUITests/QualityRuntimeSupport.swift", "scripts/run_ios_system_notification_test.sh"]
+    },
+    {
+      "id": "apple-xctest-main-thread-warning",
+      "kind": "flake",
+      "status": "resolved",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-09-01",
+      "last_seen_on": "2026-09-01",
+      "expires_on": "2026-09-15",
+      "scope": ["macOS XCTest UI input emits a framework main-thread warning after a product journey has executed"],
+      "signatures": ["This method should not be called on the main thread as it may lead to UI unresponsiveness\\."],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "The warning was emitted by XCTest UI typeText after the user-purpose Oracle had begun. macOS journeys now use the same real Cmd-V input path already used by reliable secure/form fields; native results remain warning-free while preserving the product outcomes.",
+      "exit_criteria": "Identify and remove the XCTest/main-thread call path, then observe targeted macOS UI journeys without the native xcresult warning before resolving the issue.",
+      "evidence": ["build/quality-results/macos-search-recovery-current/run-20260901-090206.xcresult", "build/quality-results/macos-search-warning-remediation/run-20260901-092352.xcresult", "build/quality-results/macos-channel-warning-remediation/run-20260901-092433.xcresult"],
+      "resolved_on": "2026-09-01"
+    },
+    {
+      "id": "apple-xctest-qos-priority-inversion",
+      "kind": "flake",
+      "status": "active",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-09-02",
+      "last_seen_on": "2026-09-02",
+      "expires_on": "2026-09-16",
+      "scope": ["macOS Thing relationship/search UI after a real product journey has started"],
+      "signatures": ["Thread running at User-interactive quality-of-service class waiting on a lower QoS thread running at Default quality-of-service class\\. Investigate ways to avoid priority inversions"],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "The same native QoS warning was reproduced in independent macOS Thing relationship result bundles after all business assertions passed, while representative Message search and deletion controls stayed warning-free. The current evidence does not prove a product data or UI failure, so the runner must preserve product PASSED but surface test-system FLAKY with an expiring issue ID instead of treating it as an unknown warning or silently accepting it.",
+      "exit_criteria": "Identify and remove the lower-QoS wait or obtain an upstream Xcode/runtime fix, then record two independent clean native Thing relationship runs with the same real search, relation, deletion, and relaunch oracles before resolving the issue. No product retry or assertion waiver is allowed.",
+      "evidence": ["build/quality-results/macos-thing-search-settled-current-20260902-r6/run-20260902-071825.xcresult", "build/quality-results/macos-thing-search-settled-current-20260902-r8/run-20260902-072906.xcresult", "build/quality-results/macos-thing-search-unavailable-detail-fix-20260902-r13/run-20260902-101759.xcresult", "build/quality-results/macos-ui/run-20260902-120603.xcresult", "build/quality-results/macos-thing-qos-snapshot-experiment-20260902/run-20260902-220702.xcresult"]
+    }
+  ]
+}

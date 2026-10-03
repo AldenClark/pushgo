@@ -543,6 +543,43 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func expiredAckLeaseReturnsToTheDurableDrainAfterWorkerExit() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let identity = testDeliveryIdentity(deliveryId: "delivery-expired-lease-drain-001")
+            #expect(await store.markInboxDurable(
+                identity: identity,
+                source: "nse_inbox_durable",
+                postNotification: false
+            ))
+
+            let start = Date().addingTimeInterval(0.1)
+            let first = try #require(await store.acquireAckLease(
+                identity: identity,
+                owner: "interrupted-worker",
+                leaseDuration: 5,
+                now: start
+            ))
+            #expect(await store.pendingMarkers(now: start.addingTimeInterval(1)).isEmpty)
+
+            let retryTime = start.addingTimeInterval(6)
+            #expect(await store.nextAttemptDate(now: retryTime) != nil)
+            let retryMarker = try #require(await store.pendingMarkers(now: retryTime).first)
+            #expect(retryMarker.record.deliveryId == identity.deliveryId)
+            let second = try #require(await store.acquireAckLease(
+                retryMarker,
+                owner: "recovery-worker",
+                leaseDuration: 5,
+                now: retryTime
+            ))
+            await store.markCompleted(first)
+            #expect(await store.nextAttemptDate(now: retryTime) != nil)
+            await store.markCompleted(second)
+            #expect(await store.nextAttemptDate(now: retryTime) == nil)
+        }
+    }
+
+    @Test
     func v2AckCannotBeClaimedBeforeReferencedIngressIsTerminal() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
@@ -837,6 +874,95 @@ struct NotificationIngressInboxTests {
                 now: Date(timeIntervalSince1970: 1_010)
             )
             #expect(retryAfterPeerFailure != nil)
+        }
+    }
+
+    @Test
+    func expiredCanonicalApplyOwnerCannotCompletePeerTakeover() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            let accepted = await inbox.enqueue(
+                codablePayload: [
+                    "message_id": AnyCodable("canonical-lease-fence-001"),
+                    "title": AnyCodable("Lease fence"),
+                ],
+                requestIdentifier: "canonical-lease-fence-001",
+                source: "test.canonical_lease"
+            )
+            #expect(accepted)
+
+            let start = Date()
+            let crashed = await inbox.claimPendingEntries(
+                owner: "app.crashed",
+                leaseDuration: 5,
+                limit: 1,
+                now: start
+            )
+            #expect(crashed.count == 1)
+            #expect(await inbox.claimPendingEntries(
+                owner: "app.too_early",
+                leaseDuration: 5,
+                limit: 1,
+                now: start.addingTimeInterval(4)
+            ).isEmpty)
+
+            let peer = await inbox.claimPendingEntries(
+                owner: "app.peer",
+                leaseDuration: 30,
+                limit: 1,
+                now: start.addingTimeInterval(6)
+            )
+            #expect(peer.count == 1)
+            #expect(peer.first?.leaseGeneration == (crashed.first?.leaseGeneration ?? 0) + 1)
+
+            #expect(await inbox.markCompleted(crashed[0]) == false)
+            #expect(await inbox.markCompleted(peer[0]))
+            #expect(await inbox.pendingEntries().isEmpty)
+        }
+    }
+
+    @Test
+    func queueCountsSeparateImmediatelyDueWorkFromLeasedAndDelayedWork() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            for index in 0..<2 {
+                #expect(await inbox.enqueue(
+                    codablePayload: [
+                        "message_id": AnyCodable("queue-count-\(index)"),
+                        "title": AnyCodable("Queue count \(index)"),
+                    ],
+                    requestIdentifier: "queue-count-\(index)",
+                    source: "test.queue_count"
+                ))
+            }
+
+            let now = Date()
+            #expect(await inbox.queueCounts(now: now) == .init(due: 2, outstanding: 2))
+
+            let firstClaim = await inbox.claimPendingEntries(
+                owner: "app.queue_count",
+                leaseDuration: 30,
+                limit: 1,
+                now: now
+            )
+            #expect(firstClaim.count == 1)
+            #expect(await inbox.queueCounts(now: now) == .init(due: 1, outstanding: 2))
+            #expect(await inbox.markCompleted(firstClaim[0]))
+            #expect(await inbox.queueCounts(now: now) == .init(due: 1, outstanding: 1))
+
+            let secondClaim = await inbox.claimPendingEntries(
+                owner: "app.queue_count",
+                leaseDuration: 30,
+                limit: 1,
+                now: now
+            )
+            #expect(secondClaim.count == 1)
+            #expect(await inbox.markRetry(
+                secondClaim[0],
+                reason: "test_delayed_retry",
+                retryAfter: now.addingTimeInterval(60)
+            ))
+            #expect(await inbox.queueCounts(now: now) == .init(due: 0, outstanding: 1))
         }
     }
 

@@ -1,0 +1,73 @@
+import re
+import unittest
+from collections import Counter
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DESIGN = REPO_ROOT / "design/pushgo-app-quality-testing-final-design.md"
+AUDIT = REPO_ROOT / "docs/quality/section-25-p0-semantic-audit.md"
+
+
+class Section25P0AuditContractTest(unittest.TestCase):
+    def test_every_design_p0_row_has_exactly_one_audit_row(self):
+        design_rows = {
+            str(line_number)
+            for line_number, line in enumerate(DESIGN.read_text().splitlines(), start=1)
+            if line.startswith("| P0")
+        }
+        audit_rows = []
+        for line in AUDIT.read_text().splitlines():
+            match = re.match(r"^\| (1[2-5]\d{2}) \|", line)
+            if match:
+                audit_rows.append(match.group(1))
+
+        self.assertEqual(103, len(design_rows), "review new design P0 rows before changing this contract")
+        self.assertEqual(len(audit_rows), len(set(audit_rows)), "audit contains duplicate design rows")
+        self.assertEqual(design_rows, set(audit_rows))
+
+    def test_audit_states_and_summary_are_structurally_consistent(self):
+        states = []
+        for line in AUDIT.read_text().splitlines():
+            if not re.match(r"^\| 1[2-5]\d{2} \|", line):
+                continue
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            self.assertEqual(5, len(cells), line)
+            self.assertRegex(cells[2], r"^(?:V|P|B|N|NA|-)/(?:V|P|B|N|NA|-)/(?:V|P|B|N|NA|-)/(?:V|P|B|N|NA|-)$")
+            self.assertIn(cells[3], {"`V`", "`P`", "`B`", "`N`", "`NA`"})
+            self.assertTrue(cells[4], "purpose-level evidence or a precise closure gap is required")
+            states.append(cells[3].strip("`"))
+
+        audit_counts = Counter(states)
+        self.assertEqual(Counter({"V": 91, "P": 3, "N": 8, "NA": 1}), audit_counts)
+
+        ledger = (REPO_ROOT / "docs/quality/completion-gate-ledger.md").read_text()
+        ledger_counts = re.search(
+            r"reconciles all 103 design rows.*?: (\d+) `V`, (\d+) conditional `NA`, "
+            r"(\d+) `P`, and (\d+) external/Release `N`",
+            ledger,
+        )
+        self.assertIsNotNone(ledger_counts, "completion ledger must publish machine-checkable audit counts")
+        self.assertEqual(
+            (audit_counts["V"], audit_counts["NA"], audit_counts["P"], audit_counts["N"]),
+            tuple(map(int, ledger_counts.groups())),
+            "completion ledger counts must stay synchronized with the semantic audit",
+        )
+
+        audit_summary = re.search(
+            r"- (\d+) rows are currently classified `V`; (\d+) conditional export row is `NA`.*?\n"
+            r"- (\d+) rows remain `P`.*?\n.*?\n"
+            r"- (\d+) P0 Release/external rows remain `N`",
+            AUDIT.read_text(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(audit_summary, "semantic audit must publish machine-checkable summary counts")
+        self.assertEqual(
+            (audit_counts["V"], audit_counts["NA"], audit_counts["P"], audit_counts["N"]),
+            tuple(map(int, audit_summary.groups())),
+            "semantic audit summary counts must match its own table",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

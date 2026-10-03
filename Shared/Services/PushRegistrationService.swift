@@ -6,6 +6,9 @@ import UserNotifications
     @MainActor
     @Observable
     final class PushRegistrationService {
+        typealias AuthorizationStatusProvider = @MainActor () async -> UNAuthorizationStatus
+        typealias AuthorizationRequestProvider = @MainActor (UNAuthorizationOptions) async throws -> Bool
+
         private struct TokenWaiter {
             let continuation: CheckedContinuation<String, Error>
             var timeoutTask: Task<Void, Never>?
@@ -35,6 +38,10 @@ import UserNotifications
 
         private let automationProviderToken: String?
         private let bypassPushAuthorizationPrompt: Bool
+        @ObservationIgnored private let authorizationStatusProvider: AuthorizationStatusProvider
+        @ObservationIgnored private let authorizationRequestProvider: AuthorizationRequestProvider
+        private var authorizationMutationGeneration: UInt = 0
+        private var authorizationRequestGeneration: UInt = 0
         private var tokenWaiters: [UUID: TokenWaiter] = [:]
 #if DEBUG
         private var testingBeforeTokenWaiterInstall: (() -> Void)?
@@ -42,11 +49,19 @@ import UserNotifications
 
         private init(
             automationProviderToken: String? = PushGoAutomationContext.providerToken,
-            bypassPushAuthorizationPrompt: Bool = PushGoAutomationContext.bypassPushAuthorizationPrompt
+            bypassPushAuthorizationPrompt: Bool = PushGoAutomationContext.bypassPushAuthorizationPrompt,
+            authorizationStatusProvider: @escaping AuthorizationStatusProvider = {
+                await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+            },
+            authorizationRequestProvider: @escaping AuthorizationRequestProvider = { options in
+                try await UNUserNotificationCenter.current().requestAuthorization(options: options)
+            }
         ) {
             let normalizedAutomationProviderToken = Self.normalizedAutomationProviderToken(automationProviderToken)
             self.automationProviderToken = normalizedAutomationProviderToken
             self.bypassPushAuthorizationPrompt = bypassPushAuthorizationPrompt
+            self.authorizationStatusProvider = authorizationStatusProvider
+            self.authorizationRequestProvider = authorizationRequestProvider
             let bootstrap = PushRegistrationSemantics.bootstrapState(
                 providerToken: normalizedAutomationProviderToken,
                 bypassPushAuthorizationPrompt: bypassPushAuthorizationPrompt
@@ -66,11 +81,15 @@ import UserNotifications
         static func testing(
             automationProviderToken: String? = nil,
             bypassPushAuthorizationPrompt: Bool = false,
-            bootstrapStateOverride: PushRegistrationSemantics.BootstrapState? = nil
+            bootstrapStateOverride: PushRegistrationSemantics.BootstrapState? = nil,
+            authorizationStatusProvider: @escaping AuthorizationStatusProvider = { .notDetermined },
+            authorizationRequestProvider: @escaping AuthorizationRequestProvider = { _ in false }
         ) -> PushRegistrationService {
             let service = PushRegistrationService(
                 automationProviderToken: automationProviderToken,
-                bypassPushAuthorizationPrompt: bypassPushAuthorizationPrompt
+                bypassPushAuthorizationPrompt: bypassPushAuthorizationPrompt,
+                authorizationStatusProvider: authorizationStatusProvider,
+                authorizationRequestProvider: authorizationRequestProvider
             )
             if let bootstrapStateOverride {
                 switch bootstrapStateOverride.authorizationState {
@@ -108,18 +127,26 @@ import UserNotifications
         }
 
         func refreshAuthorizationStatus() async {
+            let generation = beginAuthorizationMutation()
             if bypassPushAuthorizationPrompt {
+                guard generation == authorizationMutationGeneration else { return }
                 authorizationState = .authorized
                 if apnsToken == nil {
                     apnsToken = automationProviderToken
                 }
                 return
             }
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            authorizationState = AuthorizationState(status: settings.authorizationStatus)
+            let status = await authorizationStatusProvider()
+            guard generation == authorizationMutationGeneration else { return }
+            authorizationState = AuthorizationState(status: status)
+        }
+
+        func applicationDidBecomeActive() async {
+            await refreshAuthorizationStatus()
         }
 
         func requestAuthorization() async throws {
+            let requestGeneration = beginAuthorizationRequest()
             if bypassPushAuthorizationPrompt {
                 authorizationState = .authorized
                 if apnsToken == nil {
@@ -127,20 +154,44 @@ import UserNotifications
                 }
                 return
             }
+            let granted: Bool
             do {
-                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [
+                granted = try await authorizationRequestProvider([
                     .alert,
                     .sound,
                     .badge,
                 ])
-                authorizationState = granted ? .authorized : .denied
+            } catch {
+                if requestGeneration == authorizationRequestGeneration {
+                    _ = beginAuthorizationMutation()
+                    authorizationState = .denied
+                }
+                throw AppError.apnsDenied
+            }
+            guard requestGeneration == authorizationRequestGeneration else {
                 if !granted {
                     throw AppError.apnsDenied
                 }
-            } catch {
-                authorizationState = .denied
+                return
+            }
+            _ = beginAuthorizationMutation()
+            authorizationState = granted ? .authorized : .denied
+            if !granted {
                 throw AppError.apnsDenied
             }
+        }
+
+        private func beginAuthorizationMutation() -> UInt {
+            authorizationMutationGeneration &+= 1
+            return authorizationMutationGeneration
+        }
+
+        private func beginAuthorizationRequest() -> UInt {
+            authorizationRequestGeneration &+= 1
+            // The system prompt owns its final result. Invalidate refreshes that
+            // began before it; completion invalidates any refresh begun while it waited.
+            _ = beginAuthorizationMutation()
+            return authorizationRequestGeneration
         }
 
         func handleDeviceToken(_ deviceToken: Data) {

@@ -63,7 +63,7 @@ run_build "PushGo-iOS" "generic/platform=iOS"
 
 (
   cd "$ROOT"
-  swift test --disable-automatic-resolution
+  "$ROOT/scripts/run_apple_core_tests.sh"
 )
 
 echo "apple concurrency gate passed"

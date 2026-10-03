@@ -3,11 +3,13 @@ import SwiftUI
 
 struct ChannelManagementView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var pendingRemoval: ChannelSubscription?
     @State private var isRemoving = false
     @State private var pendingRename: ChannelSubscription?
     @State private var renameAlias: String = ""
+    @State private var renameErrorMessage: String?
     @State private var isRenaming = false
     @State private var isShowingRemovalConfirmation = false
     @State private var isShowingRenameAlert = false
@@ -21,6 +23,8 @@ struct ChannelManagementView: View {
     @State private var subscribeChannelPassword = ""
     @State private var isSubscribeSubmitting = false
     @State private var channelEntryErrorMessage: String?
+    let channelSummaries: [MessageChannelSummary]
+    let channelSummariesLoadState: MessageChannelSummariesLoadState
 
     var body: some View {
         navigationContainer {
@@ -74,6 +78,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Text(localizationManager.localized("unsubscribe_and_delete_history"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.delete_history")
                 Button {
                     if let target = pendingRemoval {
                         Task { await removeChannel(target, deleteHistory: false) }
@@ -81,45 +86,23 @@ struct ChannelManagementView: View {
                 } label: {
                     Text(localizationManager.localized("unsubscribe_keep_history"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.keep_history")
                 Button(role: .cancel) {
                 } label: {
                     Text(localizationManager.localized("cancel"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.cancel")
             }
-            .alert(
-                localizationManager.localized("rename_channel"),
-                isPresented: $isShowingRenameAlert
-            ) {
-                TextField(
-                    localizationManager.localized("channel_name_placeholder"),
-                    text: $renameAlias
-                )
-                Button(localizationManager.localized("confirm")) {
-                    if let target = pendingRename {
-                        Task { await renameChannel(target) }
-                    }
-                }
-                .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button(localizationManager.localized("cancel"), role: .cancel) {
-                    pendingRename = nil
-                }
-            }
-            .onAppear {
-                Task { @MainActor in
-                    await environment.syncSubscriptionsOnChannelListEntry()
-                }
+            .sheet(isPresented: $isShowingRenameAlert, onDismiss: resetRenameState) {
+                renameSheet
             }
             .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
                 if !isPresented {
                     pendingRemoval = nil
                 }
             }
-            .onChange(of: isShowingRenameAlert) { _, isPresented in
-                if !isPresented {
-                    pendingRename = nil
-                }
-            }
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .accessibilityIdentifier("screen.channels")
         .sheet(
             isPresented: $isChannelEntrySheetPresented,
@@ -159,7 +142,7 @@ struct ChannelManagementView: View {
     }
 
     private var visibleChannelSubscriptions: [ChannelSubscription] {
-        let suppressed = environment.pendingLocalDeletionController.effectiveScope.channelIDs
+        let suppressed = pendingLocalDeletionController.effectiveScope.channelIDs
         return environment.channelSubscriptions.filter {
             !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -196,14 +179,27 @@ struct ChannelManagementView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
+
+                        Text(
+                            localizedMessageChannelActivityText(
+                                identifier: channelId,
+                                summaries: channelSummaries,
+                                loadState: channelSummariesLoadState,
+                                localizationManager: localizationManager
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.appTextSecondary)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("channel.stats.\(channelId)")
                     }
 
                     Spacer(minLength: 12)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
             .accessibilityIdentifier("channel.row.\(channelId)")
 
             Menu {
@@ -212,6 +208,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Label(localizationManager.localized("rename_channel"), systemImage: "pencil")
                 }
+                .accessibilityIdentifier("action.channel.\(channelId).rename")
 
                 Button(role: .destructive) {
                     pendingRemoval = subscription
@@ -219,6 +216,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
                 }
+                .accessibilityIdentifier("action.channel.\(channelId).unsubscribe")
             } label: {
                 Image(systemName: "ellipsis.circle.fill")
                     .font(.title3.weight(.semibold))
@@ -230,6 +228,7 @@ struct ChannelManagementView: View {
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("action.channel.\(channelId).menu")
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 14)
@@ -355,8 +354,10 @@ struct ChannelManagementView: View {
             Picker("", selection: $channelEntryMode) {
                 Text(localizationManager.localized("create_channel"))
                     .tag(ChannelEntryMode.create)
+                    .accessibilityIdentifier("mode.channels.entry.create")
                 Text(localizationManager.localized("subscribe_channel"))
                     .tag(ChannelEntryMode.subscribe)
+                    .accessibilityIdentifier("mode.channels.entry.subscribe")
             }
             .pickerStyle(.segmented)
             .transientPresentationSelectionControl()
@@ -529,40 +530,89 @@ struct ChannelManagementView: View {
         return subscription.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var renameSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(localizationManager.localized("rename_channel"))
+                .font(.headline)
+            TextField(
+                localizationManager.localized("channel_name_placeholder"),
+                text: $renameAlias
+            )
+            .textFieldStyle(.roundedBorder)
+            .disabled(isRenaming)
+            .accessibilityIdentifier("field.channel.rename.alias")
+            if let renameErrorMessage {
+                Text(renameErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("feedback.channel.rename")
+            }
+            HStack {
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    isShowingRenameAlert = false
+                }
+                .accessibilityIdentifier("action.channel.rename.cancel")
+                Spacer()
+                Button(localizationManager.localized("confirm")) {
+                    if let target = pendingRename {
+                        Task { await renameChannel(target) }
+                    }
+                }
+                .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("action.channel.rename.save")
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 360)
+    }
+
     @MainActor
     private func renameChannel(_ subscription: ChannelSubscription) async {
         guard !isRenaming else { return }
         isRenaming = true
-        defer {
-            isRenaming = false
-            pendingRename = nil
-            renameAlias = ""
-        }
+        defer { isRenaming = false }
+        let submittedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            let trimmedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedAlias.isEmpty else { return }
-            if trimmedAlias == subscription.displayName {
+            guard !submittedAlias.isEmpty else { return }
+            if submittedAlias == subscription.displayName {
+                isShowingRenameAlert = false
+                pendingRename = nil
+                renameAlias = ""
+                renameErrorMessage = nil
                 return
             }
             try await environment.renameChannel(
                 channelId: subscription.channelId,
-                alias: trimmedAlias
+                alias: submittedAlias
             )
             environment.showToast(
                 message: localizationManager.localized("channel_renamed"),
                 style: .success,
                 duration: 1.5
             )
+            isShowingRenameAlert = false
+            pendingRename = nil
+            renameAlias = ""
+            renameErrorMessage = nil
         } catch {
-            environment.showErrorToast(error, duration: 2.5)
+            renameAlias = submittedAlias
+            renameErrorMessage = environment.userFacingErrorMessage(error)
         }
     }
 
     private func copyChannelId(_ value: String) {
-        PushGoSystemInteraction.copyTextToPasteboard(value)
+        guard PushGoSystemInteraction.copyTextToPasteboard(value) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
-            message: localizationManager.localized("channel_id_copied"),
+            message: "\(localizationManager.localized("channel_id_copied")): \(value)",
             style: .success,
             duration: 1.2
         )
@@ -571,8 +621,15 @@ struct ChannelManagementView: View {
     private func beginRename(_ subscription: ChannelSubscription) {
         guard !isRenaming else { return }
         renameAlias = subscription.displayName
+        renameErrorMessage = nil
         pendingRename = subscription
         isShowingRenameAlert = true
+    }
+
+    private func resetRenameState() {
+        pendingRename = nil
+        renameAlias = ""
+        renameErrorMessage = nil
     }
 }
 

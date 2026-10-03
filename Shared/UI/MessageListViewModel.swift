@@ -1,6 +1,20 @@
 import Foundation
 import Observation
 
+enum MessageListLoadState: Equatable {
+    case idle
+    case loading
+    case slow
+    case loaded
+    case failed
+}
+
+#if DEBUG
+private enum PushGoQualityInjectedMessageLoadError: Error {
+    case requestedFailure
+}
+#endif
+
 enum MessageChannelKey: Hashable, Identifiable {
     case named(String)
     case ungrouped
@@ -43,6 +57,38 @@ struct MessageChannelSummary: Identifiable, Hashable {
     var hasUnread: Bool { unreadCount > 0 }
 }
 
+enum MessageChannelSummariesLoadState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case failed
+}
+
+@MainActor
+func localizedMessageChannelActivityText(
+    identifier: String,
+    summaries: [MessageChannelSummary],
+    loadState: MessageChannelSummariesLoadState,
+    localizationManager: LocalizationManager
+) -> String {
+    guard loadState == .loaded else {
+        return loadState == .failed
+            ? localizationManager.localized("channel_stats_unavailable")
+            : localizationManager.localized("channel_stats_loading")
+    }
+    guard let summary = summaries.first(where: { $0.id == "channel-\(identifier)" }) else {
+        return localizationManager.localized("channel_stats_empty")
+    }
+    let latest = summary.latestReceivedAt?.formatted(date: .abbreviated, time: .shortened)
+        ?? localizationManager.localized("channel_stats_no_recent")
+    return localizationManager.localized(
+        "channel_stats_summary",
+        summary.totalCount,
+        summary.unreadCount,
+        latest
+    )
+}
+
 @MainActor
 @Observable
 final class MessageListViewModel {
@@ -72,14 +118,17 @@ final class MessageListViewModel {
     private(set) var selectedChannels: Set<MessageChannelKey> = []
     private(set) var selectedTags: Set<String> = []
     private(set) var channelSummaries: [MessageChannelSummary] = []
+    private(set) var channelSummariesLoadState: MessageChannelSummariesLoadState = .idle
     private(set) var tagSummaries: [MessageTagCount] = []
     private(set) var hasLoadedOnce: Bool = false
+    private(set) var loadState: MessageListLoadState = .idle
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
     private(set) var currentScopeUnreadCount: Int = 0
     private(set) var unreadSessionRetainedReadCount: Int = 0
     private(set) var hasMorePages: Bool = false
     private(set) var isLoadingPage: Bool = false
+    private(set) var pageLoadError: AppError?
     var error: AppError?
 
     private let environment: AppEnvironment
@@ -98,8 +147,15 @@ final class MessageListViewModel {
     @ObservationIgnored private var isRefreshingCountsAndChannels = false
     @ObservationIgnored private var pendingCountsAndChannels = false
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var slowLoadTask: Task<Void, Never>?
     @ObservationIgnored private var pendingReloadRequest: ReloadRequest?
     @ObservationIgnored private var unreadFilterSession: UnreadFilterSessionState?
+#if DEBUG
+    @ObservationIgnored private var qualityDelayConsumed = false
+    @ObservationIgnored private var qualityPageDelayConsumed = false
+    @ObservationIgnored private var remainingQualityFailures: Int
+    @ObservationIgnored private var remainingQualityPageFailures: Int
+#endif
 
     private struct RefreshSnapshot {
         let messages: [PushMessageSummary]
@@ -120,6 +176,10 @@ final class MessageListViewModel {
             self.environment = AppEnvironment.shared
         }
         dataStore = self.environment.dataStore
+#if DEBUG
+        remainingQualityFailures = PushGoAutomationContext.qualitySession?.faults.failMessageLoad == true ? 1 : 0
+        remainingQualityPageFailures = PushGoAutomationContext.qualitySession?.faults.failMessagePageLoadOnce == true ? 1 : 0
+#endif
     }
 
     func loadMessages() async {
@@ -128,6 +188,19 @@ final class MessageListViewModel {
 
     func refresh() async {
         await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
+    }
+
+    func retryAfterFailure() async {
+#if DEBUG
+        remainingQualityFailures = 0
+#endif
+        await refresh()
+    }
+
+    func retryPageAfterFailure() async {
+        guard pageLoadError != nil else { return }
+        pageLoadError = nil
+        await loadNextPage()
     }
 
     func reconcileUnreadFilterSession() async {
@@ -142,8 +215,16 @@ final class MessageListViewModel {
         guard shouldLoadChannelSummaries == false else { return }
         shouldLoadChannelSummaries = true
         Task { @MainActor in
-            await refreshCountsAndChannels()
+            await refreshChannelSummaries()
         }
+    }
+
+    func refreshChannelSummaries() async {
+        shouldLoadChannelSummaries = true
+        if channelSummariesLoadState != .loaded {
+            channelSummariesLoadState = .loading
+        }
+        await refreshCountsAndChannels()
     }
 
     func setFilter(_ filter: MessageFilter) {
@@ -388,7 +469,7 @@ final class MessageListViewModel {
     }
 
     func loadMoreIfNeeded(currentItem: PushMessageSummary) async {
-        guard hasMorePages, !isLoadingPage else { return }
+        guard hasMorePages, !isLoadingPage, pageLoadError == nil else { return }
         guard filteredMessages.last?.id == currentItem.id else { return }
         await loadNextPage()
     }
@@ -439,6 +520,23 @@ final class MessageListViewModel {
         clearBeforeLoading: Bool,
         reconcileUnreadSession: Bool
     ) async {
+        beginObservedReload()
+        defer {
+            hasLoadedOnce = true
+            finishObservedReload()
+        }
+
+        do {
+            try await applyQualityFaultBeforeMessageLoadIfNeeded()
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("message_load_failed"),
+                code: "quality_message_load_failure"
+            )
+            return
+        }
+
         if resetPaging {
             if clearBeforeLoading {
                 nextCursor = nil
@@ -452,11 +550,9 @@ final class MessageListViewModel {
                 )
             } else {
                 await refreshFirstPagesKeepingListStable()
-                hasLoadedOnce = true
                 await refreshCountsAndChannels()
                 return
             }
-            hasLoadedOnce = true
             return
         }
 
@@ -466,7 +562,38 @@ final class MessageListViewModel {
         } else {
             await loadNextPage()
         }
-        hasLoadedOnce = true
+    }
+
+    private func beginObservedReload() {
+        slowLoadTask?.cancel()
+        error = nil
+        pageLoadError = nil
+        loadState = .loading
+        slowLoadTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, self?.loadState == .loading else { return }
+            self?.loadState = .slow
+        }
+    }
+
+    private func finishObservedReload() {
+        slowLoadTask?.cancel()
+        slowLoadTask = nil
+        loadState = error == nil ? .loaded : .failed
+    }
+
+    private func applyQualityFaultBeforeMessageLoadIfNeeded() async throws {
+#if DEBUG
+        if !qualityDelayConsumed,
+           let delay = PushGoAutomationContext.qualitySession?.faults.messageLoadDelayMilliseconds,
+           delay > 0 {
+            qualityDelayConsumed = true
+            try await Task.sleep(for: .milliseconds(delay))
+        }
+        if remainingQualityFailures > 0 {
+            throw PushGoQualityInjectedMessageLoadError.requestedFailure
+        }
+#endif
     }
 
     private func refreshUnreadFilterSessionSnapshot(reconcile: Bool) async {
@@ -571,11 +698,39 @@ final class MessageListViewModel {
 
     private func loadNextPage() async {
         guard !isLoadingPage else { return }
+        pageLoadError = nil
         isLoadingPage = true
         defer { isLoadingPage = false }
 
+#if DEBUG
+        if !qualityPageDelayConsumed,
+           let delay = PushGoAutomationContext.qualitySession?.faults.messagePageLoadDelayMilliseconds,
+           delay > 0 {
+            qualityPageDelayConsumed = true
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+        if remainingQualityPageFailures > 0 {
+            remainingQualityPageFailures -= 1
+            pageLoadError = AppError.wrap(
+                PushGoQualityInjectedMessageLoadError.requestedFailure,
+                fallbackMessage: LocalizationProvider.localized("message_load_failed"),
+                code: "quality_message_page_load_failure"
+            )
+            return
+        }
+#endif
+
         do {
-            let page = try await loadVisiblePage(after: nextCursor, targetVisibleCount: pageSize)
+            let existingIDs = Set(filteredMessages.map(\.id))
+            let page = try await loadVisiblePage(
+                after: nextCursor,
+                targetVisibleCount: pageSize,
+                excludingMessageIDs: existingIDs
+            )
             if resetStaleSelectionIfNeeded() {
                 return
             }
@@ -584,9 +739,9 @@ final class MessageListViewModel {
             hasMorePages = page.hasMorePages
             trimCachedMessagesIfNeeded()
         } catch let appError as AppError {
-            self.error = appError
+            pageLoadError = appError
         } catch {
-            self.error = AppError.wrap(
+            pageLoadError = AppError.wrap(
                 error,
                 fallbackMessage: LocalizationProvider.localized("operation_failed"),
                 code: "message_page_load_failed"
@@ -626,6 +781,7 @@ final class MessageListViewModel {
                 if shouldLoadChannelSummaries {
                     let rawChannels = try await dataStore.messageChannelCounts()
                     channelSummaries = buildChannelSummaries(from: rawChannels)
+                    channelSummariesLoadState = .loaded
                     tagSummaries = try await dataStore.messageTagCounts()
                     let knownKeys = Set(channelSummaries.map(\.key))
                     selectedChannels = selectedChannels.intersection(knownKeys)
@@ -638,6 +794,9 @@ final class MessageListViewModel {
             } catch {
                 await refreshCounts()
                 channelSummaries = []
+                if shouldLoadChannelSummaries {
+                    channelSummariesLoadState = .failed
+                }
                 tagSummaries = []
             }
         } while pendingCountsAndChannels
@@ -855,7 +1014,8 @@ final class MessageListViewModel {
 
     private func loadVisiblePage(
         after cursor: MessagePageCursor?,
-        targetVisibleCount: Int
+        targetVisibleCount: Int,
+        excludingMessageIDs: Set<UUID> = []
     ) async throws -> VisiblePageSnapshot {
         guard targetVisibleCount > 0 else {
             return VisiblePageSnapshot(messages: [], nextCursor: cursor, hasMorePages: false)
@@ -863,6 +1023,7 @@ final class MessageListViewModel {
 
         var results: [PushMessageSummary] = []
         var currentCursor = cursor
+        var seenMessageIDs = excludingMessageIDs
 
         while results.count < targetVisibleCount {
             let page = try await dataStore.loadMessageSummariesPage(
@@ -878,13 +1039,26 @@ final class MessageListViewModel {
                 return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)
             }
 
-            currentCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            let visibleMessageIDs = Set(applyFacetSelections(to: page).map(\.id))
+            let consumed = try consumeUniqueMessagePage(
+                page,
+                targetRemaining: targetVisibleCount - results.count,
+                seenIDs: &seenMessageIDs,
+                currentCursor: &currentCursor,
+                id: \.id,
+                cursor: {
+                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+                },
+                isVisible: { visibleMessageIDs.contains($0.id) }
+            )
+            results.append(contentsOf: consumed.appended)
+            if consumed.reachedTarget {
+                return VisiblePageSnapshot(
+                    messages: results,
+                    nextCursor: currentCursor,
+                    hasMorePages: true
+                )
             }
-
-            let visiblePage = applyFacetSelections(to: page)
-            let needed = targetVisibleCount - results.count
-            results.append(contentsOf: visiblePage.prefix(needed))
 
             if page.count < pageSize {
                 return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)

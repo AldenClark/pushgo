@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 #if os(iOS)
 import UIKit
 #endif
@@ -17,27 +18,47 @@ struct MainTabContainerView: View {
     @State private var messageScrollToTopToken: Int = 0
     @State private var eventScrollToTopToken: Int = 0
     @State private var thingScrollToTopToken: Int = 0
+    @State private var unavailableEventTargetFeedback: String?
+    @State private var unavailableThingTargetFeedback: String?
     @State private var pendingMessageReselectTask: Task<Void, Never>?
+    @State private var lastReselectedTab: MainTab?
+    @State private var lastReselectAt: TimeInterval = 0
     @State private var dataRefreshTask: Task<Void, Never>?
+    @State private var isDataRefreshRequested = false
+    private let tabReselectLogger = Logger(subsystem: "io.ethan.pushgo", category: "TabReselection")
+    private let tabDoubleTapWindow: TimeInterval = 0.32
+    private let tabSingleTapCommitDelay = Duration.milliseconds(340)
 
     var body: some View {
         tabLayout
+            .overlay(alignment: .top) {
+                if let feedback = environment.notificationOpenController.pendingMessageUnavailableFeedback {
+                    AppInlineFeedbackBanner(
+                        message: feedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.message.target_unavailable",
+                        dismissAction: {
+                            environment.notificationOpenController.pendingMessageUnavailableFeedback = nil
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                }
+            }
             .pushgoTabBarMinimizeOnScroll()
             .background(
-                TabBarSelectionObserver(visibleTabs: visibleTabs) { tappedTab, tapKind in
-                    switch tapKind {
-                    case .single:
-                        handleTabBarTap(for: tappedTab)
-                    case .double:
-                        handleTabBarDoubleTap(for: tappedTab)
-                    }
+                WindowTabReselectionObserver(visibleTabs: visibleTabs) { tab in
+                    handleObservedTabReselection(tab)
                 }
             )
             .environment(searchViewModel)
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
-                if environment.notificationOpenController.pendingMessageToOpen != nil {
+                if let pendingList = environment.pendingSystemListToOpen {
+                    selection = pendingList
+                    environment.pendingSystemListToOpen = nil
+                } else if environment.notificationOpenController.pendingMessageToOpen != nil {
                     selection = .messages
                 } else if environment.notificationOpenController.pendingThingToOpen != nil {
                     selection = .things
@@ -105,6 +126,10 @@ struct MainTabContainerView: View {
                 ensureSelectionIsVisible()
             }
             .onChange(of: selection) { _, newValue in
+                pendingMessageReselectTask?.cancel()
+                pendingMessageReselectTask = nil
+                lastReselectedTab = nil
+                lastReselectAt = 0
                 environment.updateActiveTab(newValue)
             }
             .onChange(of: environment.messageStoreRevision) { _, _ in
@@ -134,20 +159,36 @@ struct MainTabContainerView: View {
         case .messages:
             await messageListViewModel.refresh()
             searchViewModel.refreshMessagesIfNeeded()
+#if DEBUG
+            environment.recordIngressPerformanceUIRefreshCompleted(
+                totalMessageCount: messageListViewModel.totalMessageCount,
+                visibleMessageCount: messageListViewModel.filteredMessages.count
+            )
+#endif
         case .events:
             await entityViewModel.reloadEvents()
         case .things:
             await entityViewModel.reloadThings()
         case .channels:
-            break
+            // A Channels selection is the user-visible recovery boundary.  Do
+            // the production sync/reconciliation here rather than in the
+            // child screen's onAppear, which may run during TabView
+            // preconstruction or be skipped when the child is reused.
+            await environment.syncSubscriptionsOnChannelListEntry()
+            await messageListViewModel.refreshChannelSummaries()
         }
         ensureSelectionIsVisible()
     }
 
     private func scheduleDataRefreshForStoreChange() {
-        dataRefreshTask?.cancel()
+        isDataRefreshRequested = true
+        guard dataRefreshTask == nil else { return }
         dataRefreshTask = Task { @MainActor in
-            await refreshData(for: selection)
+            repeat {
+                isDataRefreshRequested = false
+                await refreshData(for: selection)
+            } while isDataRefreshRequested && !Task.isCancelled
+            dataRefreshTask = nil
         }
     }
 
@@ -162,10 +203,9 @@ struct MainTabContainerView: View {
                     scrollToTopToken: messageScrollToTopToken
                 )
                 .tabItem {
-                    Label(LocalizationManager.localizedSync("messages"), systemImage: "tray.full")
+                    messagesTabItem(unreadCount: unreadCount)
                 }
                 .tag(MainTab.messages)
-                .badge(unreadCount > 0 ? Text(verbatim: "\(unreadCount)") : nil)
             }
 
             if showsEventsTab {
@@ -174,6 +214,8 @@ struct MainTabContainerView: View {
                         viewModel: entityViewModel,
                         openEventId: environment.notificationOpenController.pendingEventToOpen,
                         scrollToTopToken: eventScrollToTopToken,
+                        unavailableTargetFeedback: unavailableEventTargetFeedback,
+                        onUnavailableTargetFeedbackChanged: { unavailableEventTargetFeedback = $0 },
                         onOpenEventHandled: {
                             environment.pendingEventToOpen = nil
                         }
@@ -181,6 +223,7 @@ struct MainTabContainerView: View {
                 }
                 .tabItem {
                     Label(LocalizationManager.localizedSync("thing_detail_tab_events"), systemImage: "waveform.path.ecg")
+                        .accessibilityIdentifier("tab.events")
                 }
                 .tag(MainTab.events)
             }
@@ -191,6 +234,8 @@ struct MainTabContainerView: View {
                         viewModel: entityViewModel,
                         openThingId: environment.notificationOpenController.pendingThingToOpen,
                         scrollToTopToken: thingScrollToTopToken,
+                        unavailableTargetFeedback: unavailableThingTargetFeedback,
+                        onUnavailableTargetFeedbackChanged: { unavailableThingTargetFeedback = $0 },
                         onOpenThingHandled: {
                             environment.pendingThingToOpen = nil
                         }
@@ -198,16 +243,55 @@ struct MainTabContainerView: View {
                 }
                 .tabItem {
                     Label(LocalizationManager.localizedSync("push_type_thing"), systemImage: "cpu")
+                        .accessibilityIdentifier("tab.things")
                 }
                 .tag(MainTab.things)
             }
 
-            ChannelManagementScreen()
+            ChannelManagementScreen(
+                channelSummaries: messageListViewModel.channelSummaries,
+                channelSummariesLoadState: messageListViewModel.channelSummariesLoadState
+            )
                 .tabItem {
                     Label(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right")
+                        .accessibilityIdentifier("tab.channels")
                 }
                 .tag(MainTab.channels)
         }
+    }
+
+    /// The system TabView badge can cover the title and make the tab button
+    /// unhittable when its capped value is `99+`. Keep the unread count in the
+    /// same accessible tab element, but render the visual badge inside the
+    /// icon so the title and the full-width target remain available.
+    @ViewBuilder
+    private func messagesTabItem(unreadCount: Int) -> some View {
+        let title = LocalizationManager.localizedSync("messages")
+        let badgeText = unreadCount > 99 ? "99+" : "\(unreadCount)"
+
+        Label {
+            Text(verbatim: title)
+        } icon: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "tray.full")
+                if unreadCount > 0 {
+                    Text(verbatim: badgeText)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.red))
+                        .fixedSize()
+                        .offset(x: 10, y: -7)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 24, height: 24)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: title))
+        .accessibilityValue(unreadCount > 0 ? Text(verbatim: badgeText) : Text(verbatim: ""))
+        .accessibilityIdentifier("tab.messages")
     }
 
     private var showsMessagesTab: Bool {
@@ -241,6 +325,19 @@ struct MainTabContainerView: View {
         return tabs
     }
 
+    private func handleObservedTabReselection(_ tab: MainTab) {
+        guard isInitialSelectionResolved, tab == selection else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let isDoubleTap = lastReselectedTab == tab && now - lastReselectAt <= tabDoubleTapWindow
+        lastReselectedTab = isDoubleTap ? nil : tab
+        lastReselectAt = isDoubleTap ? 0 : now
+        if isDoubleTap {
+            handleTabBarDoubleTap(for: tab)
+        } else {
+            handleTabBarTap(for: tab)
+        }
+    }
+
     private func ensureSelectionIsVisible() {
         if !visibleTabs.contains(selection) {
             selection = visibleTabs.first ?? .channels
@@ -249,15 +346,22 @@ struct MainTabContainerView: View {
 
     private func handleTabBarTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
+        tabReselectLogger.info("Observed single tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
         pendingMessageReselectTask?.cancel()
 
         switch tappedTab {
         case .messages:
             let currentToken = messageScrollToUnreadToken
             pendingMessageReselectTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(280))
+                // Commit only after the entire double-tap window has elapsed;
+                // otherwise a late valid second tap can cause an unread→top bounce.
+                try? await Task.sleep(for: tabSingleTapCommitDelay)
                 guard !Task.isCancelled, messageScrollToUnreadToken == currentToken else { return }
                 messageScrollToUnreadToken += 1
+                pendingMessageReselectTask = nil
+                lastReselectedTab = nil
+                lastReselectAt = 0
+                tabReselectLogger.info("Committed Messages unread scroll token")
             }
         case .events, .things, .channels:
             break
@@ -266,6 +370,7 @@ struct MainTabContainerView: View {
 
     private func handleTabBarDoubleTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
+        tabReselectLogger.info("Observed double tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
         pendingMessageReselectTask?.cancel()
         pendingMessageReselectTask = nil
 
@@ -283,98 +388,98 @@ struct MainTabContainerView: View {
 }
 
 #if os(iOS)
-private struct TabBarSelectionObserver: UIViewControllerRepresentable {
+private struct WindowTabReselectionObserver: UIViewRepresentable {
     let visibleTabs: [MainTab]
-    let onTap: (MainTab, TabBarTapKind) -> Void
+    let onTap: (MainTab) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(visibleTabs: visibleTabs, onTap: onTap)
     }
 
-    func makeUIViewController(context: Context) -> ObserverController {
-        let controller = ObserverController()
-        controller.coordinator = context.coordinator
-        return controller
+    func makeUIView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.coordinator = context.coordinator
+        return view
     }
 
-    func updateUIViewController(_ uiViewController: ObserverController, context: Context) {
+    func updateUIView(_ uiView: ObserverView, context: Context) {
         context.coordinator.visibleTabs = visibleTabs
         context.coordinator.onTap = onTap
-        uiViewController.coordinator = context.coordinator
-        uiViewController.bindIfNeeded()
+        uiView.coordinator = context.coordinator
+        uiView.bindIfNeeded()
     }
 
-    final class Coordinator: NSObject, UITabBarControllerDelegate {
-        var visibleTabs: [MainTab]
-        var onTap: (MainTab, TabBarTapKind) -> Void
-        private weak var tabBarController: UITabBarController?
-        private weak var previousDelegate: UITabBarControllerDelegate?
-        private var lastTapTab: MainTab?
-        private var lastTapAt: CFTimeInterval = 0
-        private var selectedIndex: Int?
+    static func dismantleUIView(_ uiView: ObserverView, coordinator: Coordinator) {
+        coordinator.unbind()
+        uiView.coordinator = nil
+    }
 
-        init(visibleTabs: [MainTab], onTap: @escaping (MainTab, TabBarTapKind) -> Void) {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var visibleTabs: [MainTab]
+        var onTap: (MainTab) -> Void
+        private weak var window: UIWindow?
+        private weak var tapRecognizer: UITapGestureRecognizer?
+
+        init(visibleTabs: [MainTab], onTap: @escaping (MainTab) -> Void) {
             self.visibleTabs = visibleTabs
             self.onTap = onTap
         }
 
-        func bind(to tabBarController: UITabBarController) {
-            guard self.tabBarController !== tabBarController else { return }
-            previousDelegate = tabBarController.delegate
-            self.tabBarController = tabBarController
-            selectedIndex = tabBarController.selectedIndex
-            tabBarController.delegate = self
+        func bind(to resolvedWindow: UIWindow) {
+            guard window !== resolvedWindow else { return }
+            if let window, let tapRecognizer {
+                window.removeGestureRecognizer(tapRecognizer)
+            }
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            recognizer.cancelsTouchesInView = false
+            recognizer.delegate = self
+            resolvedWindow.addGestureRecognizer(recognizer)
+            window = resolvedWindow
+            tapRecognizer = recognizer
         }
 
-        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-            let index = tabBarController.viewControllers?.firstIndex(of: viewController) ?? tabBarController.selectedIndex
-            guard visibleTabs.indices.contains(index) else {
-                previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
-                return
+        func unbind() {
+            if let window, let tapRecognizer {
+                window.removeGestureRecognizer(tapRecognizer)
             }
+            window = nil
+            tapRecognizer = nil
+        }
 
-            defer {
-                selectedIndex = index
-                previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
-            }
+        @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let window,
+                  window.rootViewController?.presentedViewController == nil,
+                  !visibleTabs.isEmpty
+            else { return }
+            let location = recognizer.location(in: window)
+            let tabBarTop = window.bounds.maxY - window.safeAreaInsets.bottom - 56
+            guard location.y >= tabBarTop else { return }
+            let segmentWidth = window.bounds.width / CGFloat(visibleTabs.count)
+            let index = min(visibleTabs.count - 1, max(0, Int(location.x / segmentWidth)))
+            onTap(visibleTabs[index])
+        }
 
-            guard selectedIndex == index else {
-                lastTapTab = nil
-                lastTapAt = 0
-                return
-            }
-
-            let tappedTab = visibleTabs[index]
-            let now = CACurrentMediaTime()
-            let isDoubleTap = lastTapTab == tappedTab && (now - lastTapAt) <= 0.30
-            lastTapTab = isDoubleTap ? nil : tappedTab
-            lastTapAt = now
-
-            if isDoubleTap {
-                onTap(tappedTab, .double)
-            } else {
-                onTap(tappedTab, .single)
-            }
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
     }
 
-    final class ObserverController: UIViewController {
+    final class ObserverView: UIView {
         weak var coordinator: Coordinator?
 
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
             bindIfNeeded()
         }
 
         func bindIfNeeded() {
-            guard let tabBarController, let coordinator else { return }
-            coordinator.bind(to: tabBarController)
+            guard let coordinator, let window else { return }
+            coordinator.bind(to: window)
         }
     }
-}
-
-private enum TabBarTapKind {
-    case single
-    case double
 }
 #endif

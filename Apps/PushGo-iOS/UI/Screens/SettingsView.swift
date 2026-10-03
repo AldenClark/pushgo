@@ -6,6 +6,8 @@ import Observation
 struct SettingsView: View {
     private let embedInNavigationContainer: Bool
     private let openDecryptionOnAppear: Bool
+    private let showsCloseButton: Bool
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
@@ -13,9 +15,14 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var activeSheet: SettingsSheet?
 
-    init(embedInNavigationContainer: Bool = true, openDecryptionOnAppear: Bool = false) {
+    init(
+        embedInNavigationContainer: Bool = true,
+        openDecryptionOnAppear: Bool = false,
+        showsCloseButton: Bool = false
+    ) {
         self.embedInNavigationContainer = embedInNavigationContainer
         self.openDecryptionOnAppear = openDecryptionOnAppear
+        self.showsCloseButton = showsCloseButton
     }
 
     var body: some View {
@@ -71,7 +78,10 @@ struct SettingsView: View {
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             case .serverManagement:
-                ServerManagementSheet(viewModel: viewModel)
+                ServerManagementSheet(
+                    viewModel: viewModel,
+                    onDismiss: { activeSheet = nil }
+                )
                     .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
@@ -89,6 +99,16 @@ struct SettingsView: View {
         if embedInNavigationContainer {
             navigationContainer {
                 settingsScaffold
+                    .toolbar {
+                        if showsCloseButton {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(localizationManager.localized("close")) {
+                                    dismiss()
+                                }
+                                .accessibilityIdentifier("action.settings.close")
+                            }
+                        }
+                    }
             }
         } else {
             settingsScaffold
@@ -121,7 +141,24 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
-            if let errorMessage = viewModel.errorMessage {
+            if activeSheet == nil, let feedback = viewModel.serverSaveFeedbackMessage {
+                AppInlineFeedbackBanner(
+                    message: feedback,
+                    tone: .warning,
+                    accessibilityID: "feedback.settings.gateway.result",
+                    dismissAction: {
+                        viewModel.clearServerSaveFeedback()
+                    }
+                )
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+
+            // A form error belongs to the presented editor. Keeping the same
+            // banner alive in the host list makes one failure look like two
+            // unrelated failures when a medium-height sheet is visible.
+            if activeSheet == nil, let errorMessage = viewModel.errorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,
@@ -143,6 +180,7 @@ struct SettingsView: View {
 
             Button {
                 viewModel.clearError()
+                viewModel.clearServerSaveFeedback()
                 viewModel.prepareServerEditor()
                 activeSheet = .serverManagement
             } label: {
@@ -176,7 +214,6 @@ struct SettingsView: View {
                 eventIsOn: $bindableEnvironment.eventPageEnabled,
                 thingIsOn: $bindableEnvironment.thingPageEnabled
             )
-            .accessibilityIdentifier("group.settings.page_visibility")
             .listRowInsets(rowInsets)
             .listRowBackground(Color.clear)
 

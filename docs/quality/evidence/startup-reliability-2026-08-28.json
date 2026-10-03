@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "evidence_type": "hermetic-startup-reliability",
+  "platform": "apple-ios-simulator",
+  "recorded_on": "2026-08-28",
+  "base_revision": "9b4713a",
+  "device": {
+    "name": "PushGo Quality iPhone",
+    "id": "51A91D22-BF62-4D63-8AA2-B00E6F513F8B",
+    "runtime": "iOS Simulator 27.0"
+  },
+  "command": "ITERATIONS=50 scripts/run_ios_startup_reliability.sh",
+  "scope": "PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState",
+  "oracle": "Each XCTest repetition relaunched the test process, created a fresh App-owned empty.clean session, reached the functional Messages empty state, and verified an isolated database. Retry-on-failure was disabled.",
+  "result": {
+    "requested_iterations": 50,
+    "started_iterations": 50,
+    "passed_iterations": 50,
+    "failed_iterations": 0,
+    "success_rate": 1.0,
+    "product_status": "PASSED",
+    "test_system_status": "PASSED",
+    "test_system_issue_ids": [],
+    "duration_seconds": {
+      "p50": 8.604,
+      "p95": 10.634,
+      "max": 13.875
+    }
+  },
+  "artifact_contract": {
+    "local_summary": "build/quality-results/ios-startup-reliability/20260828-205055/summary.json",
+    "local_log": "build/quality-results/ios-startup-reliability/20260828-205055/campaign.log",
+    "local_xcresult": "build/quality-results/ios-startup-reliability/20260828-205055/campaign.xcresult",
+    "summary_sha256": "69285d52d0c96a1feb902516cfadb116086b546393163bcf7abea69f9903cf38",
+    "log_sha256": "d3afbd032bab65458e98143a521b06ceea3e65bf8e5fce322fb24d3b8ebc9091",
+    "note": "xcresult summarizes repeated identical identifiers as one unique passed test; the preserved campaign log and summary count all 50 started/passed repetitions."
+  },
+  "scope_notice": "This proves the controlled iOS App-owned startup contract, not macOS, watchOS, physical-device latency, APNs, or whole-product quality."
+}

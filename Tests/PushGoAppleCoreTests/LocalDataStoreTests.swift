@@ -5,6 +5,92 @@ import Testing
 
 struct LocalDataStoreTests {
     @Test
+    func transientStorageBootstrapFailureDoesNotPoisonTheNextOpen() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            // Model the real preparation failure where the app-local container
+            // is temporarily inaccessible (for example a permission/locking
+            // problem). The next process must be able to recover after the
+            // path is repaired; an unavailable result must not stay cached.
+            let appLocalRoot = root.appendingPathComponent("app-local", isDirectory: true)
+            try Data("temporarily-blocked".utf8).write(to: appLocalRoot)
+
+            let unavailable = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            #expect(unavailable.storageState.mode == .unavailable)
+            #expect(!(unavailable.storageState.reason ?? "").isEmpty)
+            await #expect(throws: (any Error).self) {
+                _ = try await unavailable.loadMessage(id: UUID())
+            }
+
+            try FileManager.default.removeItem(at: appLocalRoot)
+
+            let recovered = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            #expect(recovered.storageState.mode == .persistent)
+
+            let message = PushMessage(
+                messageId: "bootstrap-recovery-message",
+                title: "Recovered storage",
+                body: "The next open can persist a real message.",
+                channel: "quality"
+            )
+            try await recovered.saveMessage(message)
+
+            // Drop the shared cache to force the same ordinary reopen path a
+            // subsequent app process would use, then verify the business row.
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let persisted = try #require(try await reopened.loadMessage(id: message.id))
+            #expect(persisted.title == message.title)
+            #expect(persisted.body == message.body)
+            #expect(persisted.channel == message.channel)
+        }
+    }
+
+    @Test
+    func recoveryRebuildDeletesEveryCurrentAndLegacySQLiteFileFamily() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            try await store.saveMessagesBatch([
+                makeMessage(
+                    messageId: "recovery-delete-001",
+                    notificationRequestId: "recovery-delete-request-001",
+                    title: "Must be deleted",
+                    body: "Recovery must remove this canonical row."
+                ),
+            ])
+
+            let directory = try AppConstants.appLocalDatabaseDirectory(
+                appGroupIdentifier: appGroupIdentifier
+            )
+            let filenames = Set([
+                AppConstants.databaseStoreFilename,
+                AppConstants.messageIndexDatabaseFilename,
+            ] + AppConstants.legacyDatabaseStoreFilenames + AppConstants.legacyMessageIndexDatabaseFilenames)
+            let suffixes = ["", "-wal", "-shm", "-journal"]
+            let artifacts = filenames.flatMap { filename in
+                suffixes.map { suffix in
+                    directory.appendingPathComponent(filename + suffix)
+                }
+            }
+            for artifact in artifacts where !FileManager.default.fileExists(atPath: artifact.path) {
+                try Data("recovery-sentinel".utf8).write(to: artifact)
+            }
+            #expect(artifacts.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+
+            try await store.rebuildPersistentStoresForRecovery()
+
+            #expect(artifacts.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        }
+    }
+
+    @Test
     func persistNotificationMessageUpdatesExistingRowForDuplicateRequest() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let first = makeMessage(
@@ -21,15 +107,16 @@ struct LocalDataStoreTests {
             )
 
             let initialOutcome = try await store.persistNotificationMessageIfNeeded(first)
-            let duplicateOutcome = try await store.persistNotificationMessageIfNeeded(second)
-            let stored = try await store.loadMessage(notificationRequestId: "req-duplicate-request-001")
-            let messages = try await store.loadMessages()
-
             guard case let .persisted(initialStored) = initialOutcome else {
                 Issue.record("Expected initial notification persistence to create a message row.")
                 return
             }
             #expect(initialStored.title == "Original title")
+
+            try await store.setMessageReadState(id: initialStored.id, isRead: true)
+            let duplicateOutcome = try await store.persistNotificationMessageIfNeeded(second)
+            let stored = try await store.loadMessage(notificationRequestId: "req-duplicate-request-001")
+            let messages = try await store.loadMessages()
 
             guard case let .duplicateRequest(updated) = duplicateOutcome else {
                 Issue.record("Expected same notification request id to be treated as duplicateRequest.")
@@ -37,9 +124,53 @@ struct LocalDataStoreTests {
             }
             #expect(updated.title == "Updated title")
             #expect(updated.body == "Updated body")
+            #expect(updated.isRead)
             #expect(stored?.title == "Updated title")
             #expect(stored?.body == "Updated body")
+            #expect(stored?.isRead == true)
             #expect(messages.count == 1)
+        }
+    }
+
+    @Test
+    func persistNotificationMessageBatchPreservesInputOrderAndDuplicateSemantics() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let first = makeMessage(
+                messageId: "msg-batch-001",
+                notificationRequestId: "req-batch-shared",
+                title: "First title",
+                body: "First body"
+            )
+            let duplicateRequest = makeMessage(
+                messageId: "msg-batch-002",
+                notificationRequestId: "req-batch-shared",
+                title: "Updated title",
+                body: "Updated body"
+            )
+            let independent = makeMessage(
+                messageId: "msg-batch-003",
+                notificationRequestId: "req-batch-independent",
+                title: "Independent",
+                body: "Independent body"
+            )
+
+            let outcomes = try await store.persistNotificationMessagesIfNeeded([
+                first,
+                duplicateRequest,
+                independent,
+            ])
+
+            #expect(outcomes.count == 3)
+            guard case .persisted = outcomes[0],
+                  case let .duplicateRequest(updated) = outcomes[1],
+                  case .persisted = outcomes[2]
+            else {
+                Issue.record("Expected ordered persisted/duplicateRequest/persisted batch outcomes.")
+                return
+            }
+            #expect(updated.title == "Updated title")
+            #expect(try await store.loadMessages().count == 2)
+            #expect(try await store.loadMessage(notificationRequestId: "req-batch-shared")?.title == "Updated title")
         }
     }
 
@@ -136,6 +267,10 @@ struct LocalDataStoreTests {
 	                    "description": "Original thing body",
 	                    "attrs": #"{"pressure":"ok","rpm":"40"}"#,
 	                    "metadata": #"{"owner":"ops","site":"sha"}"#,
+	                    "external_ids": #"{"asset":"asset-42","serial":"legacy-serial"}"#,
+	                    "tags": ["legacy-tag"],
+	                    "location_type": "legacy-zone",
+	                    "location_value": "legacy-rack-9",
 	                    "observed_at": "1800010000000",
 	                ]
 	            )
@@ -151,18 +286,60 @@ struct LocalDataStoreTests {
 	                    "thing_id": "thing-head-patch-001",
 	                    "attrs": #"{"pressure":null,"rpm":"50"}"#,
 	                    "metadata": #"{"owner":"noc","site":null}"#,
+	                    "external_ids": #"{"serial":null}"#,
+	                    "tags": [],
+	                    "location": NSNull(),
 	                    "observed_at": "1800010020000",
 	                ]
 	            )
+	            let legacyLocationCreate = makeMessage(
+	                messageId: "thing-location-alias-create",
+	                notificationRequestId: "req-thing-location-alias-create",
+	                title: "Location alias create",
+	                body: "Location alias create",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_000),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-location-alias-001",
+	                    "thing_id": "thing-location-alias-001",
+	                    "location": ["type": "nested-zone", "value": "nested-rack"],
+	                    "observed_at": "1800010000000",
+	                ]
+	            )
+	            let legacyLocationPatch = makeMessage(
+	                messageId: "thing-location-alias-update",
+	                notificationRequestId: "req-thing-location-alias-update",
+	                title: "Location alias update",
+	                body: "Location alias update",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_030),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-location-alias-001",
+	                    "thing_id": "thing-location-alias-001",
+	                    "location_type": "flat-zone",
+	                    "location_value": "flat-rack",
+	                    "observed_at": "1800010030000",
+	                ]
+	            )
 
-	            try await store.saveEntityRecords([eventCreate, eventPatch, thingCreate, thingPatch])
+	            try await store.saveEntityRecords([
+	                eventCreate,
+	                eventPatch,
+	                thingCreate,
+	                thingPatch,
+	                legacyLocationCreate,
+	                legacyLocationPatch,
+	            ])
 
 	            let eventHeads = try await store.loadEventMessagesForProjection()
 	            let thingHeads = try await store.loadThingMessagesForProjection()
 	            #expect(eventHeads.count == 1)
-	            #expect(thingHeads.count == 1)
+	            #expect(thingHeads.count == 2)
 	            let eventHead = try #require(eventHeads.first)
-	            let thingHead = try #require(thingHeads.first)
+	            let thingHead = try #require(thingHeads.first(where: { $0.thingId == "thing-head-patch-001" }))
+	            let legacyLocationHead = try #require(
+	                thingHeads.first(where: { $0.thingId == "thing-location-alias-001" })
+	            )
 
 	            #expect(eventHead.title == "Original event")
 	            #expect(eventHead.body == "Original event body")
@@ -174,6 +351,62 @@ struct LocalDataStoreTests {
 	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["attrs"]?.value) == #"{"rpm":"50"}"#)
 	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["metadata"]?.value) == #"{"owner":"noc"}"#)
 	            #expect(thingHead.metadata["owner"] == "noc")
+	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["external_ids"]?.value) == #"{"asset":"asset-42"}"#)
+	            #expect((thingHead.rawPayload["tags"]?.value as? [Any])?.isEmpty == true)
+	            #expect(thingHead.rawPayload["location_type"] == nil)
+	            #expect(thingHead.rawPayload["location_value"] == nil)
+	            #expect(legacyLocationHead.rawPayload["location"] == nil)
+	            #expect(legacyLocationHead.rawPayload["location_type"]?.value as? String == "flat-zone")
+	            #expect(legacyLocationHead.rawPayload["location_value"]?.value as? String == "flat-rack")
+	        }
+	    }
+
+	    @Test
+	    func thingProjectionHeadRejectsOlderSnapshotAfterNewerSnapshot() async throws {
+	        try await withIsolatedLocalDataStore { store, _ in
+	            let newer = makeMessage(
+	                messageId: "thing-head-order-newer",
+	                notificationRequestId: "req-thing-head-order-newer",
+	                title: "Current Thing",
+	                body: "Current Thing body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_020_020),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-order-001",
+	                    "thing_id": "thing-head-order-001",
+	                    "title": "Current Thing",
+	                    "description": "Current Thing body",
+	                    "observed_at": "1800020020000",
+	                ]
+	            )
+	            let older = makeMessage(
+	                messageId: "thing-head-order-older",
+	                notificationRequestId: "req-thing-head-order-older",
+	                title: "Stale Thing",
+	                body: "Stale Thing body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_020_000),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-order-001",
+	                    "thing_id": "thing-head-order-001",
+	                    "title": "Stale Thing",
+	                    "description": "Stale Thing body",
+	                    "observed_at": "1800020000000",
+	                ]
+	            )
+
+	            // Provider/import batches are newest-first. A stale tail item must remain
+	            // in history without replacing the canonical current projection.
+	            try await store.saveMessages([newer, older])
+	            var head = try #require(try await store.loadThingMessagesForProjection().first)
+	            #expect(head.title == "Current Thing")
+	            #expect(head.body == "Current Thing body")
+
+	            // The same ordering rule must hold when an older delivery arrives later.
+	            try await store.saveMessage(older)
+	            head = try #require(try await store.loadThingMessagesForProjection().first)
+	            #expect(head.title == "Current Thing")
+	            #expect(head.body == "Current Thing body")
 	        }
 	    }
 
@@ -394,6 +627,43 @@ struct LocalDataStoreTests {
             #expect(subscriptions.map(\.channelId) == ["blank-password", "valid-channel"])
             #expect(credentials.map(\.channelId) == ["valid-channel"])
             #expect(credentials.map(\.password) == ["valid-password"])
+        }
+    }
+
+    @Test
+    func backendOnlyChannelSubscriptionReceivesSyncPresentationUpdates() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let gateway = "https://backend-only.pushgo.dev"
+            let channelId = "backend-only-channel"
+            try await store.upsertChannelSubscription(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Pending",
+                password: nil,
+                lastSyncedAt: nil,
+                updatedAt: Date(timeIntervalSince1970: 1_742_000_000),
+                isDeleted: false,
+                deletedAt: nil
+            )
+
+            try await store.updateChannelDisplayName(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Completed"
+            )
+            let syncedAt = Date(timeIntervalSince1970: 1_742_000_100)
+            try await store.updateChannelLastSynced(
+                gateway: gateway,
+                channelId: channelId,
+                date: syncedAt
+            )
+
+            let subscription = try await store.loadChannelSubscriptions(
+                gateway: gateway,
+                includeDeleted: false
+            ).first
+            #expect(subscription?.displayName == "Completed")
+            #expect(subscription?.lastSyncedAt == syncedAt)
         }
     }
 
@@ -1732,6 +2002,239 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func contentRefreshDoesNotUndoLocalReadState() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let original = makeMessage(
+                messageId: "msg-content-refresh-read-001",
+                notificationRequestId: "req-content-refresh-read-001",
+                title: "Original content",
+                body: "Original body"
+            )
+            try await store.saveMessage(original)
+            try await store.setMessageReadState(id: original.id, isRead: true)
+
+            var refreshed = original
+            refreshed.title = "Recovered content"
+            refreshed.body = "Recovered body"
+            try await store.saveMessages([refreshed])
+
+            let stored = try #require(try await store.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(stored.title == "Recovered content")
+            #expect(stored.body == "Recovered body")
+            #expect(stored.isRead)
+            #expect(try await store.messageCounts().unread == 0)
+
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let persisted = try #require(try await reopened.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(persisted.isRead)
+            #expect(persisted.body == "Recovered body")
+
+            try await reopened.setMessageReadState(id: persisted.id, isRead: false)
+            var staleSnapshot = refreshed
+            staleSnapshot.title = "Updated after marking unread"
+            staleSnapshot.isRead = true
+            // Cross the bulk projection threshold while replaying one stable ID.
+            try await reopened.saveMessagesBatch(Array(repeating: staleSnapshot, count: 501))
+
+            let updated = try #require(try await reopened.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(updated.title == "Updated after marking unread")
+            #expect(!updated.isRead)
+            #expect(try await reopened.messageCounts().unread == 1)
+        }
+    }
+
+    @Test
+    func saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let existingID = UUID(uuidString: "40000000-0000-0000-0000-000000000101")!
+            let existing = makeMessage(
+                id: existingID,
+                messageId: "msg-batch-existing-001",
+                notificationRequestId: "req-batch-existing-001",
+                title: "Existing canonical row",
+                body: "Must remain unchanged"
+            )
+            try await store.saveMessage(existing)
+
+            let newRow = makeMessage(
+                messageId: "msg-batch-new-001",
+                notificationRequestId: "req-batch-new-001",
+                title: "New row",
+                body: "Must not partially commit"
+            )
+            let conflictingRow = makeMessage(
+                id: existingID,
+                messageId: "msg-batch-conflict-001",
+                notificationRequestId: "req-batch-conflict-001",
+                title: "Conflicting row",
+                body: "Must not overwrite existing data"
+            )
+
+            await #expect(throws: (any Error).self) {
+                try await store.saveMessagesBatch([newRow, conflictingRow])
+            }
+
+            let persistedExisting = try await store.loadMessage(id: existingID)
+            #expect(persistedExisting?.messageId == "msg-batch-existing-001")
+            #expect(persistedExisting?.title == "Existing canonical row")
+            #expect(persistedExisting?.body == "Must remain unchanged")
+            #expect(try await store.loadMessage(messageId: "msg-batch-new-001") == nil)
+            #expect(try await store.loadMessage(messageId: "msg-batch-conflict-001") == nil)
+        }
+    }
+
+    @Test
+    func sqlitePageQuotaRejectsBatchWithoutPartialCommitAndRecoversAfterRestore() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let sentinel = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000111")!,
+                messageId: "msg-quota-sentinel-001",
+                notificationRequestId: "req-quota-sentinel-001",
+                title: "Quota sentinel",
+                body: "This canonical row must survive a failed batch."
+            )
+            try await store.saveMessage(sentinel)
+
+            let originalMetrics = try await store.qualitySQLitePageMetrics()
+            guard originalMetrics.pageCount > 0,
+                  originalMetrics.pageSize > 0,
+                  originalMetrics.maxPageCount >= originalMetrics.pageCount
+            else {
+                Issue.record("SQLite page metrics were not usable for a bounded write-failure test.")
+                return
+            }
+
+            let candidate = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000112")!,
+                messageId: "msg-quota-candidate-001",
+                notificationRequestId: "req-quota-candidate-001",
+                title: "Quota candidate",
+                body: "This row must not partially commit."
+            )
+            let (pageCountPlusOne, pageCountOverflow) = originalMetrics.pageCount
+                .addingReportingOverflow(1)
+            let (payloadByteCount, payloadOverflow) = pageCountPlusOne
+                .multipliedReportingOverflow(by: originalMetrics.pageSize)
+            guard !pageCountOverflow, !payloadOverflow,
+                  payloadByteCount > 0,
+                  payloadByteCount <= 64 * 1024 * 1024
+            else {
+                Issue.record("SQLite test payload size was outside the bounded test budget.")
+                return
+            }
+            let oversized = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000113")!,
+                messageId: "msg-quota-oversized-001",
+                notificationRequestId: "req-quota-oversized-001",
+                title: "Quota oversized candidate",
+                body: String(repeating: "x", count: payloadByteCount)
+            )
+
+            do {
+                let constrainedMetrics = try await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.pageCount
+                )
+                try #require(constrainedMetrics.maxPageCount == originalMetrics.pageCount)
+                #expect(constrainedMetrics.pageSize == originalMetrics.pageSize)
+
+                var writeError: (any Error)?
+                do {
+                    try await store.saveMessagesBatch([candidate, oversized])
+                    Issue.record("A batch larger than the production SQLite quota unexpectedly succeeded.")
+                } catch {
+                    writeError = error
+                }
+
+                let rowsAfterFailure = try await store.loadMessages()
+                #expect(rowsAfterFailure.count == 1)
+                let sentinelAfterFailure = try #require(
+                    try await store.loadMessage(id: sentinel.id)
+                )
+                #expect(sentinelAfterFailure.title == sentinel.title)
+                #expect(sentinelAfterFailure.body == sentinel.body)
+                #expect(try await store.loadMessage(id: candidate.id) == nil)
+                #expect(try await store.loadMessage(id: oversized.id) == nil)
+
+                let restoredMetrics = try await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.maxPageCount
+                )
+                #expect(restoredMetrics.maxPageCount == originalMetrics.maxPageCount)
+
+                guard let writeError else {
+                    return
+                }
+                guard let appError = writeError as? AppError else {
+                    Issue.record("Quota write failure did not surface through AppError.localStore.")
+                    return
+                }
+                guard case let .localStore(message) = appError else {
+                    Issue.record("Quota write failure used an unexpected AppError case: \(appError).")
+                    return
+                }
+                #expect(message.contains("saveMessagesBatch"))
+
+                // Once the quota is restored, the same production batch path
+                // must succeed and remain accurate after an ordinary reopen.
+                try await store.saveMessagesBatch([candidate, oversized])
+                let recoveredRows = try await store.loadMessages()
+                #expect(recoveredRows.count == 3)
+                let recoveredCandidate = try #require(
+                    try await store.loadMessage(id: candidate.id)
+                )
+                #expect(recoveredCandidate.title == candidate.title)
+                #expect(recoveredCandidate.body == candidate.body)
+                let recoveredOversized = try #require(
+                    try await store.loadMessage(id: oversized.id)
+                )
+                #expect(recoveredOversized.title == oversized.title)
+                #expect(recoveredOversized.body == oversized.body)
+
+                LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+                let reopened = LocalDataStore(
+                    appGroupIdentifier: appGroupIdentifier,
+                    spotlightIndexer: nil
+                )
+                let reopenedRows = try await reopened.loadMessages()
+                #expect(reopenedRows.count == 3)
+                let reopenedSentinel = try #require(
+                    try await reopened.loadMessage(id: sentinel.id)
+                )
+                #expect(reopenedSentinel.title == sentinel.title)
+                #expect(reopenedSentinel.body == sentinel.body)
+                let reopenedCandidate = try #require(
+                    try await reopened.loadMessage(id: candidate.id)
+                )
+                #expect(reopenedCandidate.title == candidate.title)
+                #expect(reopenedCandidate.body == candidate.body)
+                let reopenedOversized = try #require(
+                    try await reopened.loadMessage(id: oversized.id)
+                )
+                #expect(reopenedOversized.title == oversized.title)
+                #expect(reopenedOversized.body == oversized.body)
+                #expect(
+                    reopenedRows.filter { $0.messageId == candidate.messageId }.count == 1
+                )
+                #expect(
+                    reopenedRows.filter { $0.messageId == oversized.messageId }.count == 1
+                )
+            } catch {
+                // max_page_count is connection-local; never let a failed
+                // assertion leave the shared test connection constrained.
+                _ = try? await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.maxPageCount
+                )
+                throw error
+            }
+        }
+    }
+
+    @Test
     func saveEntityRecordsTreatsEventHeadWithinThingScopeAsTopLevelAndThingRelated() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let thingParent = makeMessage(
@@ -2479,7 +2982,7 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func legacyRawPayloadTagFormatsRemainDeterministicAcrossReload() async throws {
+    func supportedRawPayloadTagFormatsRemainDeterministicAcrossReload() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let jsonTags = makeMessage(
                 id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
@@ -2498,8 +3001,8 @@ struct LocalDataStoreTests {
                 id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
                 messageId: "legacy-tags-array-001",
                 notificationRequestId: "req-legacy-tags-array-001",
-                title: "Legacy direct array tags",
-                body: "Direct array tags are a legacy shape",
+                title: "Canonical direct array tags",
+                body: "Direct array tags are the canonical payload shape",
                 receivedAt: Date(timeIntervalSince1970: 1_800_000_090),
                 rawPayload: [
                     "tags": ["legacy-array", "ignored"],
@@ -2560,7 +3063,7 @@ struct LocalDataStoreTests {
             let loadedWrong = try #require(try await store.loadMessage(messageId: wrongTypeTags.messageId ?? ""))
 
             #expect(Set(loadedJSON.tags) == Set(["legacy-json", "stable"]))
-            #expect(loadedArray.tags.isEmpty)
+            #expect(Set(loadedArray.tags) == Set(["legacy-array", "ignored"]))
             #expect(loadedComma.tags.isEmpty)
             #expect(loadedMissing.tags.isEmpty)
             #expect(loadedWrong.tags.isEmpty)
@@ -2575,7 +3078,7 @@ struct LocalDataStoreTests {
             #expect(jsonTagPage.map(\.id) == [jsonTags.id])
 
             #expect(try await store.searchMessagesCount(query: "tag:legacy-json") == 1)
-            #expect(try await store.searchMessagesCount(query: "tag:legacy-array") == 0)
+            #expect(try await store.searchMessagesCount(query: "tag:legacy-array") == 1)
             #expect(try await store.searchMessagesCount(query: "tag:shadow-wrong") == 0)
 
             let tagCounts = try await store.messageTagCounts()
@@ -2583,7 +3086,8 @@ struct LocalDataStoreTests {
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-json" }))
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-missing" }))
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-wrong" }))
-            #expect(!tagCounts.contains(where: { $0.tag == "legacy-array" }))
+            #expect(tagCounts.first(where: { $0.tag == "legacy-array" })?.totalCount == 1)
+            #expect(tagCounts.first(where: { $0.tag == "ignored" })?.totalCount == 1)
             #expect(!tagCounts.contains(where: { $0.tag == "legacy" }))
         }
     }

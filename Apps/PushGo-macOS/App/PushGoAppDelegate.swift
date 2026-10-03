@@ -36,6 +36,12 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         }
     }
 
+    func applicationDidBecomeActive(_: Notification) {
+        Task {
+            await PushRegistrationService.shared.applicationDidBecomeActive()
+        }
+    }
+
     private func bootstrapAutomationRuntimeIfNeeded() {
 #if DEBUG
         Task { @MainActor in
@@ -302,6 +308,8 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         button.action = #selector(handleStatusItemClick(_:))
         button.target = self
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.setAccessibilityIdentifier("status-item.pushgo")
+        button.setAccessibilityLabel(LocalizationProvider.localized("pushgo_app_name"))
         statusItem = item
     }
 

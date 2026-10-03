@@ -425,14 +425,17 @@ final class EntityProjectionViewModel {
             }
             guard let eventId = normalizedID(message.eventId) else { return nil }
             let profile = profileSnapshot(fromPayload: message.rawPayload, kind: .event)
+            let displayTitle = payloadString(key: "event_title", payload: message.rawPayload)
+            let displaySummary = payloadString(key: "event_description", payload: message.rawPayload)
             let title = profile?.title
+                ?? displayTitle
                 ?? nonEmpty(message.title)
                 ?? eventId
-            let displayTitle = payloadString(key: "event_title", payload: message.rawPayload)
             let summary = profile?.description
-            let displaySummary = payloadString(key: "event_description", payload: message.rawPayload)
+                ?? displaySummary
+                ?? nonEmpty(message.body)
             let status = profile?.status
-            let statusMessage = profile?.message
+            let statusMessage = profile?.message ?? nonEmpty(message.body)
 
             let point = EventTimelinePoint(
                 id: message.id,
@@ -1229,7 +1232,7 @@ final class EntityProjectionViewModel {
             channelId: channelId,
             severity: normalizedID(event.severity)
         )
-        await reload()
+        await reloadEvents()
     }
 
     func deleteThing(thingId: String) async throws {

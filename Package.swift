@@ -12,6 +12,10 @@ let package = Package(
             name: "PushGoAppleCore",
             targets: ["PushGoAppleCore"]
         ),
+        .executable(
+            name: "PushGoSQLiteMigrationChild",
+            targets: ["PushGoSQLiteMigrationChild"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.6.0"),
@@ -56,6 +60,7 @@ let package = Package(
                 "Application/FeedbackPresentationPolicy.swift",
                 "Application/LocalStoreRecoveryController.swift",
                 "Application/LocalStoreRecoveryState.swift",
+                "Application/MacMainWindowPresenter.swift",
                 "Application/MainTab.swift",
                 "Application/PendingLocalDeletionController.swift",
                 "Application/ProviderRouteController.swift",
@@ -141,6 +146,13 @@ let package = Package(
                     "-warnings-as-errors",
                 ])
             ]
+        ),
+        .executableTarget(
+            name: "PushGoSQLiteMigrationChild",
+            dependencies: ["PushGoAppleCore"],
+            path: "Tests/Fixtures",
+            exclude: ["abrupt_wal_writer.py"],
+            sources: ["sqlite_migration_child.swift"]
         ),
         .testTarget(
             name: "PushGoAppleCoreTests",

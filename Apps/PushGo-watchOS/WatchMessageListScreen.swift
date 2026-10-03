@@ -12,13 +12,22 @@ struct WatchMessageListScreen: View {
         NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    if viewModel.messages.isEmpty {
+                    if let error = viewModel.messageError {
+                        WatchEntityLoadErrorState(
+                            message: error.errorDescription ?? error.localizedDescription,
+                            retry: reload
+                        )
+                        .accessibilityIdentifier("state.messages.error")
+                    } else if viewModel.messages.isEmpty {
                         emptyState
                     } else {
                         ForEach(viewModel.messages) { message in
                             NavigationLink(value: message.messageId) {
                                 WatchLightMessageRowView(message: message)
                             }
+                            .accessibilityIdentifier("row.message.\(message.messageId)")
+                            .accessibilityLabel(Text(message.title))
+                            .accessibilityValue(Text(messageAccessibilityValue(message)))
                         }
                     }
                 }
@@ -39,7 +48,12 @@ struct WatchMessageListScreen: View {
                     openPendingMessageIfNeeded()
                 }
             }
-            .onChange(of: viewModel.messages) { _, _ in
+            .onChange(of: viewModel.messages) { _, messages in
+                if let openedMessageID = navigationPath.last,
+                   !messages.contains(where: { $0.messageId == openedMessageID })
+                {
+                    navigationPath.removeAll()
+                }
                 openPendingMessageIfNeeded()
             }
             .onChange(of: environment.pendingMessageToOpen) { _, _ in
@@ -61,6 +75,25 @@ struct WatchMessageListScreen: View {
                 )
             }
 #endif
+        }
+    }
+
+    private func messageAccessibilityValue(_ message: WatchLightMessage) -> String {
+        [
+            localizationManager.localized(message.isRead ? "read" : "unread"),
+            message.severity?.capitalized,
+            message.body,
+        ]
+        .compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
+    }
+
+    private func reload() {
+        Task { @MainActor in
+            await viewModel.reload()
         }
     }
 
@@ -125,6 +158,8 @@ private struct WatchLightMessageRowView: View {
                 if !message.isRead {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 6))
+                        .accessibilityLabel(LocalizedStringKey("unread"))
+                        .accessibilityIdentifier("indicator.message.unread.\(message.messageId)")
                 }
                 Text(watchDateText(message.receivedAt))
                     .font(.caption2)

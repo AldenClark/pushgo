@@ -23,7 +23,7 @@ actor DurableIngressJournal {
     private static let databaseName = "ingress.sqlite"
     private static let emergencyDirectoryName = "EmergencyIngress"
     private static let emergencyFileExtension = "ingress-emergency"
-    private static let supportedApplyStates = "'pending','retry_wait','applied','discarded','quarantined'"
+    private static let supportedApplyStates = "'pending','retry_wait','applying','applied','discarded','quarantined'"
     private static let contentionRetryCount = 2
     private static let pendingScanTotalBudget = 10_000
     private static let legacyRollbackShadowRetentionMilliseconds: Int64 = 35 * 24 * 60 * 60 * 1_000
@@ -196,7 +196,8 @@ actor DurableIngressJournal {
         requestIdentifier: String?,
         source: String,
         ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity? = nil,
-        requiredEntryState: String = "durable"
+        requiredEntryState: String = "durable",
+        postChangeNotification: Bool = true
     ) -> Bool {
         enqueueIngressResult(
             codablePayload: codablePayload,
@@ -204,7 +205,8 @@ actor DurableIngressJournal {
             source: source,
             ackIdentity: ackIdentity,
             requiredEntryState: requiredEntryState,
-            trackNotificationProjection: false
+            trackNotificationProjection: false,
+            postChangeNotification: postChangeNotification
         ).accepted
     }
 
@@ -214,7 +216,8 @@ actor DurableIngressJournal {
         source: String,
         ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity? = nil,
         requiredEntryState: String = "durable",
-        trackNotificationProjection: Bool = true
+        trackNotificationProjection: Bool = true,
+        postChangeNotification: Bool = true
     ) -> EnqueueResult {
         let payload: Data
         do {
@@ -261,7 +264,7 @@ actor DurableIngressJournal {
                 projectionIdentity: projectionIdentity
             )
             if result.accepted { persistLegacyRollbackShadows(emergency) }
-            postIngressChangedNotification()
+            if postChangeNotification { postIngressChangedNotification() }
             return result
         } catch {
             // Once the payload is encoded, every thrown primary-store failure
@@ -269,7 +272,7 @@ actor DurableIngressJournal {
             // (for example, an identity conflict) never enters this path.
             guard persistEmergencyIngress(emergency) else { return .rejected }
             persistLegacyRollbackShadows(emergency)
-            postIngressChangedNotification()
+            if postChangeNotification { postIngressChangedNotification() }
             // The sidecar path cannot atomically prove whether another process
             // already persisted the same delivery. Keep the badge conservative;
             // the host's canonical snapshot rebuild will reconcile the count.
@@ -490,7 +493,10 @@ actor DurableIngressJournal {
         }
     }
 
-    func pendingIngressEntries(limit: Int?) -> [NotificationIngressInbox.PendingEntry] {
+    func pendingIngressEntries(
+        limit: Int?,
+        now: Date = Date()
+    ) -> [NotificationIngressInbox.PendingEntry] {
         importEmergencyIngress()
         let requestedLimit = min(10_000, max(1, limit ?? 10_000))
         let defaultWindow = min(10_000, max(256, requestedLimit * 8))
@@ -512,7 +518,7 @@ actor DurableIngressJournal {
                         """
                     let statement = try prepare(db, sql)
                     defer { sqlite3_finalize(statement) }
-                    sqlite3_bind_int64(statement, 1, Self.epochMilliseconds(Date()))
+                    sqlite3_bind_int64(statement, 1, Self.epochMilliseconds(now))
                     sqlite3_bind_int64(statement, 2, Int64(scanLimit))
                     var windowEntries: [NotificationIngressInbox.PendingEntry] = []
                     var invalidRows: [(String, String)] = []
@@ -574,6 +580,132 @@ actor DurableIngressJournal {
             postIngressChangedNotification()
         }
         return entries
+    }
+
+    func ingressQueueCounts(
+        now: Date = Date()
+    ) -> NotificationIngressInbox.QueueCounts {
+        let nowMilliseconds = Self.epochMilliseconds(now)
+        return (try? withDatabase(write: false) { db in
+            let statement = try prepare(
+                db,
+                """
+                SELECT
+                    COALESCE(SUM(CASE
+                        WHEN apply_state IN ('pending','retry_wait')
+                             AND next_apply_at_ms <= ? THEN 1
+                        WHEN apply_state = 'applying'
+                             AND COALESCE(lease_until_ms, 0) <= ? THEN 1
+                        ELSE 0
+                    END), 0),
+                    COUNT(*)
+                FROM ingress_entry
+                WHERE apply_state IN ('pending','retry_wait','applying');
+                """
+            )
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int64(statement, 1, nowMilliseconds)
+            sqlite3_bind_int64(statement, 2, nowMilliseconds)
+            guard sqlite3_step(statement) == SQLITE_ROW else {
+                return .zero
+            }
+            return NotificationIngressInbox.QueueCounts(
+                due: Int(sqlite3_column_int64(statement, 0)),
+                outstanding: Int(sqlite3_column_int64(statement, 1))
+            )
+        }) ?? .zero
+    }
+
+    func claimPendingIngressEntries(
+        owner: String,
+        leaseDuration: TimeInterval,
+        limit: Int,
+        now: Date = Date()
+    ) -> [NotificationIngressInbox.ClaimedEntry] {
+        importEmergencyIngress()
+        let normalizedOwner = normalized(owner) ?? "app.ingress.unknown"
+        let requestedLimit = min(512, max(1, limit))
+        let nowMilliseconds = Self.epochMilliseconds(now)
+        let leaseUntil = Self.epochMilliseconds(
+            now.addingTimeInterval(max(1, leaseDuration))
+        )
+
+        // A killed owner leaves `applying` rows behind. Rearming is a separate
+        // short transaction so ordinary pending scanning can keep its poison-row
+        // quarantine behavior; the later claim CAS still arbitrates peers.
+        try? withDatabase(write: true) { db in
+            let statement = try prepare(
+                db,
+                """
+                UPDATE ingress_entry
+                SET apply_state = 'retry_wait', lease_owner = NULL,
+                    lease_until_ms = NULL, next_apply_at_ms = ?
+                WHERE apply_state = 'applying'
+                  AND COALESCE(lease_until_ms, 0) <= ?;
+                """
+            )
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int64(statement, 1, nowMilliseconds)
+            sqlite3_bind_int64(statement, 2, nowMilliseconds)
+            try stepDone(db, statement)
+        }
+
+        let candidates = pendingIngressEntries(limit: requestedLimit, now: now)
+        guard !candidates.isEmpty else { return [] }
+        return (try? withDatabase(write: true) { db in
+            try execute(db, "BEGIN IMMEDIATE;")
+            do {
+                let update = try prepare(
+                    db,
+                    """
+                    UPDATE ingress_entry
+                    SET apply_state = 'applying', lease_owner = ?,
+                        lease_until_ms = ?, lease_generation = lease_generation + 1,
+                        apply_attempts = apply_attempts + 1
+                    WHERE entry_id = ?
+                      AND apply_state IN ('pending','retry_wait')
+                      AND next_apply_at_ms <= ?;
+                    """
+                )
+                defer { sqlite3_finalize(update) }
+                let generationQuery = try prepare(
+                    db,
+                    "SELECT lease_generation FROM ingress_entry WHERE entry_id = ? AND apply_state = 'applying' AND lease_owner = ?;"
+                )
+                defer { sqlite3_finalize(generationQuery) }
+                var claimed: [NotificationIngressInbox.ClaimedEntry] = []
+                claimed.reserveCapacity(candidates.count)
+                for candidate in candidates {
+                    sqlite3_reset(update)
+                    sqlite3_clear_bindings(update)
+                    bindText(update, 1, normalizedOwner)
+                    sqlite3_bind_int64(update, 2, leaseUntil)
+                    bindText(update, 3, candidate.record.entryId)
+                    sqlite3_bind_int64(update, 4, nowMilliseconds)
+                    try stepDone(db, update)
+                    guard sqlite3_changes(db) == 1 else { continue }
+
+                    sqlite3_reset(generationQuery)
+                    sqlite3_clear_bindings(generationQuery)
+                    bindText(generationQuery, 1, candidate.record.entryId)
+                    bindText(generationQuery, 2, normalizedOwner)
+                    guard sqlite3_step(generationQuery) == SQLITE_ROW else { continue }
+                    claimed.append(
+                        NotificationIngressInbox.ClaimedEntry(
+                            entry: candidate,
+                            owner: normalizedOwner,
+                            leaseGeneration: sqlite3_column_int64(generationQuery, 0)
+                        )
+                    )
+                }
+                if !claimed.isEmpty { try incrementGeneration(db) }
+                try execute(db, "COMMIT;")
+                return claimed
+            } catch {
+                _ = try? execute(db, "ROLLBACK;")
+                throw error
+            }
+        }) ?? []
     }
 
     /// Returns the earliest durable canonical-apply retry. The host uses this
@@ -652,6 +784,72 @@ actor DurableIngressJournal {
         }
     }
 
+    func markIngressCompleted(
+        entryID: String,
+        owner: String,
+        leaseGeneration: Int64
+    ) -> Bool {
+        let now = Self.epochMilliseconds(Date())
+        return (try? withDatabase(write: true) { db in
+            let statement = try prepare(
+                db,
+                """
+                UPDATE ingress_entry
+                SET apply_state = 'applied', canonical_applied_at_ms = ?,
+                    lease_owner = NULL, lease_until_ms = NULL
+                WHERE entry_id = ? AND apply_state = 'applying'
+                  AND lease_owner = ? AND lease_generation = ?;
+                """
+            )
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int64(statement, 1, now)
+            bindText(statement, 2, entryID)
+            bindText(statement, 3, owner)
+            sqlite3_bind_int64(statement, 4, leaseGeneration)
+            try stepDone(db, statement)
+            return sqlite3_changes(db) == 1
+        }) ?? false
+    }
+
+    func markIngressCompleted(
+        _ claimedEntries: [NotificationIngressInbox.ClaimedEntry]
+    ) -> Int {
+        guard !claimedEntries.isEmpty else { return 0 }
+        let now = Self.epochMilliseconds(Date())
+        return (try? withDatabase(write: true) { db in
+            try execute(db, "BEGIN IMMEDIATE;")
+            do {
+                let statement = try prepare(
+                    db,
+                    """
+                    UPDATE ingress_entry
+                    SET apply_state = 'applied', canonical_applied_at_ms = ?,
+                        lease_owner = NULL, lease_until_ms = NULL
+                    WHERE entry_id = ? AND apply_state = 'applying'
+                      AND lease_owner = ? AND lease_generation = ?;
+                    """
+                )
+                defer { sqlite3_finalize(statement) }
+                var completed = 0
+                for claimed in claimedEntries {
+                    sqlite3_reset(statement)
+                    sqlite3_clear_bindings(statement)
+                    sqlite3_bind_int64(statement, 1, now)
+                    bindText(statement, 2, claimed.record.entryId)
+                    bindText(statement, 3, claimed.owner)
+                    sqlite3_bind_int64(statement, 4, claimed.leaseGeneration)
+                    try stepDone(db, statement)
+                    completed += Int(sqlite3_changes(db))
+                }
+                try execute(db, "COMMIT;")
+                return completed
+            } catch {
+                _ = try? execute(db, "ROLLBACK;")
+                throw error
+            }
+        }) ?? 0
+    }
+
     func markIngressRetry(entryID: String, reason: String, retryAfter: Date) {
         let now = Self.epochMilliseconds(Date())
         try? withDatabase(write: true) { db in
@@ -670,6 +868,36 @@ actor DurableIngressJournal {
             bindText(statement, 3, entryID)
             try stepDone(db, statement)
         }
+    }
+
+    func markIngressRetry(
+        entryID: String,
+        owner: String,
+        leaseGeneration: Int64,
+        reason: String,
+        retryAfter: Date
+    ) -> Bool {
+        let now = Self.epochMilliseconds(Date())
+        return (try? withDatabase(write: true) { db in
+            let statement = try prepare(
+                db,
+                """
+                UPDATE ingress_entry
+                SET apply_state = 'retry_wait', next_apply_at_ms = ?,
+                    quarantine_reason = ?, lease_owner = NULL, lease_until_ms = NULL
+                WHERE entry_id = ? AND apply_state = 'applying'
+                  AND lease_owner = ? AND lease_generation = ?;
+                """
+            )
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_int64(statement, 1, max(now, Self.epochMilliseconds(retryAfter)))
+            bindText(statement, 2, normalized(reason).map { String($0.prefix(128)) })
+            bindText(statement, 3, entryID)
+            bindText(statement, 4, owner)
+            sqlite3_bind_int64(statement, 5, leaseGeneration)
+            try stepDone(db, statement)
+            return sqlite3_changes(db) == 1
+        }) ?? false
     }
 
     func markIngressTerminal(
@@ -724,6 +952,90 @@ actor DurableIngressJournal {
             )
         }
     }
+
+#if DEBUG
+    func purgeTerminalIngressEntriesForPerformanceTesting(source: String) -> (rows: Int, shadows: Int) {
+        let normalizedSource = normalized(source)
+        guard normalizedSource == "debug.ingress_performance" else { return (0, 0) }
+        let shadowRecords: [(kind: String, fileName: String)] = (try? withDatabase(write: false) { db in
+            let statement = try prepare(
+                db,
+                """
+                SELECT kind, file_name FROM rollback_shadow
+                WHERE identity_key IN (
+                    SELECT entry_id FROM ingress_entry
+                    WHERE source = ? AND apply_state IN ('applied','discarded','quarantined')
+                );
+                """
+            )
+            defer { sqlite3_finalize(statement) }
+            bindText(statement, 1, normalizedSource)
+            var records: [(String, String)] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let kind = columnText(statement, 0), let fileName = columnText(statement, 1) {
+                    records.append((kind, fileName))
+                }
+            }
+            return records
+        }) ?? []
+        let removedRows = (try? withDatabase(write: true) { db in
+            try execute(db, "BEGIN IMMEDIATE;")
+            do {
+                let deleteShadows = try prepare(
+                    db,
+                    """
+                    DELETE FROM rollback_shadow
+                    WHERE identity_key IN (
+                        SELECT entry_id FROM ingress_entry
+                        WHERE source = ? AND apply_state IN ('applied','discarded','quarantined')
+                    );
+                    """
+                )
+                defer { sqlite3_finalize(deleteShadows) }
+                bindText(deleteShadows, 1, normalizedSource)
+                try stepDone(db, deleteShadows)
+
+                let deleteEntries = try prepare(
+                    db,
+                    "DELETE FROM ingress_entry WHERE source = ? AND apply_state IN ('applied','discarded','quarantined');"
+                )
+                defer { sqlite3_finalize(deleteEntries) }
+                bindText(deleteEntries, 1, normalizedSource)
+                try stepDone(db, deleteEntries)
+                let rows = Int(sqlite3_changes(db))
+                try incrementGeneration(db)
+                try execute(db, "COMMIT;")
+                return rows
+            } catch {
+                _ = try? execute(db, "ROLLBACK;")
+                throw error
+            }
+        }) ?? 0
+
+        var removedShadows = 0
+        for record in shadowRecords {
+            let directoryName: String
+            switch record.kind {
+            case "inbox": directoryName = "notification-ingress-inbox"
+            case "ack": directoryName = "provider-delivery-ack-failures"
+            default: continue
+            }
+            guard let fileURL = legacyApplicationSupportDirectory()?
+                .appendingPathComponent(directoryName, isDirectory: true)
+                .appendingPathComponent(record.fileName, isDirectory: false)
+            else { continue }
+            do {
+                try fileManager.removeItem(at: fileURL)
+                removedShadows += 1
+            } catch CocoaError.fileNoSuchFile {
+                continue
+            } catch {
+                continue
+            }
+        }
+        return (removedRows, removedShadows)
+    }
+#endif
 
     @discardableResult
     func markAck(
@@ -799,8 +1111,9 @@ actor DurableIngressJournal {
                            a.state, a.lease_owner, a.lease_until_ms, a.next_attempt_at_ms,
                            a.created_at_ms, a.updated_at_ms, a.source, a.lease_generation
                     FROM ack_outbox a JOIN ingress_entry i ON i.entry_id = a.entry_id
-                    WHERE a.state IN ('pending','retry_wait')
-                      AND a.next_attempt_at_ms <= ? AND a.created_at_ms <= ?
+                    WHERE ((a.state IN ('pending','retry_wait') AND a.next_attempt_at_ms <= ?)
+                           OR (a.state = 'leased' AND a.lease_until_ms <= ?))
+                      AND a.created_at_ms <= ?
                       AND i.schema_version <= \(Self.schemaVersion)
                       AND i.apply_state != 'quarantined'
                       AND (a.required_entry_state = 'durable' OR i.apply_state IN ('applied','discarded'))
@@ -809,8 +1122,9 @@ actor DurableIngressJournal {
                 )
                 defer { sqlite3_finalize(statement) }
                 sqlite3_bind_int64(statement, 1, nowMs)
-                sqlite3_bind_int64(statement, 2, minimumCreated)
-                sqlite3_bind_int64(statement, 3, Int64(max(1, limit ?? 10_000)))
+                sqlite3_bind_int64(statement, 2, nowMs)
+                sqlite3_bind_int64(statement, 3, minimumCreated)
+                sqlite3_bind_int64(statement, 4, Int64(max(1, limit ?? 10_000)))
                 var markers: [ProviderDeliveryAckFailureStore.PendingMarker] = []
                 while sqlite3_step(statement) == SQLITE_ROW {
                     guard let marker = decodeAckMarker(statement) else { continue }

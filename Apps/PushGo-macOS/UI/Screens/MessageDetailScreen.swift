@@ -54,7 +54,13 @@ struct MessageDetailScreen: View {
                     .toolbar { toolbarContent }
             }
         }
-        .accessibilityIdentifier("screen.message.detail")
+        .overlay(alignment: .topLeading) {
+            Text("Message detail screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.message.detail")
+        }
         .onAppear {
             guard !didLoad else { return }
             didLoad = true
@@ -189,6 +195,7 @@ struct MessageDetailScreen: View {
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .appButtonHeight()
+                                .accessibilityIdentifier("action.message.open_link")
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                                 Button {
@@ -338,6 +345,7 @@ struct MessageDetailScreen: View {
                     }
                     .buttonStyle(.appPlain)
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                    .accessibilityIdentifier("message.image.0")
                 } placeholder: {
                     RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
                         .fill(EntityVisualTokens.subtleFill)
@@ -551,7 +559,14 @@ struct MessageDetailScreen: View {
     private func copyText(_ text: String, toastKey: String = "message_content_copied") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        PushGoSystemInteraction.copyTextToPasteboard(trimmed)
+        guard PushGoSystemInteraction.copyTextToPasteboard(trimmed) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
             message: localizationManager.localized(toastKey),
             style: .success,

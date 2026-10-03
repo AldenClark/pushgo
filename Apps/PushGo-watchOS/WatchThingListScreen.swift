@@ -12,7 +12,13 @@ struct WatchThingListScreen: View {
         NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    if viewModel.things.isEmpty {
+                    if let error = viewModel.thingError {
+                        WatchEntityLoadErrorState(
+                            message: error.errorDescription ?? error.localizedDescription,
+                            retry: reload
+                        )
+                        .accessibilityIdentifier("state.things.error")
+                    } else if viewModel.things.isEmpty {
                         WatchEntityEmptyState(
                             icon: "cpu",
                             text: localizationManager.localized("things_empty_title")
@@ -22,6 +28,9 @@ struct WatchThingListScreen: View {
                             NavigationLink(value: thing.thingId) {
                                 WatchLightThingRow(thing: thing)
                             }
+                            .accessibilityIdentifier("row.thing.\(thing.thingId)")
+                            .accessibilityLabel(Text(thing.title))
+                            .accessibilityValue(Text(thingAccessibilityValue(thing)))
                         }
                     }
                 }
@@ -72,6 +81,24 @@ struct WatchThingListScreen: View {
         }
     }
 
+    private func thingAccessibilityValue(_ thing: WatchLightThing) -> String {
+        [
+            watchDecryptionStateText(thing.decryptionState),
+            thing.summary,
+        ]
+        .compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
+    }
+
+    private func reload() {
+        Task { @MainActor in
+            await viewModel.reload()
+        }
+    }
+
     private func openPendingThingIfNeeded() {
         let trimmed = environment.pendingThingToOpen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else { return }
@@ -91,11 +118,17 @@ struct WatchThingListScreen: View {
 }
 
 private struct WatchLightThingRow: View {
+    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+
     let thing: WatchLightThing
 
     var body: some View {
         HStack(spacing: 8) {
-            WatchEntityAvatar(url: thing.imageURL)
+            WatchEntityAvatar(
+                url: thing.imageURL,
+                loadedImageAccessibilityIdentifier: "image.thing.row.\(thing.thingId)",
+                loadedImageAccessibilityLabel: localizationManager.localized("image")
+            )
 
             VStack(alignment: .leading, spacing: WatchEntityVisualTokens.sectionSpacing) {
                 Text(thing.title)

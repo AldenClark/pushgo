@@ -7,12 +7,15 @@ struct ThingListScreen: View {
     }
 
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let viewModel: EntityProjectionViewModel
     var openThingId: String? = nil
     var scrollToTopToken: Int = 0
+    var unavailableTargetFeedback: String? = nil
+    var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
     @State private var searchQuery: String = ""
@@ -24,8 +27,8 @@ struct ThingListScreen: View {
     var body: some View {
         let filteredThingsSnapshot = filteredThings
         let baseContent = listContainer(filteredThings: filteredThingsSnapshot)
+            .id(pendingLocalDeletionController.effectiveScope)
         let content = applySearchIfNeeded(baseContent)
-        .accessibilityIdentifier("screen.things.list")
         .refreshable {
             await handlePullToRefresh()
         }
@@ -60,7 +63,7 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedThing, isPendingLocalDeletion(selectedThing) {
                 self.selectedThing = nil
             }
@@ -84,26 +87,40 @@ struct ThingListScreen: View {
     @ViewBuilder
     private func listContainer(filteredThings: [ThingProjection]) -> some View {
         let overlayState = overlayState(for: filteredThings)
-        ZStack {
-            thingList(filteredThings: filteredThings)
-                .opacity(overlayState == nil ? 1 : 0.001)
-                .allowsHitTesting(overlayState == nil)
-                .accessibilityHidden(overlayState != nil)
-
-            switch overlayState {
-            case .onboarding:
-                EntityOnboardingEmptyView(kind: .things)
-            case .searchPlaceholder:
-                MessageSearchPlaceholderView(
-                    imageName: "questionmark.circle",
-                    title: "no_matching_results",
-                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+        VStack(spacing: 0) {
+            if let unavailableTargetFeedback {
+                AppInlineFeedbackBanner(
+                    message: unavailableTargetFeedback,
+                    tone: .danger,
+                    accessibilityID: "feedback.entity.target_unavailable",
+                    dismissAction: { onUnavailableTargetFeedbackChanged?(nil) }
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
-            case nil:
-                EmptyView()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
+
+            ZStack {
+                thingList(filteredThings: filteredThings)
+                    .opacity(overlayState == nil ? 1 : 0.001)
+                    .allowsHitTesting(overlayState == nil)
+                    .accessibilityHidden(overlayState != nil)
+
+                switch overlayState {
+                case .onboarding:
+                    EntityOnboardingEmptyView(kind: .things)
+                case .searchPlaceholder:
+                    MessageSearchPlaceholderView(
+                        imageName: "questionmark.circle",
+                        title: "no_matching_results",
+                        detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 24)
+                case nil:
+                    EmptyView()
+                }
+            }
+            .accessibilityIdentifier("screen.things.list")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -119,6 +136,7 @@ struct ThingListScreen: View {
                     } label: {
                         ThingListRow(thing: thing)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .id(thing.id)
@@ -240,7 +258,6 @@ struct ThingListScreen: View {
     }
 
     private var filteredThings: [ThingProjection] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
             let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(thing.channelId) ?? "")
@@ -249,8 +266,10 @@ struct ThingListScreen: View {
                 let normalizedThingTags = Set(thing.tags.map(normalizedTag))
                 guard selectedTags.contains(where: normalizedThingTags.contains) else { return false }
             }
-            guard !query.isEmpty else { return true }
-            return searchableText(for: thing).contains(query)
+            return SearchQuerySemantics.matchesEntityFields(
+                searchableFields(for: thing),
+                rawQuery: searchQuery
+            )
         }
         return matched.sorted { lhs, rhs in
             let lhsRank = thingSortPriority(lhs)
@@ -292,8 +311,12 @@ struct ThingListScreen: View {
         environment.updateThingListPosition(isAtTop: isAtTop)
     }
 
-    private func searchableText(for thing: ThingProjection) -> String {
+    private func searchableFields(for thing: ThingProjection) -> [String] {
         let externalValues = thing.externalIDs
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        let metadataValues = thing.metadata
             .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
             .map { "\($0.key) \($0.value)" }
             .joined(separator: " ")
@@ -308,11 +331,10 @@ struct ThingListScreen: View {
             thing.locationValue ?? "",
             externalValues,
             thing.attrsJSON ?? "",
+            metadataValues,
             thing.relatedMessages.map(\.title).joined(separator: " "),
             thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
         ]
-        .joined(separator: " ")
-        .lowercased()
     }
 
     private func handlePullToRefresh() async {
@@ -342,6 +364,7 @@ struct ThingListScreen: View {
                 filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
             }
             .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityIdentifier("action.things.filters")
             .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                 if #available(iOS 16.4, *) {
                     filterPopoverContent
@@ -365,6 +388,10 @@ struct ThingListScreen: View {
     private func openThingIfNeeded() {
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
+        if pendingLocalDeletionController.suppressesThing(id: target, channelId: nil) {
+            handleUnavailableThingTarget()
+            return
+        }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
             openThing(matched, target: target)
             return
@@ -375,9 +402,20 @@ struct ThingListScreen: View {
         Task { @MainActor in
             let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
             hydrationRequestedThingIDs.remove(target)
-            guard let hydrated else { return }
+            guard let hydrated else {
+                guard viewModel.error == nil else { return }
+                handleUnavailableThingTarget()
+                return
+            }
             openThing(hydrated, target: target)
         }
+    }
+
+    private func handleUnavailableThingTarget() {
+        onUnavailableTargetFeedbackChanged?(
+            localizationManager.localized("gateway_resource_not_found")
+        )
+        onOpenThingHandled?()
     }
 
     private func openThing(_ thing: ThingProjection, target: String) {
@@ -399,6 +437,7 @@ struct ThingListScreen: View {
     }
 
     private func selectThing(_ thing: ThingProjection) {
+        onUnavailableTargetFeedbackChanged?(nil)
         selectedThing = thing
         Task { @MainActor in
             if let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: thing.id, forceRefresh: true) {
@@ -419,7 +458,7 @@ struct ThingListScreen: View {
     }
 
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesThing(
+        pendingLocalDeletionController.suppressesThing(
             id: thing.id,
             channelId: thing.channelId
         )
@@ -427,7 +466,7 @@ struct ThingListScreen: View {
 
     @MainActor
     private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [thing],
             identity: { $0.id },
             title: { $0.title },
@@ -476,6 +515,7 @@ struct ThingListScreen: View {
                     ) {
                         selectedChannelIDs.removeAll()
                     }
+                    .accessibilityIdentifier("filter.things.channel.all")
                     ForEach(allChannelIds, id: \.self) { channelId in
                         filterCloudChip(
                             title: environment.channelDisplayName(for: channelId) ?? channelId,
@@ -487,6 +527,7 @@ struct ThingListScreen: View {
                                 selectedChannelIDs.insert(channelId)
                             }
                         }
+                        .accessibilityIdentifier("filter.things.channel.\(channelId)")
                     }
                 }
             }
@@ -523,6 +564,7 @@ struct ThingListScreen: View {
                 selectedTags.insert(tag)
             }
         }
+        .accessibilityIdentifier("filter.things.tag.\(tag)")
     }
 
     private func filterCloudChip(
@@ -555,6 +597,7 @@ struct ThingListScreen: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {

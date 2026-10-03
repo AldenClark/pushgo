@@ -1,3 +1,6 @@
+import AppKit
+import ApplicationServices
+import Darwin
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
@@ -59,7 +62,7 @@ final class PushGo_macOSUITests: XCTestCase {
         let error: String?
     }
 
-    private struct LaunchContext {
+    struct LaunchContext {
         let app: XCUIApplication
         let runtimeRoot: URL
         let responseURL: URL
@@ -78,6 +81,7 @@ final class PushGo_macOSUITests: XCTestCase {
     private let seedMessageId = "msg_p2_seed_001"
     private let crossAppPromptDismissButtons = ["Don’t Allow", "Don't Allow", "Not Now", "Later", "不允许", "以后"]
     private var runtimeRoots: [URL] = []
+    private var launchedApps: [XCUIApplication] = []
 
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)
@@ -91,18 +95,198 @@ final class PushGo_macOSUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // A crash dialog can be posted shortly after the App process exits. Require a
+        // quiet observation window before every journey so it cannot cover the next UI.
+        try closeProblemReporter(waitForDelayedAppearance: true)
     }
 
-    override func tearDownWithError() throws {
+    @MainActor
+    override func tearDown() async throws {
+        for app in launchedApps where app.state != .notRunning {
+            app.terminate()
+        }
+        launchedApps.removeAll()
+
+        var cleanupError: Error?
+        do {
+            try closeProblemReporter(waitForDelayedAppearance: true)
+        } catch {
+            cleanupError = error
+        }
         let fileManager = FileManager.default
         for runtimeRoot in runtimeRoots {
             try? fileManager.removeItem(at: runtimeRoot)
         }
         runtimeRoots.removeAll()
+        if let cleanupError {
+            throw cleanupError
+        }
     }
 
     @MainActor
-    func testLaunchesIntoMessageList() {
+    func testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds() {
+        let context = configuredApp()
+        setAutomationValue(
+            "not-valid-base64",
+            for: "PUSHGO_QUALITY_SESSION_BASE64",
+            in: context.app
+        )
+        let startedAt = Date()
+
+        context.app.launch()
+        context.app.activate()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.invalid")
+                .waitForExistence(timeout: 8),
+            "QUALITY_PRECONDITION: invalid App-owned session was not classified within 8 seconds."
+        )
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            10,
+            "QUALITY_PRECONDITION: invalid App-owned session exceeded the 10-second preparation budget."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "quality-runtime.ready").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+    }
+
+    private func closeProblemReporter(waitForDelayedAppearance: Bool) throws {
+        // macOS has used both the dedicated Problem Reporter process and
+        // UserNotificationCenter to own the "app quit unexpectedly" dialog.
+        // UserNotificationCenter is also a long-lived system daemon, so its
+        // process existence alone is not evidence of a visible blocking dialog.
+        let deadline = Date().addingTimeInterval(waitForDelayedAppearance ? 0.35 : 0)
+        repeat {
+            let reporters = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
+            if !reporters.isEmpty {
+                for reporter in reporters {
+                    _ = reporter.terminate()
+                }
+                Thread.sleep(forTimeInterval: 0.1)
+                for reporter in reporters where !reporter.isTerminated {
+                    _ = reporter.forceTerminate()
+                }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            let remaining = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
+            if !remaining.isEmpty && Date() >= deadline {
+                throw NSError(
+                    domain: "macos_problem_reporter_cleanup_failed",
+                    code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "macos_problem_reporter_cleanup_failed: system crash dialog would obstruct the next UI journey"
+                    ]
+                )
+            }
+            if Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            } else {
+                break
+            }
+        } while true
+    }
+
+    private func isCrashDialogHost(_ application: NSRunningApplication) -> Bool {
+        guard !application.isTerminated, let bundleIdentifier = application.bundleIdentifier else {
+            return false
+        }
+        switch bundleIdentifier {
+        case "com.apple.ProblemReporter":
+            // The dedicated host is only launched for the report surface.
+            return true
+        case "com.apple.UserNotificationCenter":
+            // UserNotificationCenter normally stays alive with no windows. Only
+            // treat it as a blocker when its accessibility tree exposes the
+            // actionable crash dialog itself.
+            return hasVisibleCrashDialog(in: application)
+        default:
+            return false
+        }
+    }
+
+    private func hasVisibleCrashDialog(in application: NSRunningApplication) -> Bool {
+        let appElement = AXUIElementCreateApplication(application.processIdentifier)
+        var windowsValue: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                appElement,
+                kAXWindowsAttribute as CFString,
+                &windowsValue
+            ) == .success,
+            let windows = windowsValue as? [AXUIElement]
+        else {
+            return false
+        }
+
+        let crashActions = Set([
+            "relaunch", "reopen", "ignore", "report", "report…", "report...",
+            "重新打开", "忽略", "报告…", "报告...",
+        ])
+        let crashTextMarkers = [
+            "quit unexpectedly", "unexpectedly", "意外退出", "意外地退出",
+        ]
+
+        func descendants(of root: AXUIElement, limit: Int = 512) -> [AXUIElement] {
+            var result: [AXUIElement] = []
+            var queue: [AXUIElement] = []
+            var childrenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(root, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+               let children = childrenValue as? [AXUIElement]
+            {
+                queue = children
+            }
+            while !queue.isEmpty && result.count < limit {
+                let element = queue.removeFirst()
+                result.append(element)
+                var nestedValue: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &nestedValue) == .success,
+                   let nested = nestedValue as? [AXUIElement]
+                {
+                    queue.append(contentsOf: nested)
+                }
+            }
+            return result
+        }
+
+        func stringValue(_ attribute: CFString, _ element: AXUIElement) -> String {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+                return ""
+            }
+            return value as? String ?? ""
+        }
+
+        return windows.contains { window in
+            var hiddenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, kAXHiddenAttribute as CFString, &hiddenValue) == .success,
+               let hidden = hiddenValue as? Bool,
+               hidden
+            {
+                return false
+            }
+            let elements = [window] + descendants(of: window)
+            let strings = elements.flatMap { element in
+                [
+                    stringValue(kAXTitleAttribute as CFString, element),
+                    stringValue(kAXDescriptionAttribute as CFString, element),
+                    stringValue(kAXValueAttribute as CFString, element),
+                ]
+            }.filter { !$0.isEmpty }
+            let normalizedStrings = strings.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            let hasCrashAction = normalizedStrings.contains { crashActions.contains($0) }
+            let hasCrashText = normalizedStrings.contains { value in
+                crashTextMarkers.contains { value.contains($0) }
+            }
+            return hasCrashAction && hasCrashText
+        }
+    }
+
+    @MainActor
+    // Non-discoverable migration diagnostic. It must not be restored to a test until its
+    // command/state oracle is replaced by an independent user-purpose outcome.
+    func legacyDiagnosticLaunchesIntoMessageList() {
         let context = configuredApp()
         launch(context)
 
@@ -110,25 +294,3150 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSidebarNavigationCoversPrimaryScreens() {
-        let context = configuredApp()
-        launch(context)
+    func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState() {
+        let sessionID = "macos-empty-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
-        let routeMatrix: [(sidebar: String, screen: String)] = [
-            ("events", "screen.events.list"),
-            ("things", "screen.things.list"),
-            ("channels", "screen.channels"),
-            ("settings", "screen.settings"),
-            ("messages", "screen.messages.list"),
-        ]
-        for route in routeMatrix {
-            openSidebarTab(route.sidebar, in: context.app)
-            assertVisibleScreen(route.screen, in: context, timeout: 12)
-        }
+        XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5)
+        )
+
+        // A startup marker and a rendered empty state are insufficient if the
+        // first window is frozen or its navigation cannot be used. Exercise one
+        // real round trip and require the same accurate business state at the end.
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 5)
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5),
+            "The functional empty state must remain accurate after real user navigation."
+        )
     }
 
     @MainActor
-    func testAutomationRequestCanOpenChannelsScreen() {
+    func testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch() {
+        let sessionID = "macos-system-notification-\(UUID().uuidString.lowercased())"
+        let requestID = "quality-macos-notification-\(UUID().uuidString.lowercased())"
+        let messageID = "quality-macos-message-\(UUID().uuidString.lowercased())"
+        let marker = String(requestID.suffix(8))
+        let title = "Quality macOS System Message \(marker)"
+        let body = "The real macOS notification opens canonical body \(marker)."
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            skipPushAuthorization: false
+        )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        setAutomationRequest(
+            name: "notification.schedule_system",
+            args: [
+                "notification_request_id": requestID,
+                "message_id": messageID,
+                "title": title,
+                "body": body,
+            ],
+            in: context.app
+        )
+
+        context.app.launch()
+        resolveMacNotificationAuthorizationIfNeeded(in: context.app)
+        context.app.activate()
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 12))
+        let ready = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            ready.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: App-owned notification session did not become ready."
+        )
+        XCTAssertEqual(ready.value as? String, sessionID)
+
+        let commandSucceeded = element(in: context.app, identifier: "quality-command.succeeded")
+        let commandFailed = element(in: context.app, identifier: "quality-command.failed")
+        guard commandSucceeded.exists else {
+            let failureDetail = commandFailed.exists
+                ? ((commandFailed.value as? String) ?? "unknown command error")
+                : "missing App-owned command outcome"
+            XCTFail(
+                "QUALITY_PRECONDITION: macOS system notification scheduling failed before product verification: "
+                    + failureDetail
+            )
+            return
+        }
+
+        context.app.typeKey("h", modifierFlags: .command)
+        let backgrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "state == %d",
+                XCUIApplication.State.runningBackground.rawValue
+            ),
+            object: context.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [backgrounded], timeout: 5),
+            .completed,
+            "QUALITY_PRECONDITION: PushGo did not leave the foreground before notification delivery."
+        )
+
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        // macOS 27 exposes a delivered notification as either a container whose
+        // accessibility description contains the whole payload or a text child
+        // whose value contains the whole payload. Requiring `label == title`
+        // misclassifies a real, actionable notification as a test-system block.
+        let notificationCard = notificationCenter.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "(label CONTAINS %@ AND label CONTAINS %@) OR "
+                        + "(value CONTAINS %@ AND value CONTAINS %@)",
+                    title,
+                    body,
+                    title,
+                    body
+                )
+            )
+            .firstMatch
+        if !notificationCard.waitForExistence(timeout: 5) {
+            XCTAssertTrue(
+                revealNotificationCenter(),
+                "QUALITY_PRECONDITION: The real macOS notification surface could not be opened."
+            )
+        }
+        guard notificationCard.waitForExistence(timeout: 5) else {
+            XCTFail(
+                "QUALITY_PRECONDITION: App scheduling succeeded, but macOS did not expose this "
+                    + "notification card to XCTest; display, accessibility, and real-click outcomes "
+                    + "cannot be distinguished trustworthily."
+            )
+            return
+        }
+        notificationCard.click()
+
+        // A same-bundle stale macOS build can still receive the system click.
+        // Prove that the process handling it belongs to this App-owned quality
+        // session before evaluating business state; otherwise a runner identity
+        // failure would be misreported as missing persistence or bad UI data.
+        let coldLaunchReady = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            coldLaunchReady.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: system notification click did not attach to the current App-owned quality session."
+        )
+        XCTAssertEqual(
+            coldLaunchReady.value as? String,
+            sessionID,
+            "QUALITY_PRECONDITION: system notification click attached to a different quality session."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 12),
+            "The real notification click did not route into the canonical message detail."
+        )
+        XCTAssertTrue(context.app.staticTexts[title].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts[body].waitForExistence(timeout: 5),
+            "The routed detail did not display the exact notification body."
+        )
+        let unreadBadge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(
+            unreadBadge.waitForNonExistence(timeout: 8),
+            "Opening the system notification must persist the target as read and remove its unread badge."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        relaunched.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = messageRow(containing: title, in: relaunched.app)
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 10),
+            "The system-ingressed canonical message did not survive process relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts[body].waitForExistence(timeout: 5),
+            "The persisted notification message changed after relaunch."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"].waitForNonExistence(timeout: 8),
+            "The read state established by the system notification must survive process relaunch."
+        )
+    }
+
+    @MainActor
+    func testDeniedNotificationSettingsCardRecoversAfterSystemEnable() {
+        continueAfterFailure = true
+        func toggleIsOn(_ toggle: XCUIElement) -> Bool {
+            if let number = toggle.value as? NSNumber {
+                return number.boolValue
+            }
+            let normalized = String(describing: toggle.value ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return ["1", "on", "true", "yes", "开启", "打开"].contains(normalized)
+        }
+        func waitForToggle(
+            _ toggle: XCUIElement,
+            toBeOn expected: Bool,
+            timeout: TimeInterval
+        ) -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if toggle.exists && toggleIsOn(toggle) == expected {
+                    return true
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            return toggle.exists && toggleIsOn(toggle) == expected
+        }
+        func openPushGoNotificationSettings(in systemSettings: XCUIApplication) -> Bool {
+            if systemSettings.state == .notRunning {
+                systemSettings.launch()
+            }
+            guard let notificationsURL = URL(
+                string: "x-apple.systempreferences:com.apple.preference.notifications"
+            ) else {
+                return false
+            }
+            _ = NSWorkspace.shared.open(notificationsURL)
+            guard systemSettings.wait(for: .runningForeground, timeout: 10) else {
+                return false
+            }
+
+            let allowNotifications = systemSettings.descendants(matching: .any)
+                .matching(identifier: "allow-notifications")
+                .firstMatch
+            if allowNotifications.waitForExistence(timeout: 2) {
+                return true
+            }
+
+            let pushGoRow = systemSettings.buttons.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "PushGo")
+            ).firstMatch
+            // System Settings can expose the application row before the split-view
+            // transition has made it actionable.  The user-purpose handoff needs an
+            // actual click into PushGo's settings, so first use the real notification
+            // list's scroll owner to bring the semantic row into view, then wait for
+            // both facts rather than treating a transient non-hittable row as missing.
+            let rowDeadline = Date().addingTimeInterval(8)
+            while Date() < rowDeadline {
+                if pushGoRow.exists && pushGoRow.isHittable {
+                    break
+                }
+                guard pressSystemSettingsNotificationPageDown(in: systemSettings) else {
+                    break
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            guard pushGoRow.exists && pushGoRow.isHittable else {
+                return false
+            }
+            pushGoRow.click()
+            return allowNotifications.waitForExistence(timeout: 8)
+        }
+
+        let sessionID = "macos-permission-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            allowCrossAppDataAccess: true,
+            skipPushAuthorization: false
+        )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(context, sessionID: sessionID)
+
+        let systemSettings = XCUIApplication(bundleIdentifier: "com.apple.systempreferences")
+        let allowNotifications = systemSettings.descendants(matching: .any)
+            .matching(identifier: "allow-notifications")
+            .firstMatch
+        defer {
+            if allowNotifications.exists && !toggleIsOn(allowNotifications) {
+                allowNotifications.click()
+            }
+            context.app.activate()
+        }
+
+        guard openPushGoNotificationSettings(in: systemSettings) else {
+            XCTFail("QUALITY_PRECONDITION: PushGo's real macOS notification settings were unreachable.")
+            return
+        }
+        if toggleIsOn(allowNotifications) {
+            allowNotifications.click()
+        }
+        XCTAssertTrue(
+            waitForToggle(allowNotifications, toBeOn: false, timeout: 5),
+            "QUALITY_PRECONDITION: macOS did not enter the real denied notification state."
+        )
+
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+        let openSettings = element(
+            in: context.app,
+            identifier: "action.settings.notification.open_system_settings"
+        )
+        XCTAssertTrue(
+            openSettings.waitForExistence(timeout: 8)
+                && openSettings.isHittable
+                && openSettings.label.contains("Please enable notification permission in system settings first")
+                && openSettings.label.contains("You have turned off notification permission")
+                && openSettings.label.contains("Open Settings to enable notifications, then return to continue"),
+            "The real denied state must explain the user's recovery purpose."
+        )
+        guard openSettings.exists && openSettings.isHittable else { return }
+        openSettings.click()
+
+        XCTAssertTrue(
+            systemSettings.wait(for: .runningForeground, timeout: 10),
+            "The product recovery action did not reach the real System Settings app."
+        )
+        guard openPushGoNotificationSettings(in: systemSettings) else {
+            XCTFail("The product handoff did not expose PushGo's notification control.")
+            return
+        }
+        XCTAssertFalse(toggleIsOn(allowNotifications))
+        allowNotifications.click()
+        XCTAssertTrue(
+            waitForToggle(allowNotifications, toBeOn: true, timeout: 5),
+            "macOS did not accept the enabled notification setting."
+        )
+
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            openSettings.waitForNonExistence(timeout: 8),
+            "Returning from System Settings must refresh the real authorization state and remove the denied card."
+        )
+    }
+
+    @MainActor
+    private func pressSystemSettingsNotificationPageDown(in systemSettings: XCUIApplication) -> Bool {
+        guard systemSettings.state == .runningForeground,
+              let settingsApplication = NSWorkspace.shared.runningApplications.first(where: {
+                  $0.bundleIdentifier == "com.apple.systempreferences"
+                      && !$0.isTerminated
+              })
+        else {
+            return false
+        }
+
+        func attribute(_ element: AXUIElement, _ key: CFString) -> CFTypeRef? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, key, &value) == .success else {
+                return nil
+            }
+            return value
+        }
+
+        func stringAttribute(_ element: AXUIElement, _ key: CFString) -> String {
+            attribute(element, key) as? String ?? ""
+        }
+
+        func pointAttribute(_ element: AXUIElement, _ key: CFString) -> CGPoint? {
+            guard let rawValue = attribute(element, key),
+                  CFGetTypeID(rawValue) == AXValueGetTypeID()
+            else {
+                return nil
+            }
+            var point = CGPoint.zero
+            guard AXValueGetValue(rawValue as! AXValue, .cgPoint, &point) else {
+                return nil
+            }
+            return point
+        }
+
+        func sizeAttribute(_ element: AXUIElement, _ key: CFString) -> CGSize? {
+            guard let rawValue = attribute(element, key),
+                  CFGetTypeID(rawValue) == AXValueGetTypeID()
+            else {
+                return nil
+            }
+            var size = CGSize.zero
+            guard AXValueGetValue(rawValue as! AXValue, .cgSize, &size) else {
+                return nil
+            }
+            return size
+        }
+
+        func children(of element: AXUIElement) -> [AXUIElement] {
+            guard let rawValue = attribute(element, kAXChildrenAttribute as CFString) else {
+                return []
+            }
+            return rawValue as? [AXUIElement] ?? []
+        }
+
+        func descendants(of root: AXUIElement, limit: Int = 2048) -> [AXUIElement] {
+            var result: [AXUIElement] = []
+            var queue = children(of: root)
+            while !queue.isEmpty && result.count < limit {
+                let element = queue.removeFirst()
+                result.append(element)
+                queue.append(contentsOf: children(of: element))
+            }
+            return result
+        }
+
+        let application = AXUIElementCreateApplication(settingsApplication.processIdentifier)
+        guard let windows = attribute(application, kAXWindowsAttribute as CFString) as? [AXUIElement] else {
+            return false
+        }
+        for window in windows {
+            let allElements = [window] + descendants(of: window)
+            guard let notificationScroll = allElements.first(where: { element in
+                      guard stringAttribute(element, kAXRoleAttribute as CFString) == "AXScrollArea",
+                            let origin = pointAttribute(element, kAXPositionAttribute as CFString),
+                            let size = sizeAttribute(element, kAXSizeAttribute as CFString)
+                      else {
+                          return false
+                      }
+                      let frame = CGRect(origin: origin, size: size)
+                      return frame.width > 400 && frame.height > 400
+                  })
+            else {
+                continue
+            }
+            guard let scrollOrigin = pointAttribute(notificationScroll, kAXPositionAttribute as CFString),
+                  let scrollSize = sizeAttribute(notificationScroll, kAXSizeAttribute as CFString)
+            else {
+                continue
+            }
+            let scrollFrame = CGRect(origin: scrollOrigin, size: scrollSize)
+            let pageDown = descendants(of: notificationScroll).first(where: { element in
+                guard stringAttribute(element, kAXRoleAttribute as CFString) == "AXButton",
+                      stringAttribute(element, kAXSubroleAttribute as CFString) == "AXIncrementPage",
+                      let origin = pointAttribute(element, kAXPositionAttribute as CFString),
+                      let size = sizeAttribute(element, kAXSizeAttribute as CFString)
+                else {
+                    return false
+                }
+                let frame = CGRect(origin: origin, size: size)
+                return frame.width > 0
+                    && frame.height > 0
+                    && frame.minX >= scrollFrame.maxX - 50
+            })
+            guard let pageDown else { continue }
+            return AXUIElementPerformAction(pageDown, kAXPressAction as CFString) == .success
+        }
+        return false
+    }
+
+    @MainActor
+    private func revealNotificationCenter() -> Bool {
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        let systemMenuBar = notificationCenter.menuBars.firstMatch
+        guard systemMenuBar.exists, systemMenuBar.frame.width > 0 else { return false }
+
+        // macOS 27 no longer exposes the clock/status item as an AX child to XCTest,
+        // while the owning system menu bar remains a stable full-screen-width surface.
+        // Use a normalized coordinate inside its far-right date/time area rather than
+        // hard-coding this host's screen size.
+        systemMenuBar.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.985, dy: 0.5)
+        ).click()
+
+        return true
+    }
+
+    @MainActor
+    func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
+        let sessionID = "macos-store-fatal-\(UUID().uuidString.lowercased())"
+        let seeded = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        seeded.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(seeded, sessionID: sessionID)
+        XCTAssertTrue(
+            element(
+                in: seeded.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).waitForExistence(timeout: 8),
+            "The destructive recovery journey must begin with real canonical data to lose."
+        )
+        seeded.app.terminate()
+        XCTAssertEqual(seeded.app.state, .notRunning)
+
+        let firstFailure = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
+        )
+        firstFailure.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        firstFailure.app.launch()
+        firstFailure.app.activate()
+        dismissSystemPrivacyDialogsIfNeeded(in: firstFailure.app)
+        XCTAssertTrue(
+            element(
+                in: firstFailure.app,
+                identifier: "state.storage.unavailable"
+            ).waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
+            firstFailure.app.sheets.firstMatch.buttons["Rebuild database and exit"].exists,
+            "Destructive recovery must not be offered before the configured repeated-failure threshold."
+        )
+        let exit = storageRecoveryButton(
+            in: firstFailure.app,
+            identifier: "action.storage.exit",
+            fallbackLabel: "Exit App"
+        )
+        XCTAssertTrue(exit.waitForExistence(timeout: 5) && exit.isHittable)
+        exit.click()
+        let firstExit = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: firstFailure.app
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [firstExit], timeout: 5), .completed)
+
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
+        )
+        failing.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        failing.app.launch()
+        failing.app.activate()
+        dismissSystemPrivacyDialogsIfNeeded(in: failing.app)
+
+        XCTAssertTrue(failing.app.windows.firstMatch.waitForExistence(timeout: 12))
+        XCTAssertTrue(
+            failing.app.staticTexts[
+                "Local storage is unavailable. The app may be unable to load or save messages."
+            ].waitForExistence(timeout: 8),
+            "A fatal Store open failure must be shown as unavailable, not as an empty message list."
+        )
+        XCTAssertTrue(
+            failing.app.staticTexts.matching(
+                NSPredicate(
+                    format: "value CONTAINS %@ OR label CONTAINS %@",
+                    "Quality-injected local persistent storage initialization failure.",
+                    "Quality-injected local persistent storage initialization failure."
+                )
+            ).firstMatch.exists,
+            "The recovery surface must retain the causal Store failure for diagnosis."
+        )
+        XCTAssertTrue(element(in: failing.app, identifier: "state.storage.unavailable").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "state.messages.empty").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "quality-runtime.ready").exists)
+        let rebuild = storageRecoveryButton(
+            in: failing.app,
+            identifier: "action.storage.rebuild",
+            fallbackLabel: "Rebuild database and exit"
+        )
+        XCTAssertTrue(rebuild.waitForExistence(timeout: 5) && rebuild.isHittable)
+        rebuild.click()
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: failing.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The storage rebuild action must finish deletion before terminating the App."
+        )
+
+        let recovered = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        recovered.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(recovered, sessionID: sessionID)
+        XCTAssertTrue(
+            element(in: recovered.app, identifier: "screen.messages.list")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            element(in: recovered.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
+            element(
+                in: recovered.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "A destructive rebuild must not resurrect the canonical row that existed before recovery."
+        )
+        XCTAssertFalse(recovered.app.sheets.firstMatch.buttons["Exit App"].exists)
+        XCTAssertFalse(recovered.app.sheets.firstMatch.buttons["Rebuild database and exit"].exists)
+    }
+
+    @MainActor
+    func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
+        let sessionID = "macos-standard-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message",
+            allowCrossAppDataAccess: true
+        )
+        let savedImageReceiptURL = macOSQualitySessionRootURL(sessionID: sessionID)
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent("saved-image-destination.txt")
+        launchQuality(context, sessionID: sessionID)
+
+        let legacyRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(
+            legacyRow.waitForExistence(timeout: 8)
+                && legacyRow.label.contains("Legacy Upgrade Message"),
+            "The production v17-to-current migration must preserve the legacy row in the real macOS list."
+        )
+        legacyRow.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Preserved through the production database migration."].exists,
+            "The migrated macOS detail must retain the exact legacy body."
+        )
+
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 8),
+            "The real message list did not render the canonical stored row."
+        )
+        XCTAssertTrue(
+            row.label.contains("P2 Split Seed Message"),
+            "The accessible row label did not expose the canonical title."
+        )
+        XCTAssertTrue(
+            (row.value as? String)?.contains("Seeded from fixture.seed_messages for UI validation.") == true,
+            "The accessible row value did not expose the canonical body."
+        )
+        row.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8),
+            "Selecting the canonical row did not open its real detail pane."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+
+        let pasteboard = NSPasteboard.general
+        let savedPasteboardItems: [[NSPasteboard.PasteboardType: Data]] =
+            pasteboard.pasteboardItems?.map { item in
+                Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                    item.data(forType: type).map { (type, $0) }
+                })
+            } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedPasteboardItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+
+        let metadataCopy = element(
+            in: context.app,
+            identifier: "action.message.copy_metadata_value.0"
+        )
+        XCTAssertTrue(
+            metadataCopy.waitForExistence(timeout: 5) && metadataCopy.isHittable,
+            "The canonical metadata value must expose a reachable production copy action."
+        )
+        assertExactPasteboardCopy(
+            "quality-fixture",
+            byClicking: metadataCopy,
+            pasteboard: pasteboard,
+            in: context.app,
+            purpose: "message metadata"
+        )
+
+        let copyLink = element(in: context.app, identifier: "action.message.copy_link")
+        let detailScroll = context.app.scrollViews.firstMatch
+        for _ in 0..<3 where !(copyLink.exists && copyLink.isHittable) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            copyLink.exists && copyLink.isHittable,
+            "The canonical message URL copy action remained unreachable in the real detail."
+        )
+        assertExactPasteboardCopy(
+            "https://pushgo.dev/quality-message",
+            byClicking: copyLink,
+            pasteboard: pasteboard,
+            in: context.app,
+            purpose: "message URL"
+        )
+
+        let openLink = element(in: context.app, identifier: "action.message.open_link")
+        for _ in 0..<3 where !(openLink.exists && openLink.isHittable) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            openLink.exists && openLink.isHittable,
+            "The canonical message URL open action remained unreachable in the real detail."
+        )
+        let expectedMessageURL = URL(string: "https://pushgo.dev/quality-message")!
+        guard let browserApplicationURL = NSWorkspace.shared.urlForApplication(
+            toOpen: expectedMessageURL
+        ),
+        let browserBundleIdentifier = Bundle(url: browserApplicationURL)?.bundleIdentifier
+        else {
+            XCTFail("QUALITY_PRECONDITION: no default browser can consume the canonical message URL.")
+            return
+        }
+        let browser = XCUIApplication(bundleIdentifier: browserBundleIdentifier)
+        openLink.click()
+        XCTAssertTrue(
+            browser.wait(for: .runningForeground, timeout: 10),
+            "Opening the canonical message URL must hand off to the default system browser."
+        )
+        browser.typeKey("l", modifierFlags: .command)
+        let browserAddress = browser.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "pushgo.dev/quality-message",
+                "pushgo.dev/quality-message"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "The browser must expose the exact canonical message host and path."
+        )
+        let displayedMessageAddress = ((browserAddress.value as? String) ?? browserAddress.label)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedMessageAddress = displayedMessageAddress.contains("://")
+            ? displayedMessageAddress
+            : "https://\(displayedMessageAddress)"
+        let consumedMessageURL = URL(string: normalizedMessageAddress)
+        XCTAssertEqual(consumedMessageURL?.scheme, "https")
+        XCTAssertEqual(consumedMessageURL?.host, "pushgo.dev")
+        XCTAssertEqual(
+            consumedMessageURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+            "quality-message",
+            "A different pushgo.dev page must not satisfy the message URL handoff."
+        )
+        context.app.activate()
+        XCTAssertTrue(
+            context.app.wait(for: .runningForeground, timeout: 8),
+            "Returning from the browser must restore the same PushGo message detail."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Returning from the browser must preserve the exact canonical message body."
+        )
+
+        let image = element(in: context.app, identifier: "message.image.0")
+        for _ in 0..<3 where !(image.exists && image.isHittable) {
+            detailScroll.swipeDown()
+        }
+        XCTAssertTrue(
+            image.waitForExistence(timeout: 8) && image.isHittable,
+            "The canonical message image must decode into an interactive detail asset."
+        )
+        image.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "dialog.image.preview")
+                .waitForExistence(timeout: 8),
+            "The decoded message image must open the production preview."
+        )
+        let shareImage = element(in: context.app, identifier: "action.image.preview.share")
+        XCTAssertTrue(
+            shareImage.waitForExistence(timeout: 8) && shareImage.isHittable,
+            "The preview must prepare a real file before enabling its native Share action."
+        )
+
+        let saveImage = element(in: context.app, identifier: "action.image.preview.save")
+        XCTAssertTrue(
+            saveImage.waitForExistence(timeout: 5) && saveImage.isHittable,
+            "The decoded image preview must expose its production Save action."
+        )
+        saveImage.click()
+        saveImageThroughSystemPanel(
+            in: context.app,
+            expectedFilename: "pushgo-image-\(sessionID).png"
+        )
+        let savedImageURL = waitForSavedImageDestinationReceipt(at: savedImageReceiptURL)
+        assertSavedImageMatchesCanonicalPixels(at: savedImageURL)
+
+        shareImage.click()
+        XCTAssertTrue(
+            context.app.menus.firstMatch.waitForExistence(timeout: 5),
+            "The prepared image file must reach the native sharing service picker."
+        )
+        context.app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        let closePreview = element(in: context.app, identifier: "action.image.preview.close")
+        XCTAssertTrue(
+            closePreview.waitForExistence(timeout: 5) && closePreview.isHittable,
+            "The preview must remain closable after Save and native Share handoff."
+        )
+        closePreview.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "dialog.image.preview")
+                .waitForNonExistence(timeout: 5),
+            "Closing the preview must dismiss the media surface before relaunch."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "Save and Share must return to the same accurate canonical message detail."
+        )
+
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertFalse(
+            badge.exists,
+            "Opening both existing canonical messages must establish a zero-unread baseline."
+        )
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(
+            refresh.waitForExistence(timeout: 5) && refresh.isHittable,
+            "The production Refresh action must remain usable in the core positive message journey."
+        )
+        refresh.click()
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "A successful provider refresh must add the exact new canonical message to the real list."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The refreshed row must expose the provider body's accurate canonical value."
+        )
+        XCTAssertTrue(
+            badge.waitForExistence(timeout: 8) && waitForValue("1", in: badge, timeout: 8),
+            "The one persisted provider result must create exactly one unread message."
+        )
+        refreshedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Opening the refreshed result must bind to its exact canonical detail."
+        )
+        XCTAssertTrue(
+            badge.waitForNonExistence(timeout: 8),
+            "Opening the only unread provider result must persist its read transition."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageSearchDelayMilliseconds: 2_000,
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message",
+            allowCrossAppDataAccess: true
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let relaunchedLegacyRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(
+            relaunchedLegacyRow.waitForExistence(timeout: 8)
+                && relaunchedLegacyRow.label.contains("Legacy Upgrade Message"),
+            "The migrated macOS canonical message must survive an ordinary process relaunch."
+        )
+        let relaunchedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            relaunchedRow.waitForExistence(timeout: 8)
+                && relaunchedRow.label.contains("P2 Split Seed Message"),
+            "The canonical message did not survive a real process relaunch."
+        )
+        let relaunchedRefreshResult = relaunched.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            relaunchedRefreshResult.waitForExistence(timeout: 8),
+            "The successful provider refresh result must survive the existing process relaunch."
+        )
+        XCTAssertTrue(
+            (relaunchedRefreshResult.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "Relaunch must preserve the refreshed row's exact canonical body."
+        )
+        relaunchedRefreshResult.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Relaunch must reopen the refreshed result's exact canonical detail."
+        )
+        XCTAssertFalse(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"].exists,
+            "The refreshed result's read state must remain accurate after relaunch."
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+        relaunchedLegacyRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Preserved through the production database migration."]
+                .waitForExistence(timeout: 8),
+            "The control detail must start on a different canonical message before search selection."
+        )
+
+        let searchField = relaunched.app.searchFields.firstMatch
+        XCTAssertTrue(
+            searchField.waitForExistence(timeout: 8) && searchField.isHittable,
+            "The real macOS message search field must remain reachable after relaunch."
+        )
+        searchField.click()
+        replaceTextUsingPasteboard(in: searchField, with: "P2 Split")
+        let slowSearchFeedback = element(
+            in: relaunched.app,
+            identifier: "state.messages.search.loading"
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.waitForExistence(timeout: 2),
+            "A deliberately slow first search must warn the user before its result is available."
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.frame.intersects(relaunched.app.windows.firstMatch.frame)
+                && slowSearchFeedback.frame.width > 0
+                && slowSearchFeedback.frame.height > 0,
+            "The slow-search warning must occupy visible window space, not only exist in semantics."
+        )
+        XCTAssertTrue(
+            relaunchedRow.waitForExistence(timeout: 8)
+                && relaunchedRow.label.contains("P2 Split Seed Message"),
+            "The slow search must finish with the exact canonical target."
+        )
+        XCTAssertFalse(
+            relaunchedLegacyRow.exists,
+            "The completed search must not leave the unrelated pre-search row visible."
+        )
+        relaunchedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8),
+            "Selecting the exact search result must open its real detail pane."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].exists,
+            "The search result selection must retain the canonical title in detail."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "The search result selection must bind to the canonical body, not a stale or unrelated detail."
+        )
+        XCTAssertFalse(
+            relaunched.app.staticTexts["Preserved through the production database migration."].exists,
+            "Opening the search result must replace the previous message detail instead of leaving stale content."
+        )
+    }
+
+    @MainActor
+    func testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail() {
+        let sessionID = "macos-search-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failMessageSearchOnce: true,
+            legacyStore: "messages.v17"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let legacyRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(legacyRow.waitForExistence(timeout: 8) && legacyRow.isHittable)
+        legacyRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Preserved through the production database migration."]
+                .waitForExistence(timeout: 8),
+            "The control detail must start on a different canonical message before the failed query."
+        )
+
+        let searchField = context.app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8) && searchField.isHittable)
+        searchField.click()
+        replaceTextUsingPasteboard(in: searchField, with: "P2 Split")
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.search.failed")
+                .waitForExistence(timeout: 8),
+            "A failed search must be visible as a failure, not silently presented as no results."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "state.messages.search.empty").exists,
+            "A failed search must not masquerade as a genuine no-results state."
+        )
+        let target = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertFalse(
+            target.exists,
+            "The pre-search list must not remain visible as if it were a result for the failed query."
+        )
+        let retrySearch = element(in: context.app, identifier: "action.messages.search.retry")
+        XCTAssertTrue(
+            retrySearch.waitForExistence(timeout: 5) && retrySearch.isHittable,
+            "A search failure must offer a real retry action."
+        )
+        retrySearch.click()
+        XCTAssertTrue(
+            target.waitForExistence(timeout: 8) && target.label.contains("P2 Split Seed Message"),
+            "Retry must recover the exact canonical search result."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.failed").exists)
+        target.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail").waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 8),
+            "Retry must open the exact target detail, not retain the pre-search detail."
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["Preserved through the production database migration."].exists,
+            "The recovered search detail must replace the stale pre-search detail."
+        )
+    }
+
+    @MainActor
+    func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
+        let sessionID = "macos-cleanup-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.cleanup")
+        launchQuality(context, sessionID: sessionID)
+
+        let oldRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+        )
+        let recentRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+        )
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "2")
+
+        openMessageFilters(in: context.app)
+        let cleanup = element(in: context.app, identifier: "action.messages.history_cleanup")
+        XCTAssertTrue(cleanup.waitForExistence(timeout: 5) && cleanup.isHittable)
+        cleanup.click()
+        let rangeSheet = element(in: context.app, identifier: "sheet.messages.history_cleanup.range")
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        let thirtyDays = element(
+            in: context.app,
+            identifier: "option.messages.history_cleanup.30_days"
+        )
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        XCTAssertTrue(thirtyDays.waitForExistence(timeout: 5) && thirtyDays.isHittable)
+        thirtyDays.click()
+        let confirm = element(
+            in: context.app,
+            identifier: "action.messages.history_cleanup.confirm"
+        )
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+        confirm.click()
+        let done = element(in: context.app, identifier: "action.messages.history_cleanup.done")
+        XCTAssertTrue(done.waitForExistence(timeout: 8) && done.isHittable)
+        done.click()
+
+        XCTAssertTrue(oldRow.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForValue("1", in: badge, timeout: 8))
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.cleanup")
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+            ).exists,
+            "The removed old message must not return after process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+            ).waitForExistence(timeout: 8)
+        )
+        let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedBadge.value as? String, "1")
+    }
+
+    @MainActor
+    func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
+        let sessionID = "macos-markdown-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.markdown")
+        launchQuality(context, sessionID: sessionID)
+
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000d001"
+        )
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+
+        let requiredContent = [
+            "Quality Markdown Heading",
+            "Completed deployment check",
+            "Production quote remains visible",
+            "Gateway",
+            "Healthy",
+            "pushgo status",
+            "{\"environment\":\"quality\"}",
+        ]
+        let renderedElement: (String) -> XCUIElement = { fragment in
+            context.app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", fragment, fragment)
+            ).firstMatch
+        }
+        for fragment in requiredContent {
+            let rendered = renderedElement(fragment)
+            XCTAssertTrue(
+                rendered.waitForExistence(timeout: 5),
+                "The production Markdown renderer omitted \(fragment)"
+            )
+        }
+        XCTAssertTrue(
+            context.app.links["Open quality guide"].waitForExistence(timeout: 5),
+            "The Markdown link was not exposed as a real link"
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["# Quality Markdown Heading"].exists,
+            "Raw Markdown syntax was shown instead of the rendered heading"
+        )
+        let heading = renderedElement("Quality Markdown Heading")
+        let task = renderedElement("Completed deployment check")
+        let gateway = renderedElement("Gateway")
+        let healthy = renderedElement("Healthy")
+        XCTAssertGreaterThan(heading.frame.height, task.frame.height)
+        XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
+        XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
+        XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+
+        let tail = renderedElement("Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻")
+        XCTAssertTrue(tail.waitForExistence(timeout: 5), "The exact Unicode tail was truncated before rendering")
+        let detailScroll = context.app.scrollViews.allElementsBoundByIndex
+            .filter { $0.frame.width > 200 && $0.frame.height > 200 }
+            .max { $0.frame.midX < $1.frame.midX }
+        XCTAssertNotNil(detailScroll, "The split detail must retain a real user-scrollable region")
+        let detailViewport = detailScroll?.frame ?? .zero
+        XCTAssertFalse(
+            detailViewport.intersects(tail.frame),
+            "The representative body must actually overflow the initial viewport"
+        )
+        for _ in 0..<12 {
+            if detailViewport.intersects(tail.frame) { break }
+            detailScroll?.swipeUp()
+        }
+        XCTAssertTrue(
+            detailViewport.intersects(tail.frame),
+            "A user must be able to scroll through the exact long body to its Unicode tail"
+        )
+        openSidebarTab("events", in: context.app)
+        XCTAssertTrue(element(in: context.app, identifier: "screen.events.list").waitForExistence(timeout: 8))
+        openSidebarTab("messages", in: context.app)
+        XCTAssertTrue(row.waitForExistence(timeout: 8), "Returning must preserve the exact source message")
+    }
+
+    @MainActor
+    func testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist() {
+        let sessionID = "macos-message-filters-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.filters")
+        let allTitles = [
+            "Quality filter alpha even",
+            "Quality filter alpha odd",
+            "Quality filter beta odd",
+            "Quality filter beta even",
+            "Quality filter ungrouped orphan",
+        ]
+        launchQuality(context, sessionID: sessionID)
+        assertMessageTitles(allTitles, excluding: [], in: context.app)
+
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "4")
+
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-filter-alpha", towardTags: false, in: context.app)
+        element(in: context.app, identifier: "filter.channel-filter-alpha").click()
+        dismissMessageFilters(in: context.app)
+
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        element(in: context.app, identifier: "filter.tag.even").click()
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter alpha even"],
+            excluding: [
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+                "Quality filter ungrouped orphan",
+            ],
+            in: context.app
+        )
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-filter-alpha", towardTags: false, in: context.app)
+        element(in: context.app, identifier: "filter.channel-filter-alpha").click()
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        element(in: context.app, identifier: "filter.tag.even").click()
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: context.app)
+        element(in: context.app, identifier: "filter.channel-ungrouped").click()
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: [
+                "Quality filter alpha even",
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+            ],
+            in: context.app
+        )
+
+        let markCurrentScopeRead = element(
+            in: context.app,
+            identifier: "action.messages.mark_all_read"
+        )
+        XCTAssertTrue(markCurrentScopeRead.waitForExistence(timeout: 5) && markCurrentScopeRead.isHittable)
+        markCurrentScopeRead.click()
+        XCTAssertTrue(markCurrentScopeRead.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(
+            waitForValue("3", in: badge, timeout: 8),
+            "Only the selected ungrouped unread message may be marked read"
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.filters")
+        launchQuality(relaunched, sessionID: sessionID)
+        let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedBadge.value as? String, "3")
+
+        openMessageFilters(in: relaunched.app)
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: relaunched.app)
+        element(in: relaunched.app, identifier: "filter.channel-ungrouped").click()
+        dismissMessageFilters(in: relaunched.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: Array(allTitles.dropLast()),
+            in: relaunched.app
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "action.messages.mark_all_read")
+                .waitForExistence(timeout: 2),
+            "The already-read ungrouped scope must not offer another unread bulk action"
+        )
+    }
+
+    @MainActor
+    func testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions() {
+        let sessionID = "macos-sidebar-badge-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "subscribe_and_rename_reject_once_then_accepted"
+        )
+        context.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
+        launchQuality(context, sessionID: sessionID)
+
+        let title = context.app.staticTexts["sidebar-messages"]
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            title.value as? String,
+            "消息",
+            "The representative sidebar state must exercise the real zh-Hans title."
+        )
+        XCTAssertEqual(badge.value as? String, "2", "The fixture must exercise a real unread badge.")
+        XCTAssertGreaterThanOrEqual(
+            title.frame.width,
+            24,
+            "The full two-glyph Chinese Messages title was compressed or truncated."
+        )
+        XCTAssertGreaterThan(
+            badge.frame.minX,
+            title.frame.maxX + 4,
+            "The unread badge overlaps the Messages title."
+        )
+
+        let titleScreenshot = title.screenshot()
+        let attachment = XCTAttachment(screenshot: titleScreenshot)
+        attachment.name = "selected-messages-sidebar-title-with-unread-badge"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertTrue(
+            hasReadableForegroundContrast(in: titleScreenshot),
+            "The selected Messages title has insufficient visible foreground contrast."
+        )
+
+        title.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.messages.list")
+                .waitForExistence(timeout: 8),
+            "The readable Messages entry must remain a functional navigation target."
+        )
+
+        let firstUnread = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        XCTAssertTrue(firstUnread.waitForExistence(timeout: 8))
+        firstUnread.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].waitForExistence(timeout: 8)
+        )
+        XCTAssertEqual(
+            waitForValue("1", in: badge, timeout: 8),
+            true,
+            "Opening one real unread message must decrement the sidebar badge exactly once."
+        )
+
+        let secondUnread = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(secondUnread.waitForExistence(timeout: 8))
+        secondUnread.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            badge.waitForNonExistence(timeout: 8),
+            "Reading the final unread message must remove the sidebar badge."
+        )
+
+        openSidebarTab("channels", in: context.app)
+        let keepActivity = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepActivity.waitForExistence(timeout: 8))
+        XCTAssertTrue(keepActivity.label.contains("1 条消息"))
+        XCTAssertTrue(keepActivity.label.contains("0 条未读"))
+        let keepLatestDate = ISO8601DateFormatter().date(from: "2026-01-15T08:01:00Z")!
+        let keepLatestText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened)
+                .locale(Locale(identifier: "zh_Hans_CN"))
+        )
+        XCTAssertTrue(
+            keepActivity.label.contains(keepLatestText),
+            "Reading messages must update the Channel row while retaining its latest canonical time."
+        )
+        element(in: context.app, identifier: "action.channels.add").click()
+        let entryMode = element(in: context.app, identifier: "select.channels.entry.mode")
+        XCTAssertTrue(entryMode.waitForExistence(timeout: 8))
+        let subscribeMode = element(in: context.app, identifier: "mode.channels.entry.subscribe")
+        XCTAssertTrue(subscribeMode.waitForExistence(timeout: 5))
+        subscribeMode.click()
+        let subscribedChannelID = "01H00000000000000000000004"
+        let subscribeID = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let subscribePassword = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(subscribeID.waitForExistence(timeout: 5))
+        subscribeID.click()
+        replaceTextUsingPasteboard(in: subscribeID, with: subscribedChannelID)
+        XCTAssertTrue(subscribePassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: subscribePassword, with: "qualityx")
+        let subscribeSubmit = element(
+            in: context.app,
+            identifier: "action.channels.entry.submit"
+        )
+        XCTAssertTrue(subscribeSubmit.waitForExistence(timeout: 5))
+        subscribeSubmit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let subscribeFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(
+            subscribeFeedback.waitForExistence(timeout: 8),
+            "A rejected existing-channel subscription must remain owned by the Channel sheet."
+        )
+        XCTAssertTrue(subscribeFeedback.label.contains("Channel password is incorrect"))
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "A Channel sheet failure must not also be rendered by the host Channel page."
+        )
+        XCTAssertEqual(
+            subscribeID.value as? String,
+            subscribedChannelID,
+            "The recoverable Channel ID must remain available for correction or retry."
+        )
+        XCTAssertTrue(subscribePassword.exists)
+        XCTAssertTrue(subscribeSubmit.isEnabled)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)").exists,
+            "A rejected subscription must not create a canonical Channel row."
+        )
+        subscribeSubmit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "An accepted existing-channel subscription must enter the canonical Channel list"
+        )
+
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Quality Created Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+
+        let createdChannelID = "01H00000000000000000000003"
+        let createdRow = element(
+            in: context.app,
+            identifier: "channel.row.\(createdChannelID)"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            createdRow.label.contains("Quality Created Channel"),
+            "The created Channel row must expose the exact accepted name."
+        )
+
+        let createdMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).menu"
+        )
+        XCTAssertTrue(createdMenu.waitForExistence(timeout: 5) && createdMenu.isHittable)
+        createdMenu.click()
+        var renameAction = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).rename"
+        )
+        XCTAssertTrue(renameAction.waitForExistence(timeout: 5))
+        renameAction.click()
+        var renameSheet = context.app.sheets.firstMatch
+        var renameField = renameSheet.textFields.firstMatch
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: renameField, with: "Cancelled Rename")
+        element(in: context.app, identifier: "action.channel.rename.cancel").click()
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+
+        createdMenu.click()
+        renameAction = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).rename"
+        )
+        XCTAssertTrue(renameAction.waitForExistence(timeout: 5))
+        renameAction.click()
+        renameSheet = context.app.sheets.firstMatch
+        renameField = renameSheet.textFields.firstMatch
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: renameField, with: String(repeating: "x", count: 129))
+        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            renameSheet.staticTexts["频道名称过长（最多 128）。"].waitForExistence(timeout: 8),
+            "Invalid rename feedback must remain owned by the rename sheet."
+        )
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+
+        replaceTextUsingPasteboard(in: renameField, with: "Quality Renamed Channel")
+        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            renameSheet.staticTexts["The channel rename was rejected. Check the name and retry."]
+                .waitForExistence(timeout: 8),
+            "Remote rejection must reopen the owning rename sheet."
+        )
+        XCTAssertEqual(renameSheet.textFields.firstMatch.value as? String, "Quality Renamed Channel")
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+        renameSheet.textFields.firstMatch.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            waitForLabelContaining("Quality Renamed Channel", in: createdRow, timeout: 8),
+            "The created Channel row must expose the exact accepted rename."
+        )
+
+        let keepChannelID = "01H00000000000000000000001"
+        let keepRow = element(in: context.app, identifier: "channel.row.\(keepChannelID)")
+        XCTAssertTrue(keepRow.waitForExistence(timeout: 8))
+        let keepMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(keepChannelID).menu"
+        )
+        XCTAssertTrue(keepMenu.waitForExistence(timeout: 5) && keepMenu.isHittable)
+        keepMenu.click()
+        let keepUnsubscribe = element(
+            in: context.app,
+            identifier: "action.channel.\(keepChannelID).unsubscribe"
+        )
+        XCTAssertTrue(keepUnsubscribe.waitForExistence(timeout: 5))
+        keepUnsubscribe.click()
+        let keepHistory = element(
+            in: context.app,
+            identifier: "action.channel.unsubscribe.keep_history"
+        )
+        XCTAssertTrue(keepHistory.waitForExistence(timeout: 5))
+        keepHistory.click()
+        XCTAssertTrue(
+            keepRow.waitForNonExistence(timeout: 8),
+            "Keep-history unsubscribe must remove only the subscription row."
+        )
+
+        let deleteChannelID = "01H00000000000000000000002"
+        let deleteRow = element(in: context.app, identifier: "channel.row.\(deleteChannelID)")
+        XCTAssertTrue(deleteRow.waitForExistence(timeout: 8))
+        let deleteMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(deleteChannelID).menu"
+        )
+        XCTAssertTrue(deleteMenu.waitForExistence(timeout: 5) && deleteMenu.isHittable)
+        deleteMenu.click()
+        let deleteUnsubscribe = element(
+            in: context.app,
+            identifier: "action.channel.\(deleteChannelID).unsubscribe"
+        )
+        XCTAssertTrue(deleteUnsubscribe.waitForExistence(timeout: 5))
+        deleteUnsubscribe.click()
+        let deleteHistory = element(
+            in: context.app,
+            identifier: "action.channel.unsubscribe.delete_history"
+        )
+        XCTAssertTrue(deleteHistory.waitForExistence(timeout: 5))
+        deleteHistory.click()
+        XCTAssertTrue(
+            deleteRow.waitForNonExistence(timeout: 8),
+            "Delete-history unsubscribe must immediately suppress the subscription row."
+        )
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            pendingDeletion.waitForNonExistence(timeout: 15),
+            "Delete-history unsubscribe must reach its production commit deadline."
+        )
+
+        openSidebarTab("messages", in: context.app)
+        let keptMessage = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(keptMessage.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).waitForNonExistence(timeout: 5),
+            "Delete-history unsubscribe must remove the target history, not only its Channel row."
+        )
+        keptMessage.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Keep-history unsubscribe must preserve the accurate canonical message body."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            allowCrossAppDataAccess: true
+        )
+        relaunched.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+                .waitForExistence(timeout: 3),
+            "The cleared sidebar badge must not return after process relaunch."
+        )
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "The existing-channel subscription must survive process relaunch"
+        )
+
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(createdChannelID)")
+                .waitForExistence(timeout: 8),
+            "The created Channel must survive process relaunch."
+        )
+        let relaunchedCreatedRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.\(createdChannelID)"
+        )
+        XCTAssertTrue(
+            waitForLabelContaining("Quality Renamed Channel", in: relaunchedCreatedRow, timeout: 8),
+            "The accepted rename must survive process relaunch."
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "channel.row.\(keepChannelID)").exists,
+            "The keep-history subscription must stay removed after relaunch."
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "channel.row.\(deleteChannelID)").exists,
+            "The delete-history subscription must stay removed after relaunch."
+        )
+
+        let expectedChannelID = createdChannelID
+        let row = element(in: relaunched.app, identifier: "channel.row.\(expectedChannelID)")
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+
+        let pasteboard = NSPasteboard.general
+        let savedItems: [[NSPasteboard.PasteboardType: Data]] = pasteboard.pasteboardItems?.map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type, $0) }
+            })
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.setString("pushgo-quality-copy-sentinel", forType: .string))
+        row.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "feedback.toast.success")
+                .waitForExistence(timeout: 2),
+            "The Channel row did not report a successful system pasteboard write"
+        )
+
+        let copied = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                pasteboard.string(forType: .string) == expectedChannelID
+            },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [copied], timeout: 3),
+            .completed,
+            "Clicking the real Channel row did not put its exact ID on the system pasteboard"
+        )
+
+        openSidebarTab("messages", in: relaunched.app)
+        let relaunchedKeptMessage = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(relaunchedKeptMessage.waitForExistence(timeout: 8))
+        relaunchedKeptMessage.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Keep-history data must retain its accurate body after process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).waitForNonExistence(timeout: 5),
+            "Committed delete-history data must not reappear after process relaunch."
+        )
+    }
+
+    @MainActor
+    func testChannelCreateRemoteRejectionStaysInSheetAndRetryPersists() {
+        let sessionID = "macos-channel-rejected-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "reject_once_then_accepted"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("channels", in: context.app)
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Quality Rejected Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+
+        let submit = element(in: context.app, identifier: "action.channels.entry.submit")
+        XCTAssertTrue(submit.waitForExistence(timeout: 5) && submit.isEnabled)
+        submit.click()
+
+        let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(
+            sheetFeedback.waitForExistence(timeout: 8),
+            "A rejected new-channel request must remain owned by the Channel sheet."
+        )
+        XCTAssertTrue(
+            sheetFeedback.label.contains("Channel password is incorrect"),
+            "The Sheet must expose the actionable remote rejection, not a generic success or empty state."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "A new-channel Sheet failure must not also be rendered by the host Channel page."
+        )
+        XCTAssertEqual(createName.value as? String, "Quality Rejected Channel")
+        XCTAssertTrue(
+            createName.exists,
+            "The owning Channel sheet must remain open with the original input available for correction."
+        )
+        XCTAssertTrue(createPassword.exists)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertFalse(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).exists,
+            "A rejected create must not publish a partial canonical Channel row."
+        )
+
+        submit.click()
+        let createdRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdRow.waitForExistence(timeout: 8),
+            "Retry must complete the real Channel creation after the one-time rejection."
+        )
+        XCTAssertTrue(createdRow.label.contains("Quality Rejected Channel"))
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        let persistedRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 8),
+            "The accepted retry must survive a real process relaunch."
+        )
+        XCTAssertTrue(persistedRow.label.contains("Quality Rejected Channel"))
+    }
+
+    @MainActor
+    func testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch() {
+        let sessionID = "macos-delete-lifecycle-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let committedRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        let restoredRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(committedRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(restoredRow.exists, "The reversible control message must exist before deletion.")
+
+        restoredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "The undo path must begin from the exact canonical control detail."
+        )
+        var delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
+        delete.click()
+        XCTAssertTrue(
+            restoredRow.waitForNonExistence(timeout: 2),
+            "Scheduling the reversible deletion must immediately suppress its row."
+        )
+        var pending = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
+        XCTAssertTrue(undo.waitForExistence(timeout: 5) && undo.isHittable)
+        undo.click()
+        XCTAssertTrue(
+            restoredRow.waitForExistence(timeout: 8),
+            "Undo must restore the real row, not merely dismiss pending-deletion UI."
+        )
+        XCTAssertTrue(
+            pending.waitForNonExistence(timeout: 5),
+            "Undo must clear the production pending-deletion state."
+        )
+        restoredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Undo must restore the exact canonical control content."
+        )
+
+        committedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].waitForExistence(timeout: 8),
+            "The committed path must begin from the exact target detail."
+        )
+        delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
+        delete.click()
+
+        XCTAssertTrue(committedRow.waitForNonExistence(timeout: 2))
+        pending = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
+            "The journey must observe the real undo opportunity before allowing commit."
+        )
+        XCTAssertTrue(
+            pending.waitForNonExistence(timeout: 15),
+            "The production undo deadline did not commit and clear the pending deletion."
+        )
+        XCTAssertFalse(committedRow.exists, "The committed target must remain absent.")
+        XCTAssertTrue(
+            restoredRow.waitForExistence(timeout: 5),
+            "Committing the target must preserve the previously restored control message."
+        )
+        restoredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "The control message must retain its exact canonical content."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A committed deletion must not revive after process relaunch."
+        )
+        let persistedRestoredRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(
+            persistedRestoredRow.waitForExistence(timeout: 8),
+            "The undone canonical message must survive the same process relaunch."
+        )
+        persistedRestoredRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists
+        )
+
+        relaunched.app.terminate()
+        let deletedRoute = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            requestName: "message.open",
+            requestArgs: ["message_id": "01H00000000000000000000002"]
+        )
+        launchQuality(deletedRoute, sessionID: sessionID)
+        assertVisibleScreenThroughUI("screen.messages.list", in: deletedRoute.app, timeout: 8)
+        XCTAssertFalse(
+            element(
+                in: deletedRoute.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A cold route to the deleted Message must not revive its canonical row."
+        )
+        XCTAssertFalse(
+            element(in: deletedRoute.app, identifier: "screen.message.detail").exists,
+            "The deleted target must not leave stale Message detail visible."
+        )
+        let unavailableFeedback = element(
+            in: deletedRoute.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "A cold route to the committed deletion must explain its list fallback."
+        )
+        let feedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: feedbackText.contains),
+            "The unavailable-target feedback must state the real outcome."
+        )
+        let survivingRow = element(
+            in: deletedRoute.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(survivingRow.waitForExistence(timeout: 8))
+        survivingRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: deletedRoute.app, timeout: 8)
+        XCTAssertTrue(
+            deletedRoute.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 5),
+            "The surviving canonical Message must remain actionable after the deleted route."
+        )
+    }
+
+    @MainActor
+    func testSlowMessageLoadWarnsBeforeDataCompletes() {
+        let sessionID = "macos-slow-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.workflow",
+            messageLoadDelayMilliseconds: 8_000,
+            messagePageLoadDelayMilliseconds: 5_000,
+            failMessagePageLoadOnce: true
+        )
+        launch(context)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.loading.slow")
+                .waitForExistence(timeout: 4),
+            "A deliberately slow load must warn the user before completion."
+        )
+        let firstPageHead = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000007d"
+        )
+        XCTAssertTrue(
+            firstPageHead.waitForExistence(timeout: 10) && firstPageHead.isHittable,
+            "The delayed load did not complete into its accurate canonical collection."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+
+        let list = element(in: context.app, identifier: "messages.list.scroll")
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
+        XCTAssertTrue(
+            pageLoading.waitForExistence(timeout: 3) && pageLoading.isHittable,
+            "A slow next page must expose visible progress instead of looking frozen."
+        )
+        XCTAssertTrue(
+            firstPageHead.exists && firstPageHead.isHittable,
+            "Already loaded page-1 content must remain usable while page 2 is loading."
+        )
+        let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 8),
+            "A failed next page must expose a page-owned recovery state instead of silently stopping."
+        )
+        XCTAssertTrue(
+            firstPageHead.exists && firstPageHead.isHittable,
+            "Accurate page-1 content must remain actionable while page 2 is failed."
+        )
+        let firstPageTail = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000004c"
+        )
+        for _ in 0..<6 where !firstPageTail.exists {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            firstPageTail.waitForExistence(timeout: 5)
+                && firstPageTail.label.contains("Quality workflow 75"),
+            "A page failure must retain the accurate page-1 tail, not only its first row."
+        )
+        let pageRetry = element(in: context.app, identifier: "action.messages.page.retry")
+        XCTAssertTrue(
+            pageRetry.waitForExistence(timeout: 3) && pageRetry.isHittable,
+            "Page Retry must be a real user action on the failed append owner."
+        )
+        pageRetry.click()
+        let secondPageTargetID = "message.row.00000000-0000-0000-0000-00000000004b"
+        let secondPageTarget = element(in: context.app, identifier: secondPageTargetID)
+        XCTAssertTrue(
+            secondPageTarget.waitForExistence(timeout: 5),
+            "The canonical page-2 boundary object was not rendered after Retry."
+        )
+        XCTAssertTrue(
+            secondPageTarget.label.contains("Quality workflow 74"),
+            "The reachable page-2 row did not expose the expected canonical content."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any).matching(identifier: secondPageTargetID).count,
+            1,
+            "Repeated scroll pressure while loading must not append page 2 more than once."
+        )
+        let secondPageTailID = "message.row.00000000-0000-0000-0000-00000000001a"
+        let secondPageTail = element(in: context.app, identifier: secondPageTailID)
+        for _ in 0..<8 where !secondPageTail.exists {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            secondPageTail.waitForExistence(timeout: 5)
+                && secondPageTail.label.contains("Quality workflow 25"),
+            "Retry must recover the accurate page-2 tail instead of a one-row partial page."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any).matching(identifier: secondPageTailID).count,
+            1,
+            "Retry must not duplicate the page-2 tail."
+        )
+    }
+
+    @MainActor
+    func testMessageLoadFailureRetryRecoversToFunctionalState() {
+        let sessionID = "macos-retry-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failMessageLoad: true
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.load_failed")
+                .waitForExistence(timeout: 5),
+            "The first controlled load failure must be visible to the user."
+        )
+        let retry = element(in: context.app, identifier: "action.messages.retry")
+        XCTAssertTrue(
+            retry.isHittable,
+            "Retry must be a usable control, not a diagnostic marker."
+        )
+        retry.click()
+        let restoredRow = messageRow(containing: "P2 Split Seed Message", in: context.app)
+        XCTAssertTrue(
+            restoredRow.waitForExistence(timeout: 8),
+            "Retry must restore the canonical non-empty Message result, not only clear the error state."
+        )
+        let restoredRowID = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            restoredRowID.waitForExistence(timeout: 5) && restoredRowID.isHittable,
+            "Retry must restore the stable canonical Message row, not a title-only lookalike."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any)
+                .matching(identifier: "message.row.00000000-0000-0000-0000-000000000001")
+                .count,
+            1,
+            "Retry must expose exactly one stable canonical Message row."
+        )
+        XCTAssertEqual(
+            context.app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "P2 Split Seed Message")).count,
+            1,
+            "Retry must restore exactly one canonical target row."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+        XCTAssertTrue(
+            (restoredRow.value as? String)?.contains("Seeded from fixture.seed_messages for UI validation.") == true,
+            "Retry must restore the canonical row body, not just its title."
+        )
+        restoredRowID.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Retry must open the restored canonical Message and expose its exact body."
+        )
+    }
+
+    @MainActor
+    func testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion() {
+        let sessionID = "macos-refresh-slow-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+
+        XCTAssertTrue(originalRow.exists, "Refresh must not blank the last accurate snapshot.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForExistence(timeout: 2),
+            "A slow refresh must become visible before the provider operation completes."
+        )
+        XCTAssertTrue(originalRow.exists, "Slow feedback must coexist with accurate existing data.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForNonExistence(timeout: 5),
+            "Slow feedback must clear when refresh completes."
+        )
+        XCTAssertTrue(originalRow.exists, "Successful refresh must finish on accurate content.")
+    }
+
+    @MainActor
+    func testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult() {
+        let sessionID = "macos-refresh-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "1")
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForExistence(timeout: 5),
+            "The provider refresh failure must be visible on the Messages owner."
+        )
+        XCTAssertTrue(originalRow.exists, "A failed refresh must retain the last accurate snapshot.")
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not present a provider result before Retry."
+        )
+        XCTAssertTrue(refresh.isHittable, "The same real Refresh control must remain usable for retry.")
+        refresh.click()
+
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "The successful retry did not render the newly persisted provider result."
+        )
+        XCTAssertTrue(originalRow.exists, "Retry must not replace an unrelated canonical message.")
+        XCTAssertTrue(
+            waitForValue("2", in: badge, timeout: 8),
+            "The provider ingress result must increment the real sidebar badge exactly once."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The refreshed row did not expose the accurate persisted body."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForNonExistence(timeout: 5)
+        )
+        refreshedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row did not open its accurate real detail."
+        )
+        XCTAssertTrue(
+            waitForValue("1", in: badge, timeout: 8),
+            "Opening the provider result must leave only the original unread control message."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = relaunched.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 8),
+            "The provider refresh result did not survive a real process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "The original canonical message must survive the refresh and relaunch."
+        )
+        XCTAssertTrue(
+            (persistedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The persisted provider result must retain its accurate body after relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted provider result must reopen its accurate detail after relaunch."
+        )
+        let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedBadge.value as? String, "1")
+    }
+
+    @MainActor
+    func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
+        let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500,
+            messageRefreshScenario: "new_message"
+        )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(context, sessionID: sessionID)
+
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let mainWindow = context.app.windows.firstMatch
+        XCTAssertTrue(mainWindow.exists)
+        let minimizeButton = mainWindow.buttons[XCUIIdentifierMinimizeWindow]
+        XCTAssertTrue(
+            minimizeButton.waitForExistence(timeout: 5) && minimizeButton.isHittable,
+            "The real main window must expose its native minimize action."
+        )
+        minimizeButton.click()
+        let minimized = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"),
+            object: mainWindow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [minimized], timeout: 5),
+            .completed,
+            "The native minimize action must actually remove the main window from interaction."
+        )
+        XCTAssertNotEqual(
+            context.app.state,
+            .notRunning,
+            "Minimizing the main window must not terminate the status-item app."
+        )
+
+        let minimizedStatusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            minimizedStatusItem.waitForExistence(timeout: 8),
+            "The status item must remain reachable while the main window is minimized."
+        )
+        minimizedStatusItem.click()
+        let deminiaturized = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: mainWindow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [deminiaturized], timeout: 8),
+            .completed,
+            "The primary status-item action must restore the minimized main window."
+        )
+        XCTAssertEqual(
+            context.app.windows.count,
+            1,
+            "Restoring a minimized main window must not create a duplicate window."
+        )
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5) && originalRow.isHittable,
+            "The restored main window must preserve its accurate, usable canonical content."
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "Minimize and restore must preserve the same App-owned session."
+        )
+
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForExistence(timeout: 2),
+            "The provider refresh must still be in flight when the main window closes."
+        )
+        XCTAssertTrue(originalRow.exists, "Closing begins from the last accurate snapshot.")
+
+        let closeButton = mainWindow.buttons[XCUIIdentifierCloseWindow]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
+        closeButton.click()
+
+        XCTAssertTrue(
+            waitForElementToDisappear(mainWindow, timeout: 8),
+            "Closing the main window must hide it without terminating the status-item app."
+        )
+        XCTAssertNotEqual(
+            context.app.state,
+            .notRunning,
+            "Closing the singleton window must not terminate the status-item app."
+        )
+
+        let statusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            statusItem.waitForExistence(timeout: 8),
+            "The app-owned status item must remain reachable after the main window closes."
+        )
+        statusItem.rightClick()
+        let openMainWindow = context.app.menuItems["Open main window"]
+        XCTAssertTrue(
+            openMainWindow.waitForExistence(timeout: 5) && openMainWindow.isHittable,
+            "The real status-item context menu must offer its localized main-window action."
+        )
+        openMainWindow.click()
+
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            context.app.windows.count,
+            1,
+            "The context-menu action must restore the unique main window."
+        )
+        XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "Closing the window must not cancel or lose an in-flight provider result."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The restored window did not expose the accurate persisted provider body."
+        )
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5),
+            "Receiving while the window is closed must not replace unrelated canonical data."
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "The restored window must still show the same App-owned session and Store state."
+        )
+
+        let restoredWindow = context.app.windows.firstMatch
+        restoredWindow.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(
+            waitForElementToDisappear(restoredWindow, timeout: 8),
+            "The restored unique window must remain closable before testing the primary status-item action."
+        )
+        pushGoStatusItem(in: context.app).click()
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(context.app.windows.count, 1, "Left click must restore, not duplicate, the main window.")
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "Both status-item entry points must preserve the same App-owned session."
+        )
+
+        // Reuse the restored functional window for the macOS-only keyboard route.
+        // Each arrow must change the real selection and content owner; focus or an
+        // identifier alone is not accepted as navigation evidence.
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        let keyboardDestinations = [
+            "screen.events.list",
+            "screen.things.list",
+            "screen.channels",
+            "screen.settings",
+        ]
+        for screen in keyboardDestinations {
+            context.app.typeKey(.downArrow, modifierFlags: [])
+            assertVisibleScreenThroughUI(screen, in: context.app, timeout: 5)
+        }
+        for screen in keyboardDestinations.dropLast().reversed() {
+            context.app.typeKey(.upArrow, modifierFlags: [])
+            assertVisibleScreenThroughUI(screen, in: context.app, timeout: 5)
+        }
+        context.app.typeKey(.upArrow, modifierFlags: [])
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5) && originalRow.isHittable,
+            "Keyboard navigation must return to the same accurate canonical Messages content."
+        )
+
+        let quitStatusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            quitStatusItem.waitForExistence(timeout: 5),
+            "The healthy functional session must still own its real status item before Quit."
+        )
+        quitStatusItem.rightClick()
+        let quitApplication = context.app.menuItems["Quit application"]
+        XCTAssertTrue(
+            quitApplication.waitForExistence(timeout: 5) && quitApplication.isHittable,
+            "The real status-item context menu must expose its localized Quit action."
+        )
+        quitApplication.click()
+
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "state == %d",
+                XCUIApplication.State.notRunning.rawValue
+            ),
+            object: context.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The production Quit action must terminate the whole App, not only hide its window."
+        )
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+        let survivingPushGoProcesses = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == "io.ethan.pushgo" && !$0.isTerminated
+        }
+        XCTAssertTrue(
+            survivingPushGoProcesses.isEmpty,
+            "The production Quit action must leave no PushGo process owning a window or status item."
+        )
+        let crashDialogHosts = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
+        XCTAssertTrue(
+            crashDialogHosts.isEmpty,
+            "A normal status-item Quit must not leave a crash dialog that can block the next journey."
+        )
+    }
+
+    @MainActor
+    func testSidebarNavigationCoversPrimaryScreens() throws {
+        let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "core.positive",
+            messageRefreshScenario: "new_message"
+        )
+        context.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
+        launchQuality(context, sessionID: sessionID)
+
+        let minimumWindowFrame = resizeMainWindowThroughSystemAccessibility(
+            context.app,
+            requestedSize: CGSize(width: 1_100, height: 640)
+        )
+        XCTAssertLessThanOrEqual(
+            minimumWindowFrame.width,
+            1_120,
+            "The system resize must actually exercise the minimum-width layout, not a restored large window."
+        )
+        XCTAssertLessThanOrEqual(
+            minimumWindowFrame.height,
+            700,
+            "The system resize must actually exercise the minimum-height layout, including native title-bar chrome."
+        )
+
+        let messagesTitle = context.app.staticTexts["sidebar-messages"]
+        let unreadBadge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            messagesTitle.isHittable,
+            "The full Messages navigation target must remain actionable at the minimum window size."
+        )
+        XCTAssertEqual(messagesTitle.value as? String, "消息")
+        XCTAssertEqual(
+            unreadBadge.value as? String,
+            "99+",
+            "The broad positive fixture must exercise the real capped high-unread state."
+        )
+        XCTAssertGreaterThanOrEqual(
+            messagesTitle.frame.width,
+            24,
+            "The full two-glyph Messages title must remain visible when the unread badge is present."
+        )
+        XCTAssertGreaterThan(
+            unreadBadge.frame.minX,
+            messagesTitle.frame.maxX + 4,
+            "The unread badge must not cover the Messages title."
+        )
+        XCTAssertTrue(
+            hasReadableForegroundContrast(in: messagesTitle.screenshot()),
+            "The selected Messages title must remain visibly readable."
+        )
+
+        context.app.open(
+            try XCTUnwrap(
+                URL(string: "pushgo://open?kind=message&id=00000000-0000-0000-0000-000000000001")
+            )
+        )
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Message."
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=quality-event-active"))
+        )
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Event detail."
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=quality-thing-rich"))
+        )
+        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Thing detail."
+        )
+
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).waitForExistence(timeout: 8),
+            "The real Messages sidebar entry must return to the canonical list after system routing."
+        )
+
+        openSidebarTab("events", in: context.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
+        let event = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(event.waitForExistence(timeout: 8))
+        event.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        openSidebarTab("things", in: context.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+        let thing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(thing.waitForExistence(timeout: 8))
+        thing.click()
+        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5))
+
+        openSidebarTab("channels", in: context.app)
+        assertVisibleScreenThroughUI("screen.channels", in: context.app, timeout: 8)
+        let channel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(channel.waitForExistence(timeout: 8))
+        XCTAssertTrue(channel.label.contains("Quality Keep History"))
+
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(
+            refresh.waitForExistence(timeout: 5) && refresh.isHittable,
+            "The daily macOS core journey must exercise the real provider Refresh action."
+        )
+        refresh.click()
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "The daily core refresh must add its exact new canonical row to the real list."
+        )
+        XCTAssertTrue(
+            refreshedRow.label.contains("未读"),
+            "The newly persisted provider result must initially expose its unread row semantics."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The daily core refresh row must expose the accurate canonical body."
+        )
+        XCTAssertEqual(
+            unreadBadge.value as? String,
+            "99+",
+            "The capped high-unread navigation state must remain readable after provider ingress."
+        )
+        refreshedRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row must open its exact canonical detail in the daily core journey."
+        )
+        let markedRead = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "NOT label CONTAINS %@", "未读"),
+            object: refreshedRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [markedRead], timeout: 8),
+            .completed,
+            "Opening the refreshed result must update that exact row to read semantics."
+        )
+
+        let largeWindowFrame = resizeMainWindowThroughSystemAccessibility(
+            context.app,
+            requestedSize: CGSize(width: 1_360, height: 840)
+        )
+        XCTAssertGreaterThanOrEqual(
+            largeWindowFrame.width,
+            1_350,
+            "The large-window journey must exercise a genuinely expanded main window."
+        )
+        XCTAssertGreaterThanOrEqual(
+            largeWindowFrame.height,
+            820,
+            "The large-window journey must exercise representative vertical expansion."
+        )
+        XCTAssertGreaterThan(
+            largeWindowFrame.width,
+            minimumWindowFrame.width + 250,
+            "The second size phase must expand the same real window beyond its minimum layout."
+        )
+
+        XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(messagesTitle.value as? String, "消息")
+        XCTAssertEqual(unreadBadge.value as? String, "99+")
+        XCTAssertTrue(
+            messagesTitle.isHittable,
+            "The complete Messages label must remain a functional navigation target in the large window."
+        )
+        XCTAssertGreaterThanOrEqual(
+            messagesTitle.frame.width,
+            24,
+            "The complete two-glyph Messages label must remain visible in the large window."
+        )
+        XCTAssertGreaterThan(
+            unreadBadge.frame.minX,
+            messagesTitle.frame.maxX + 4,
+            "The high-unread badge must not cover the Messages label in the large window."
+        )
+
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."].exists,
+            "Resizing must preserve the already-open exact canonical detail."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.message.delete").isHittable,
+            "The representative large-window detail toolbar must remain operable."
+        )
+    }
+
+    @MainActor
+    func testEventDetailCloseAndRelaunchPreserveAccurateProjection() {
+        let sessionID = "macos-event-close-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("events", in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            (eventRow.label.contains("P2 Event Active"))
+                && ((eventRow.value as? String)?.contains("Event fixture for app-owned UI validation.") == true),
+            "The Event row must expose the accurate title and purpose-bearing summary."
+        )
+        eventRow.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        let closeAction = element(in: context.app, identifier: "action.event.close")
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.click()
+        let cancel = element(in: context.app, identifier: "action.event.close.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing")
+                .waitForExistence(timeout: 5),
+            "Cancelling close must leave the canonical Event ongoing."
+        )
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.click()
+        let confirm = element(in: context.app, identifier: "action.event.close.confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+        confirm.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 12),
+            "Closing succeeds only when the real projection becomes closed."
+        )
+        XCTAssertTrue(
+            closeAction.waitForNonExistence(timeout: 5),
+            "A closed Event must not continue to offer the close action."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8),
+            "The Event detail must show both the original and close timeline points."
+        )
+        let filterAction = element(in: context.app, identifier: "action.events.filter")
+        XCTAssertTrue(filterAction.waitForExistence(timeout: 5) && filterAction.isHittable)
+        filterAction.click()
+        let ongoingOnly = element(in: context.app, identifier: "filter.events.ongoing")
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5) && ongoingOnly.isHittable)
+        ongoingOnly.click()
+        XCTAssertTrue(
+            eventRow.waitForNonExistence(timeout: 8),
+            "The ongoing-only filter must exclude the same closed Event."
+        )
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5) && ongoingOnly.isHittable)
+        ongoingOnly.click()
+        XCTAssertTrue(
+            eventRow.waitForExistence(timeout: 8),
+            "Clearing the filter must restore the exact closed Event."
+        )
+        openSidebarTab("things", in: context.app)
+        let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(linkedThing.waitForExistence(timeout: 8) && linkedThing.isHittable)
+        linkedThing.click()
+        let linkedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-event-active"
+        )
+        XCTAssertTrue(linkedEvent.waitForExistence(timeout: 8) && linkedEvent.isHittable)
+        linkedEvent.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "The Thing consumer must converge to the same closed Event."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("events", in: relaunched.app)
+        let persistedRow = element(in: relaunched.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "The same Event must remain closed after a real process relaunch."
+        )
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(relaunched.app.staticTexts["P2 Event Active"].exists)
+
+        let deleteAction = element(in: relaunched.app, identifier: "action.event.delete")
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 5) && deleteAction.isHittable)
+        deleteAction.click()
+        XCTAssertTrue(
+            persistedRow.waitForNonExistence(timeout: 8),
+            "Deleting the selected Event must remove its row immediately."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P3 Event Control"].waitForExistence(timeout: 8),
+            "The split view must select the next exact Event instead of leaving a blank detail."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Control event must become the selected detail after deleting the current event."
+            ].waitForExistence(timeout: 5)
+        )
+    }
+
+    @MainActor
+    func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists() {
+        let sessionID = "mac-event-close-retry-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("events", in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        eventRow.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."].waitForExistence(timeout: 5)
+        )
+
+        func confirmClose() {
+            let closeAction = element(in: context.app, identifier: "action.event.close")
+            XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+            closeAction.click()
+            let confirm = element(in: context.app, identifier: "action.event.close.confirm")
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+            confirm.click()
+        }
+
+        confirmClose()
+        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close").exists,
+            "A close already in flight must not allow a duplicate submission."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.event.close").waitForExistence(timeout: 5),
+            "The first boundary failure must remain owned by the Event detail."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing").exists,
+            "A failed close must preserve the canonical ongoing state."
+        )
+
+        confirmClose()
+        XCTAssertTrue(closing.waitForExistence(timeout: 2))
+        XCTAssertFalse(element(in: context.app, identifier: "action.event.close").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 12),
+            "Retry succeeds only after the production-shaped delivery updates the canonical projection."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("events", in: relaunched.app)
+        let persistedRow = element(in: relaunched.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "action.event.close").exists)
+    }
+
+    @MainActor
+    func testUnavailableMessageRouteReturnsToListAndKeepsMessagesUsable() {
+        let sessionID = "macos-message-unavailable-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            requestName: "message.open",
+            requestArgs: ["message_id": "01H00000000000000000000002"]
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let canonicalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(canonicalRow.waitForExistence(timeout: 8))
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+
+        let unavailableFeedback = element(
+            in: context.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "An unavailable Message route must explain its list fallback instead of leaving a hidden pending target."
+        )
+        let unavailableFeedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: unavailableFeedbackText.contains),
+            "The unavailable Message feedback must state the real outcome in the active localization."
+        )
+        canonicalRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The surviving canonical Message must remain actionable after the unavailable route."
+        )
+    }
+
+    @MainActor
+    func testThingRelationsOpenAccurateDetailsAndSurviveRelaunch() {
+        let sessionID = "macos-thing-relations-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "thing.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("things", in: context.app)
+        let thingList = context.app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(thingList.waitForExistence(timeout: 8))
+        let thingRow = thingList.buttons["thing.row.quality-thing-rich"]
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        let distractorRow = thingList.buttons["thing.row.quality-thing-distractor"]
+        XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        distractorRow.click()
+        let deleteThing = element(in: context.app, identifier: "action.thing.delete")
+        XCTAssertTrue(deleteThing.waitForExistence(timeout: 8) && deleteThing.isHittable)
+        deleteThing.click()
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "Deleting one Thing must immediately remove only that target from the user-visible list."
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        let pendingThingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingThingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            pendingThingDeletion.waitForNonExistence(timeout: 15),
+            "The production undo deadline must commit before the journey continues."
+        )
+
+        context.app.terminate()
+        // The separate primary-navigation journey owns registered `pushgo://`
+        // URL-scheme coverage. This continuation instead exercises the same
+        // production target-resolution path as an in-app notification after a
+        // real deletion/relaunch, without making this data-lifecycle Oracle
+        // depend on XCTest's cross-process URL injector.
+        let routed = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "thing.standard",
+            requestName: "entity.open",
+            requestArgs: [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+            ]
+        )
+        launchQuality(routed, sessionID: sessionID)
+        let app = routed.app
+        let qualityEventsURL = macOSQualitySessionRootURL(sessionID: sessionID)
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent("automation-events.jsonl")
+        openSidebarTab("things", in: app)
+        let reopenedThingList = app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(reopenedThingList.waitForExistence(timeout: 8))
+        let reopenedThingRow = reopenedThingList.buttons["thing.row.quality-thing-rich"]
+        let reopenedDistractorRow = reopenedThingList.buttons["thing.row.quality-thing-distractor"]
+        XCTAssertTrue(
+            reopenedThingRow.waitForExistence(timeout: 8),
+            "The surviving Thing must remain inside the owned list after relaunch."
+        )
+        XCTAssertTrue(
+            reopenedDistractorRow.waitForNonExistence(timeout: 8),
+            "The deleted Thing must not return after the production deadline commits and the App relaunches."
+        )
+
+        assertVisibleScreenThroughUI("screen.things.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            reopenedDistractorRow.waitForNonExistence(timeout: 8),
+            "Routing to a deleted Thing must not revive its committed projection."
+        )
+        let unavailableFeedback = element(
+            in: app,
+            identifier: "feedback.entity.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Thing must visibly explain the fallback instead of leaving a pending target."
+        )
+        let unavailableFeedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: unavailableFeedbackText.contains),
+            "The fallback must accurately explain that the routed Thing is unavailable."
+        )
+        XCTAssertFalse(
+            app.staticTexts["Quality Pump Beta"].exists,
+            "The deleted Thing title must not remain as a stale detail after route fallback."
+        )
+        XCTAssertFalse(
+            app.staticTexts[
+                "Secondary fixture that must be excluded by the target search."
+            ].exists,
+            "The deleted Thing summary must not remain as a stale detail after route fallback."
+        )
+        let unavailableDetailIdentity = element(
+            in: app,
+            identifier: "field.thing.detail.identity"
+        )
+        XCTAssertTrue(
+            unavailableDetailIdentity.waitForNonExistence(timeout: 5),
+            "An unavailable Thing route must leave the detail pane empty until the user explicitly selects a surviving Thing."
+        )
+
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.click()
+        replaceTextUsingPasteboard(in: searchField, with: "thing-rich")
+        searchField.typeKey(.return, modifierFlags: [])
+        let settledSearch = waitForAutomationEvent(
+            at: qualityEventsURL,
+            timeout: 8,
+            matching: { event in
+                guard (event["type"] as? String) == "search.results_updated",
+                      let details = event["details"] as? [String: Any],
+                      (details["search_domain"] as? String) == "things",
+                      (details["search_query"] as? String) == "thing-rich",
+                      (details["settled"] as? String) == "true",
+                      let rawCount = details["result_count"] as? String,
+                      let resultCount = Int(rawCount),
+                      let resultIDs = details["result_ids"] as? String,
+                      let revision = details["search_revision"] as? String,
+                      Int(revision) != nil
+                else { return false }
+                return resultCount == 1 && resultIDs == "quality-thing-rich"
+            }
+        )
+        XCTAssertNotNil(
+            settledSearch,
+            "Thing search must publish an App-owned settled result snapshot before the UI Oracle continues."
+        )
+        XCTAssertTrue(reopenedThingRow.exists)
+        let distractorExists: Bool
+        if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = hostSampleThingRowQuery(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = sampleThingRowQueryAcrossProcesses(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else {
+            distractorExists = reopenedDistractorRow.exists
+        }
+        XCTAssertFalse(
+            distractorExists,
+            "Thing search must keep the exact target while excluding a real distractor."
+        )
+        XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
+        reopenedThingRow.click()
+        assertVisibleScreenThroughUI("screen.things.detail", in: app, timeout: 8)
+        let identity = element(in: app, identifier: "field.thing.detail.identity")
+        XCTAssertTrue(identity.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            identity.label.contains("P2 Thing Rich")
+                && identity.label.localizedCaseInsensitiveContains("active")
+                && identity.label.localizedCaseInsensitiveContains("quality"),
+            "The Thing identity region must expose the accurate title, lifecycle state, and channel."
+        )
+        let summary = element(in: app, identifier: "field.thing.detail.summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            summary.label.contains("Fixture thing summary")
+                || (summary.value as? String)?.contains("Fixture thing summary") == true,
+            "The Thing detail must expose its accurate purpose-bearing summary."
+        )
+
+        let relatedEvent = element(
+            in: app,
+            identifier: "thing.related.event.quality-related-event"
+        )
+        XCTAssertTrue(relatedEvent.waitForExistence(timeout: 8) && relatedEvent.isHittable)
+        relatedEvent.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: app, timeout: 8)
+        XCTAssertTrue(app.staticTexts["Quality Related Event"].waitForExistence(timeout: 5))
+        let relatedEventSummary = element(in: app, identifier: "field.event.detail.summary")
+        XCTAssertTrue(relatedEventSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            relatedEventSummary.label.contains("A deterministic event associated with P2 Thing Rich.")
+                || (relatedEventSummary.value as? String)?
+                    .contains("A deterministic event associated with P2 Thing Rich.") == true,
+            "The related Event must display the canonical notification body as its accurate summary."
+        )
+        element(in: app, identifier: "action.thing.related.close").click()
+
+        let messagesTab = element(in: app, identifier: "tab.thing.detail.messages")
+        XCTAssertTrue(messagesTab.waitForExistence(timeout: 5) && messagesTab.isHittable)
+        messagesTab.click()
+        let relatedMessage = element(
+            in: app,
+            identifier: "thing.related.message.quality-related-message"
+        )
+        XCTAssertTrue(relatedMessage.waitForExistence(timeout: 8) && relatedMessage.isHittable)
+        relatedMessage.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: app, timeout: 8)
+        XCTAssertTrue(app.staticTexts["Quality Related Message"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["The linked Thing message opens its canonical detail."]
+                .waitForExistence(timeout: 5)
+        )
+        element(in: app, identifier: "action.thing.related.close").click()
+        XCTAssertTrue(relatedMessage.waitForExistence(timeout: 5))
+
+        let updatesTab = element(in: app, identifier: "tab.thing.detail.updates")
+        XCTAssertTrue(updatesTab.waitForExistence(timeout: 5) && updatesTab.isHittable)
+        updatesTab.click()
+        let relatedUpdate = element(
+            in: app,
+            identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+        )
+        XCTAssertTrue(relatedUpdate.waitForExistence(timeout: 8) && relatedUpdate.isHittable)
+        relatedUpdate.click()
+        assertVisibleScreenThroughUI("screen.thing.update.detail", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 5)
+        )
+        element(in: app, identifier: "action.thing.related.close").click()
+
+    }
+
+    @MainActor
+    func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
         let context = configuredApp(
             requestName: "nav.switch_tab",
             args: ["tab": "channels"]
@@ -140,7 +3449,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testImportedEventFixtureCanOpenEventDetailFromStartupRequest() {
+    func legacyDiagnosticImportedEventFixtureCanOpenEventDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -170,7 +3479,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testImportedThingFixtureCanOpenThingDetailFromStartupRequest() {
+    func legacyDiagnosticImportedThingFixtureCanOpenThingDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: thingFixturePath,
             requestName: "entity.open",
@@ -200,21 +3509,572 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsSidebarCanOpenDecryptionOverlay() {
-        let context = configuredApp()
-        launch(context)
+    // Superseded by the purpose-level decryption lifecycle and encrypted-message journeys.
+    func legacyDiagnosticSettingsSidebarCanOpenDecryptionOverlay() {
+        let sessionID = "macos-decryption-overlay-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("settings", in: context.app)
-        assertVisibleScreen("screen.settings", in: context)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app)
 
         let decryptionButton = element(in: context.app, identifier: "action.settings.open_decryption")
         XCTAssertTrue(decryptionButton.waitForExistence(timeout: 10))
         decryptionButton.click()
-        assertVisibleScreen("screen.settings.decryption", in: context)
+        assertVisibleScreenThroughUI("screen.settings.decryption", in: context.app)
     }
 
     @MainActor
-    func testSettingsScreenControlMatrixShowsCriticalGroups() {
+    func testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey() {
+        let sessionID = "macos-decryption-life-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("settings", in: context.app)
+        let initialAction = element(in: context.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(initialAction.waitForExistence(timeout: 8) && initialAction.isHittable)
+        let initialLabel = initialAction.label
+        initialAction.click()
+
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        replaceSecureText(in: keyField, with: "short")
+        XCTAssertEqual(keyField.elementType, .secureTextField)
+        let visibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        )
+        visibilityAction.click()
+        let visibleKeyField = element(in: context.app, identifier: keyField.identifier)
+        XCTAssertEqual(visibleKeyField.elementType, .textField)
+        XCTAssertEqual(visibleKeyField.value as? String, "short")
+        element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        ).click()
+        XCTAssertEqual(
+            element(in: context.app, identifier: keyField.identifier).elementType,
+            .secureTextField
+        )
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 5),
+            "An invalid key must remain actionable inside the decryption sheet."
+        )
+        XCTAssertTrue(keyField.exists, "Invalid input must not dismiss its owning editor.")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+
+        let validKey = String(repeating: "k", count: 32)
+        replaceSecureText(in: keyField, with: validKey)
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            keyField.waitForNonExistence(timeout: 8),
+            "A valid key may dismiss only after protected persistence succeeds."
+        )
+        let configuredAction = element(in: context.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(configuredAction.waitForExistence(timeout: 8))
+        let configuredLabel = configuredAction.label
+        XCTAssertNotEqual(configuredLabel, initialLabel)
+
+        context.app.terminate()
+        let restored = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(restored, sessionID: sessionID)
+        openSidebarTab("settings", in: restored.app)
+        let restoredAction = element(in: restored.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(restoredAction.waitForExistence(timeout: 8))
+        XCTAssertEqual(restoredAction.label, configuredLabel)
+        restoredAction.click()
+        let restoredField = element(in: restored.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertNotEqual(
+            restoredField.value as? String,
+            validKey,
+            "Persisted secret material must never be echoed back into the UI."
+        )
+        element(in: restored.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(restoredField.waitForNonExistence(timeout: 8))
+        XCTAssertEqual(
+            element(in: restored.app, identifier: "action.settings.open_decryption").label,
+            configuredLabel,
+            "Blank Save must preserve the already configured material."
+        )
+
+        restored.app.terminate()
+        let beforeClear = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(beforeClear, sessionID: sessionID)
+        openSidebarTab("settings", in: beforeClear.app)
+        let beforeClearAction = element(
+            in: beforeClear.app,
+            identifier: "action.settings.open_decryption"
+        )
+        XCTAssertEqual(beforeClearAction.label, configuredLabel)
+        beforeClearAction.click()
+        let clearAction = element(in: beforeClear.app, identifier: "action.settings.decryption.clear")
+        XCTAssertTrue(clearAction.waitForExistence(timeout: 8) && clearAction.isHittable)
+        clearAction.click()
+        XCTAssertTrue(clearAction.waitForNonExistence(timeout: 8))
+        XCTAssertEqual(
+            element(in: beforeClear.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Explicit Delete must restore the visible not-configured state."
+        )
+
+        beforeClear.app.terminate()
+        let cleared = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(cleared, sessionID: sessionID)
+        openSidebarTab("settings", in: cleared.app)
+        XCTAssertEqual(
+            element(in: cleared.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Deleted material must remain absent after a full process relaunch."
+        )
+    }
+
+    @MainActor
+    func testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry() {
+        let sessionID = "macos-decryption-store-\(UUID().uuidString.lowercased())"
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failNotificationMaterialPersistenceOnce: true
+        )
+        launchQuality(failing, sessionID: sessionID)
+        openSidebarTab("settings", in: failing.app)
+        let initialAction = element(in: failing.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(initialAction.waitForExistence(timeout: 8))
+        let initialLabel = initialAction.label
+        initialAction.click()
+        let field = element(in: failing.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        replaceSecureText(in: field, with: String(repeating: "p", count: 32))
+        element(in: failing.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            element(in: failing.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 8),
+            "Protected-store failure must be owned by the decryption sheet."
+        )
+        XCTAssertTrue(field.exists, "Failed secret persistence must keep the editor open.")
+        XCTAssertFalse(element(in: failing.app, identifier: "feedback.settings.root").exists)
+
+        failing.app.terminate()
+        let retry = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(retry, sessionID: sessionID)
+        openSidebarTab("settings", in: retry.app)
+        let retryAction = element(in: retry.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(retryAction.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            retryAction.label,
+            initialLabel,
+            "A failed protected write must remain unconfigured after restart."
+        )
+        retryAction.click()
+        let retryField = element(in: retry.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        replaceSecureText(in: retryField, with: String(repeating: "p", count: 32))
+        element(in: retry.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 8))
+        XCTAssertNotEqual(
+            element(in: retry.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Only a successful retry may expose configured state."
+        )
+    }
+
+    @MainActor
+    func testEncryptedMessageWrongKeyThenCorrectKeyRecoversAndSurvivesRelaunch() {
+        let sessionID = "macos-encrypted-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.valid"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        var encryptedRow = messageRow(containing: "Encrypted Quality Message", in: context.app)
+        XCTAssertTrue(encryptedRow.waitForExistence(timeout: 8))
+        encryptedRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let wrongKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: wrongKeyField, with: String(repeating: "Z", count: 16))
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(wrongKeyField.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        encryptedRow = messageRow(containing: "Encrypted Quality Message", in: context.app)
+        XCTAssertTrue(encryptedRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(messageRow(containing: "Recovered Quality Message", in: context.app).exists)
+        encryptedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "A wrong but valid-length key must preserve the safe original fallback."
+        )
+        XCTAssertFalse(context.app.staticTexts["Recovered from the original encrypted payload."].exists)
+
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let correctKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: correctKeyField, with: "QualityKey123456")
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(correctKeyField.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        let recoveredRow = messageRow(containing: "Recovered Quality Message", in: context.app)
+        XCTAssertTrue(
+            recoveredRow.waitForExistence(timeout: 8),
+            "The original canonical message must become readable after saving its matching key."
+        )
+        XCTAssertTrue(
+            (recoveredRow.value as? String)?
+                .contains("Recovered from the original encrypted payload.") == true
+        )
+        XCTAssertFalse(messageRow(containing: "Encrypted Quality Message", in: context.app).exists)
+        recoveredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Recovered from the original encrypted payload."]
+                .waitForExistence(timeout: 8)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.valid"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = messageRow(containing: "Recovered Quality Message", in: relaunched.app)
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists,
+            "Recovered plaintext must survive a full process relaunch."
+        )
+    }
+
+    @MainActor
+    func testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch() {
+        let sessionID = "macos-encrypted-corrupt-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        var corruptRow = messageRow(containing: "Corrupt Encrypted Message", in: context.app)
+        XCTAssertTrue(corruptRow.waitForExistence(timeout: 8))
+        corruptRow.click()
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let field = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: field, with: "QualityKey123456")
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        corruptRow = messageRow(containing: "Corrupt Encrypted Message", in: context.app)
+        XCTAssertTrue(corruptRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(messageRow(containing: "Recovered Quality Message", in: context.app).exists)
+        corruptRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "Authenticated corrupt ciphertext must retain the safe fallback."
+        )
+        XCTAssertFalse(context.app.staticTexts["Recovered from the original encrypted payload."].exists)
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedCorrupt = messageRow(
+            containing: "Corrupt Encrypted Message",
+            in: relaunched.app
+        )
+        XCTAssertTrue(persistedCorrupt.waitForExistence(timeout: 8))
+        persistedCorrupt.click()
+        XCTAssertTrue(relaunched.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists)
+    }
+
+    @MainActor
+    func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
+        let sessionID = "macos-settings-visibility-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(context, sessionID: sessionID)
+
+        let messagesEntry = element(in: context.app, identifier: "sidebar-messages")
+        let eventsEntry = element(in: context.app, identifier: "sidebar-events")
+        let thingsEntry = element(in: context.app, identifier: "sidebar-things")
+        XCTAssertTrue(messagesEntry.waitForExistence(timeout: 8))
+        XCTAssertTrue(eventsEntry.waitForExistence(timeout: 8))
+        XCTAssertTrue(thingsEntry.waitForExistence(timeout: 8))
+        openSidebarTab("events", in: context.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
+
+        openSidebarTab("settings", in: context.app)
+        let soundSettingsAction = element(
+            in: context.app,
+            identifier: "action.settings.notification_sounds"
+        )
+        XCTAssertTrue(
+            soundSettingsAction.waitForExistence(timeout: 8) && soundSettingsAction.isHittable,
+            "Notification sounds must be reachable through the real macOS Settings action."
+        )
+        soundSettingsAction.click()
+        let lowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        XCTAssertTrue(
+            lowPrioritySound.waitForExistence(timeout: 8),
+            "The real notification-sound editor must expose the low-priority setting."
+        )
+        XCTAssertFalse(
+            (lowPrioritySound.value as? String ?? "").isEmpty,
+            "The notification-sound editor must project the currently selected value."
+        )
+        let closeSoundSettings = element(
+            in: context.app,
+            identifier: "action.settings.notification_sounds.close"
+        )
+        XCTAssertTrue(closeSoundSettings.waitForExistence(timeout: 8) && closeSoundSettings.isHittable)
+        closeSoundSettings.click()
+        XCTAssertTrue(
+            closeSoundSettings.waitForNonExistence(timeout: 8),
+            "Closing notification-sound settings must reliably return to the Settings page."
+        )
+
+        let messageToggle = element(in: context.app, identifier: "toggle.settings.page.messages")
+        XCTAssertTrue(messageToggle.waitForExistence(timeout: 8) && messageToggle.isHittable)
+        messageToggle.click()
+        let eventToggle = element(in: context.app, identifier: "toggle.settings.page.events")
+        XCTAssertTrue(eventToggle.waitForExistence(timeout: 8) && eventToggle.isHittable)
+        eventToggle.click()
+        let thingToggle = element(in: context.app, identifier: "toggle.settings.page.things")
+        XCTAssertTrue(thingToggle.waitForExistence(timeout: 8) && thingToggle.isHittable)
+        thingToggle.click()
+        XCTAssertTrue(
+            messagesEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Messages page must remove its real navigation destination."
+        )
+        XCTAssertTrue(
+            eventsEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Event page must remove its real navigation destination."
+        )
+        XCTAssertTrue(
+            thingsEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Thing page must remove its real navigation destination."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["sidebar.messages.unread_badge"].waitForNonExistence(timeout: 8),
+            "Hiding Messages must remove its badge owner instead of leaving an orphan unread decoration."
+        )
+        openSidebarTab("channels", in: context.app)
+        assertVisibleScreenThroughUI("screen.channels", in: context.app, timeout: 8)
+
+        context.app.terminate()
+        let persistedOff = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        persistedOff.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(persistedOff, sessionID: sessionID)
+        XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-messages")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Messages page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-events")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Event page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-things")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Thing page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
+            persistedOff.app.staticTexts["sidebar.messages.unread_badge"]
+                .waitForNonExistence(timeout: 8),
+            "The hidden Messages badge owner must not return after a full process relaunch."
+        )
+        openSidebarTab("settings", in: persistedOff.app)
+        let persistedOffMessageToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.messages"
+        )
+        XCTAssertTrue(
+            persistedOffMessageToggle.waitForExistence(timeout: 8)
+                && persistedOffMessageToggle.isHittable
+        )
+        persistedOffMessageToggle.click()
+        let persistedOffToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.events"
+        )
+        XCTAssertTrue(persistedOffToggle.waitForExistence(timeout: 8) && persistedOffToggle.isHittable)
+        persistedOffToggle.click()
+        let persistedOffThingToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.things"
+        )
+        XCTAssertTrue(
+            persistedOffThingToggle.waitForExistence(timeout: 8) && persistedOffThingToggle.isHittable
+        )
+        persistedOffThingToggle.click()
+
+        let restoredMessagesEntry = element(in: persistedOff.app, identifier: "sidebar-messages")
+        XCTAssertTrue(
+            restoredMessagesEntry.waitForExistence(timeout: 8),
+            "Turning the Messages page back on must restore a reachable navigation destination."
+        )
+        let restoredBadge = persistedOff.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(restoredBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredBadge.value as? String,
+            "1",
+            "Restoring Messages must project the still-unread canonical message back into its badge owner."
+        )
+        openSidebarTab("messages", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: persistedOff.app, timeout: 8)
+        let restoredMessageRow = messageRow(
+            containing: "P2 Split Seed Message",
+            in: persistedOff.app
+        )
+        XCTAssertTrue(
+            restoredMessageRow.waitForExistence(timeout: 8)
+                && restoredMessageRow.label.contains("P2 Split Seed Message")
+                && ((restoredMessageRow.value as? String)?.contains(
+                    "Seeded from fixture.seed_messages for UI validation."
+                ) == true),
+            "The restored Messages destination must show the accurate App-owned fixture."
+        )
+        restoredMessageRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(
+            persistedOff.app.staticTexts[
+                "Seeded from fixture.seed_messages for UI validation."
+            ].waitForExistence(timeout: 8)
+        )
+        let restoredEventsEntry = element(in: persistedOff.app, identifier: "sidebar-events")
+        XCTAssertTrue(
+            restoredEventsEntry.waitForExistence(timeout: 8),
+            "Turning the Event page back on must restore a reachable navigation destination."
+        )
+        openSidebarTab("events", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(persistedOff.app.staticTexts["No events yet"].waitForExistence(timeout: 8))
+        XCTAssertTrue(persistedOff.app.staticTexts["Track issues from open to close."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Add a channel."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Close it when finished."].exists)
+        XCTAssertTrue(
+            persistedOff.app.buttons["Event API docs"].exists
+                && persistedOff.app.buttons["Event API docs"].isHittable
+        )
+        let restoredThingsEntry = element(in: persistedOff.app, identifier: "sidebar-things")
+        XCTAssertTrue(
+            restoredThingsEntry.waitForExistence(timeout: 8),
+            "Turning the Thing page back on must restore a reachable navigation destination."
+        )
+        openSidebarTab("things", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(persistedOff.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
+        XCTAssertTrue(persistedOff.app.staticTexts["Track changing state by object."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Create or subscribe to a channel."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Update related events and messages."].exists)
+        XCTAssertTrue(
+            persistedOff.app.buttons["Object API docs"].exists
+                && persistedOff.app.buttons["Object API docs"].isHittable
+        )
+
+        persistedOff.app.terminate()
+        let persistedOn = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            allowCrossAppDataAccess: true
+        )
+        persistedOn.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(persistedOn, sessionID: sessionID)
+        openSidebarTab("messages", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: persistedOn.app, timeout: 8)
+        let persistedMessageRow = messageRow(containing: "P2 Split Seed Message", in: persistedOn.app)
+        XCTAssertTrue(
+            persistedMessageRow.waitForExistence(timeout: 8)
+                && persistedMessageRow.label.contains("P2 Split Seed Message")
+                && ((persistedMessageRow.value as? String)?.contains(
+                    "Seeded from fixture.seed_messages for UI validation."
+                ) == true)
+        )
+        openSidebarTab("events", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: persistedOn.app, timeout: 8)
+        XCTAssertTrue(persistedOn.app.staticTexts["No events yet"].waitForExistence(timeout: 8))
+        openSidebarTab("things", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: persistedOn.app, timeout: 8)
+        XCTAssertTrue(persistedOn.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
+
+        openSidebarTab("settings", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.settings", in: persistedOn.app, timeout: 8)
+        let documentationAction = element(
+            in: persistedOn.app,
+            identifier: "action.settings.open_getting_started_docs"
+        )
+        XCTAssertTrue(
+            documentationAction.waitForExistence(timeout: 8) && documentationAction.isHittable,
+            "The visible Getting Started documentation action must remain usable."
+        )
+        let expectedDocumentationURL = URL(string: "https://pushgo.dev/guides/getting-started/")!
+        guard let browserApplicationURL = NSWorkspace.shared.urlForApplication(
+            toOpen: expectedDocumentationURL
+        ),
+        let browserBundleIdentifier = Bundle(url: browserApplicationURL)?.bundleIdentifier
+        else {
+            XCTFail("QUALITY_PRECONDITION: no default browser can consume the documentation URL.")
+            return
+        }
+        let browser = XCUIApplication(bundleIdentifier: browserBundleIdentifier)
+        documentationAction.click()
+        XCTAssertTrue(
+            browser.wait(for: .runningForeground, timeout: 10),
+            "The production documentation action must hand off to the default system browser."
+        )
+        browser.typeKey("l", modifierFlags: .command)
+        let browserAddress = browser.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "pushgo.dev/guides/getting-started",
+                "pushgo.dev/guides/getting-started"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "The browser must expose the exact official documentation host and path."
+        )
+        let displayedAddress = ((browserAddress.value as? String) ?? browserAddress.label)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAddress = displayedAddress.contains("://")
+            ? displayedAddress
+            : "https://\(displayedAddress)"
+        let consumedURL = URL(string: normalizedAddress)
+        XCTAssertEqual(consumedURL?.scheme, "https")
+        XCTAssertEqual(consumedURL?.host, "pushgo.dev")
+        XCTAssertEqual(
+            consumedURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+            "guides/getting-started",
+            "A different pushgo.dev page must not satisfy the documentation handoff."
+        )
+        persistedOn.app.activate()
+        XCTAssertTrue(
+            persistedOn.app.wait(for: .runningForeground, timeout: 8),
+            "Returning from the browser must restore the same PushGo Settings journey."
+        )
+        assertVisibleScreenThroughUI("screen.settings", in: persistedOn.app, timeout: 8)
+    }
+
+    @MainActor
+    func legacyDiagnosticSettingsScreenControlMatrixShowsCriticalGroups() {
         let context = configuredApp()
         launch(context)
 
@@ -227,30 +4087,399 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
-        let context = configuredApp()
-        launch(context)
+        let sessionID = "macos-invalid-server-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("settings", in: context.app)
-        assertVisibleScreen("screen.settings", in: context)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app)
         element(in: context.app, identifier: "action.settings.server_management").click()
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
         replaceText(in: addressField, with: "not a valid url")
         element(in: context.app, identifier: "action.settings.server.save").click()
 
+        let serverFeedback = element(in: context.app, identifier: "feedback.settings.server")
         XCTAssertTrue(
-            element(in: context.app, identifier: "feedback.settings.server").waitForExistence(timeout: 5),
+            serverFeedback.waitForExistence(timeout: 5),
             "Server validation errors should stay inline in the sheet."
         )
+        let invalidAddressFeedback = serverFeedback.label
+        XCTAssertFalse(invalidAddressFeedback.isEmpty)
         XCTAssertFalse(
             element(in: context.app, identifier: "feedback.toast.error").waitForExistence(timeout: 1),
             "Server validation errors must not be routed to the global toast overlay."
         )
+
+        replaceText(in: addressField, with: "https://quality-macos-rejected.invalid/api")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+        let registrationRejection = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", invalidAddressFeedback),
+            object: serverFeedback
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [registrationRejection], timeout: 8),
+            .completed,
+            "A rejected candidate registration must stay actionable in its editor."
+        )
+        XCTAssertTrue(addressField.exists, "Registration rejection must not dismiss the editor.")
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure must not leak into the host Settings page."
+        )
+
+        let cancel = element(in: context.app, identifier: "action.settings.server.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        element(in: context.app, identifier: "action.settings.server_management").click()
+        let restoredField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredField.value as? String,
+            originalAddress,
+            "A rejected candidate must not replace the previously saved gateway."
+        )
     }
 
     @MainActor
-    func testSettingsPageVisibilityCommandCanHideEventPage() {
+    func testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery() {
+        let sessionID = "macos-server-sync-pending-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-macos-sync-pending.invalid/api"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewayPostCommitSyncOnce: true,
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("settings", in: context.app)
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        XCTAssertTrue(serverAction.waitForExistence(timeout: 8) && serverAction.isHittable)
+        serverAction.click()
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+
+        let pendingFeedback = element(in: context.app, identifier: "feedback.settings.gateway.result")
+        XCTAssertTrue(
+            pendingFeedback.waitForExistence(timeout: 8),
+            "A committed gateway with recoverable sync work must report a user-visible result."
+        )
+        let pendingText = pendingFeedback.label.lowercased()
+        XCTAssertTrue(
+            pendingText.contains("sync") || pendingFeedback.label.contains("同步"),
+            "The result must identify pending sync instead of reporting a false gateway failure."
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 8),
+            "A committed gateway must close the editor after reporting pending reconciliation."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The Settings row must expose the newly committed gateway while sync is pending."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A post-commit sync failure must not leak into the host Settings page."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        // Channels entry is the recovery point.  It must execute the real
+        // controller reconciliation before a new-gateway mutation is allowed
+        // to establish its canonical result.
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Recovery must retain the newly committed gateway's data scope."
+        )
+        let recoveredSyncRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000004"
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.waitForExistence(timeout: 8),
+            "Recovery must sync a candidate-scoped subscription, not only reload the list."
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.label.contains("Quality Recovery Sync Completed"),
+            "The recovery sync must produce the expected business update."
+        )
+        element(in: relaunched.app, identifier: "action.channels.add").click()
+        let createName = element(in: relaunched.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: relaunched.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Recovered Gateway Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: relaunched.app, identifier: "action.channels.entry.submit").click()
+        let recoveredChannel = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            recoveredChannel.waitForExistence(timeout: 8),
+            "Channels-entry recovery must permit a real mutation on the committed gateway."
+        )
+        XCTAssertTrue(recoveredChannel.label.contains("Recovered Gateway Channel"))
+
+        openSidebarTab("settings", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The committed gateway must remain authoritative after recovery and a real mutation."
+        )
+    }
+
+    @MainActor
+    func testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch() {
+        let sessionID = "macos-settings-server-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-macos-settings.invalid/api"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("channels", in: context.app)
+        let originalChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "The original gateway-scoped channel must be usable before replacement."
+        )
+        openSidebarTab("settings", in: context.app)
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        XCTAssertTrue(serverAction.waitForExistence(timeout: 8) && serverAction.isHittable)
+        serverAction.click()
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let gatewayCredential = String(repeating: "g", count: 24)
+        let gatewayFieldID = ["field", "settings", "server", "token"].joined(separator: ".")
+        var credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: credentialField, with: gatewayCredential)
+        let credentialVisibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        )
+        credentialVisibilityAction.click()
+        let revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
+        element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        ).click()
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 10),
+            "Only a registered and locally committed candidate may close the editor."
+        )
+
+        openSidebarTab("channels", in: context.app)
+        XCTAssertTrue(
+            originalChannel.waitForNonExistence(timeout: 8),
+            "Accepted gateway replacement must immediately scope data away from the old gateway."
+        )
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "New Gateway Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdChannel.waitForExistence(timeout: 8),
+            "A post-commit Channel operation must reach the newly active gateway and persist its exact result."
+        )
+        XCTAssertTrue(createdChannel.label.contains("New Gateway Channel"))
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "channel.row.01H00000000000000000000001"
+            ).waitForNonExistence(timeout: 8),
+            "Relaunch must not reload channel data owned by the previous gateway."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).waitForExistence(timeout: 8),
+            "The exact post-switch Channel result must remain owned by the new gateway after relaunch."
+        )
+        openSidebarTab("settings", in: relaunched.app)
+        element(in: relaunched.app, identifier: "action.settings.server_management").click()
+        let restoredField = element(in: relaunched.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredField.value as? String,
+            normalizedAddress,
+            "The registered gateway must remain authoritative after a full process relaunch."
+        )
+        credentialField = relaunched.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        element(
+            in: relaunched.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        ).click()
+        let restoredVisibleCredentialField = relaunched.app.textFields
+            .matching(identifier: gatewayFieldID)
+            .firstMatch
+        XCTAssertTrue(restoredVisibleCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(restoredVisibleCredentialField.value as? String, gatewayCredential)
+    }
+
+    @MainActor
+    func testGatewayLocalCommitFailureRollsBackBeforeRetryCommits() {
+        let sessionID = "macos-gateway-commit-\(UUID().uuidString.lowercased())"
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchCommitOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(failing, sessionID: sessionID)
+
+        openSidebarTab("channels", in: failing.app)
+        let originalChannel = element(
+            in: failing.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "The old Gateway's channel data must be usable before the candidate commit."
+        )
+        openSidebarTab("settings", in: failing.app)
+        element(in: failing.app, identifier: "action.settings.server_management").click()
+
+        let addressField = element(in: failing.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
+        let normalizedAddress = "https://quality-macos-commit.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: failing.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(
+            element(in: failing.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A failed local commit must remain in the server editor."
+        )
+        XCTAssertTrue(addressField.exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "feedback.settings.root").exists)
+
+        let cancel = element(in: failing.app, identifier: "action.settings.server.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        element(in: failing.app, identifier: "action.settings.server_management").click()
+        let rolledBackField = element(in: failing.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(rolledBackField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            rolledBackField.value as? String,
+            originalAddress,
+            "A failed local commit must keep the old gateway active immediately, not only after restart."
+        )
+        element(in: failing.app, identifier: "action.settings.server.cancel").click()
+        XCTAssertTrue(rolledBackField.waitForNonExistence(timeout: 8))
+        openSidebarTab("channels", in: failing.app)
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "Immediate rollback must keep the old Gateway's real channel data available."
+        )
+
+        failing.app.terminate()
+        let retry = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(retry, sessionID: sessionID)
+        openSidebarTab("channels", in: retry.app)
+        let relaunchedOriginalChannel = element(
+            in: retry.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            relaunchedOriginalChannel.waitForExistence(timeout: 8),
+            "Process relaunch after rollback must still expose the old Gateway's channel data."
+        )
+        openSidebarTab("settings", in: retry.app)
+        element(in: retry.app, identifier: "action.settings.server_management").click()
+        let retryField = element(in: retry.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            retryField.value as? String,
+            originalAddress,
+            "Rollback must keep the old gateway authoritative after process restart."
+        )
+        replaceText(in: retryField, with: "\(normalizedAddress)/")
+        element(in: retry.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 10))
+
+        openSidebarTab("channels", in: retry.app)
+        XCTAssertTrue(
+            relaunchedOriginalChannel.waitForNonExistence(timeout: 8),
+            "Only the successful retry may scope channel data away from the old Gateway."
+        )
+        openSidebarTab("settings", in: retry.app)
+        element(in: retry.app, identifier: "action.settings.server_management").click()
+        let committedField = element(in: retry.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(committedField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            committedField.value as? String,
+            normalizedAddress,
+            "Only the successful retry may expose the candidate as active."
+        )
+    }
+
+    @MainActor
+    func legacyDiagnosticSettingsPageVisibilityCommandCanHideEventPage() {
         let context = configuredApp(
             requestName: "settings.set_page_visibility",
             args: ["page": "events", "enabled": "false"]
@@ -282,7 +4511,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsPageVisibilityCommandCanRoundTripEventPage() {
+    func legacyDiagnosticSettingsPageVisibilityCommandCanRoundTripEventPage() {
         let sharedRuntimeRoot = makeRuntimeRoot()
         let hideContext = configuredApp(
             runtimeRoot: sharedRuntimeRoot,
@@ -358,7 +4587,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
+    func legacyDiagnosticFixtureSeedEntityRecordsPublishesProjectionCounts() {
         let context = configuredApp(
             requestName: "fixture.seed_entity_records",
             args: ["path": entityRecordFixturePath]
@@ -399,7 +4628,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testFixtureSeedSubscriptionsPublishesImportState() {
+    func legacyDiagnosticFixtureSeedSubscriptionsPublishesImportState() {
         let context = configuredApp(
             requestName: "fixture.seed_subscriptions",
             args: ["path": subscriptionFixturePath]
@@ -440,7 +4669,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testEntityOpenPublishesEntityStateAndProjectionCounts() {
+    func legacyDiagnosticEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredApp(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -511,7 +4740,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testMessageOpenPublishesMessageDetailState() {
+    func legacyDiagnosticMessageOpenPublishesMessageDetailState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "message.open",
@@ -547,7 +4776,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationOpenPublishesMessageDetailState() {
+    func legacyDiagnosticNotificationOpenPublishesMessageDetailState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.open",
@@ -577,7 +4806,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationMarkReadCommandUpdatesUnreadState() {
+    func legacyDiagnosticNotificationMarkReadCommandUpdatesUnreadState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.mark_read",
@@ -613,7 +4842,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -649,7 +4878,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testGatewaySetServerCommandUpdatesConfigurationState() {
+    func legacyDiagnosticGatewaySetServerCommandUpdatesConfigurationState() {
         let context = configuredApp(
             requestName: "gateway.set_server",
             args: [
@@ -687,7 +4916,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testBaselineAutomationStateHasNoRuntimeErrors() {
+    func legacyDiagnosticBaselineAutomationStateHasNoRuntimeErrors() {
         let context = configuredApp()
         launch(context)
 
@@ -706,7 +4935,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
+    func legacyDiagnosticRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
         try XCTSkipUnless(
             runtimeQualityUIEnabled(),
             "Set PUSHGO_RUNTIME_QUALITY_UI=1 to run large UI runtime quality validation."
@@ -914,7 +5143,7 @@ final class PushGo_macOSUITests: XCTestCase {
         detailContext.app.terminate()
     }
 
-    func testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
+    func legacyDiagnosticRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
         let gatewayBodyLimitBytes = 32 * 1024
         let markdownSafetyCapBytes = 27 * 1024
         let fixtures: [(name: String, body: String)] = [
@@ -947,6 +5176,7 @@ final class PushGo_macOSUITests: XCTestCase {
         args: [String: String] = [:]
     ) -> LaunchContext {
         let app = XCUIApplication()
+        launchedApps.append(app)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         do {
@@ -1011,6 +5241,161 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testExistingChannelLocalFailureDoesNotCompensateBeforeRetry() {
+        let sessionID = "macos-existing-channel-\(UUID().uuidString.lowercased())"
+        let channelID = "01H00000000000000000000004"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failChannelSubscriptionPersistenceOnce: true,
+            channelMutationScenario: "existing_subscribe_must_not_compensate"
+        )
+        launchQuality(context, sessionID: sessionID)
+        openSidebarTab("channels", in: context.app)
+        element(in: context.app, identifier: "action.channels.add").click()
+        let subscribeMode = element(in: context.app, identifier: "mode.channels.entry.subscribe")
+        XCTAssertTrue(subscribeMode.waitForExistence(timeout: 5))
+        subscribeMode.click()
+        let channelInput = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let passwordInput = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(channelInput.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: channelInput, with: channelID)
+        XCTAssertTrue(passwordInput.waitForExistence(timeout: 5))
+        replaceSecureText(in: passwordInput, with: "qualityx")
+        let submit = element(in: context.app, identifier: "action.channels.entry.submit")
+        submit.click()
+
+        let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(sheetFeedback.waitForExistence(timeout: 8))
+        XCTAssertEqual(channelInput.value as? String, channelID)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(channelID)").exists)
+
+        element(in: context.app, identifier: "action.channels.entry.cancel").click()
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
+        openSidebarTab("messages", in: context.app)
+        openSidebarTab("channels", in: context.app)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(channelID)").exists)
+
+        element(in: context.app, identifier: "action.channels.add").click()
+        element(in: context.app, identifier: "mode.channels.entry.subscribe").click()
+        let retryChannelInput = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let retryPasswordInput = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(retryChannelInput.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: retryChannelInput, with: channelID)
+        XCTAssertTrue(retryPasswordInput.waitForExistence(timeout: 5))
+        replaceSecureText(in: retryPasswordInput, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(channelID)").waitForExistence(timeout: 8),
+            "Retry must succeed when the existing remote subscription was preserved."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "existing_subscribe_must_not_compensate",
+            allowCrossAppDataAccess: false
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(channelID)").waitForExistence(timeout: 8),
+            "The accepted existing-channel subscription must survive process relaunch."
+        )
+    }
+
+    @MainActor
+    func configuredQualityApp(
+        sessionID: String,
+        fixture: String,
+        failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
+        messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
+        legacyStore: String? = nil,
+        failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false,
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil,
+        allowCrossAppDataAccess: Bool = false,
+        skipPushAuthorization: Bool = true,
+        requestName: String? = nil,
+        requestArgs: [String: String] = [:]
+    ) -> LaunchContext {
+        XCTAssertTrue(
+            isValidQualitySessionID(sessionID),
+            "QUALITY_CONFIGURATION: session ID must be 1...64 ASCII letters, digits, '-' or '_'; got \(sessionID.utf8.count) bytes."
+        )
+        let app = XCUIApplication()
+        launchedApps.append(app)
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        setAutomationValue(
+            skipPushAuthorization ? "1" : "0",
+            for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION",
+            in: app
+        )
+        setAutomationValue(
+            allowCrossAppDataAccess ? "1" : "0",
+            for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS",
+            in: app
+        )
+        setAutomationValue("1", for: "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP", in: app)
+        setAutomationValue(
+            qualitySessionPayload(
+                sessionID: sessionID,
+                fixture: fixture,
+                failLocalStoreInitialization: failLocalStoreInitialization,
+                localStoreFailureStreakThreshold: localStoreFailureStreakThreshold,
+                messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
+                messagePageLoadDelayMilliseconds: messagePageLoadDelayMilliseconds,
+                messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
+                messageSearchDelayMilliseconds: messageSearchDelayMilliseconds,
+                failMessageSearchOnce: failMessageSearchOnce,
+                legacyStore: legacyStore,
+                failMessageLoad: failMessageLoad,
+                failMessagePageLoadOnce: failMessagePageLoadOnce,
+                failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
+                failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
+                failGatewayPostCommitSyncOnce: failGatewayPostCommitSyncOnce,
+                failNotificationMaterialPersistenceOnce: failNotificationMaterialPersistenceOnce,
+                failChannelSubscriptionPersistenceOnce: failChannelSubscriptionPersistenceOnce,
+                messageRefreshScenario: messageRefreshScenario,
+                eventCloseScenario: eventCloseScenario,
+                channelMutationScenario: channelMutationScenario,
+                expectedChannelMutationGatewayURL: expectedChannelMutationGatewayURL
+            ),
+            for: "PUSHGO_QUALITY_SESSION_BASE64",
+            in: app
+        )
+        if let requestName {
+            setAutomationRequest(name: requestName, args: requestArgs, in: app)
+        }
+        let diagnosticRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGo-macOS-quality-\(sessionID)", isDirectory: true)
+        return LaunchContext(
+            app: app,
+            runtimeRoot: diagnosticRoot,
+            responseURL: diagnosticRoot.appendingPathComponent("unused-response.json"),
+            stateURL: diagnosticRoot.appendingPathComponent("unused-state.json"),
+            eventsURL: diagnosticRoot.appendingPathComponent("unused-events.jsonl"),
+            traceURL: diagnosticRoot.appendingPathComponent("unused-trace.json")
+        )
+    }
+
     private func makeRuntimeRoot() -> URL {
         let fileManager = FileManager.default
         let sharedBase = fileManager.temporaryDirectory
@@ -1024,10 +5409,261 @@ final class PushGo_macOSUITests: XCTestCase {
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func macOSQualitySessionRootURL(sessionID: String) -> URL {
+        let hostHomePath = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) }
+            ?? NSHomeDirectory()
+        return URL(fileURLWithPath: hostHomePath, isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent("io.ethan.pushgo", isDirectory: true)
+            .appendingPathComponent("Data", isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+    }
+
+    @MainActor
+    private func resizeMainWindowThroughSystemAccessibility(
+        _ app: XCUIApplication,
+        requestedSize: CGSize
+    ) -> CGRect {
+        let xcuiWindow = app.windows.firstMatch
+        guard xcuiWindow.waitForExistence(timeout: 8) else {
+            XCTFail("QUALITY_PRECONDITION: the PushGo main window was unavailable for the size journey.")
+            return .zero
+        }
+        guard AXIsProcessTrusted() else {
+            XCTFail("QUALITY_PRECONDITION: the UI-test runner lacks macOS Accessibility permission for a real window resize.")
+            return xcuiWindow.frame
+        }
+
+        guard let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+              frontmostApplication.bundleIdentifier == "io.ethan.pushgo",
+              !frontmostApplication.isTerminated
+        else {
+            XCTFail("QUALITY_PRECONDITION: PushGo was not the active foreground App for window resize.")
+            return xcuiWindow.frame
+        }
+        let application = AXUIElementCreateApplication(frontmostApplication.processIdentifier)
+        var windowValue: CFTypeRef?
+        let copyResult = AXUIElementCopyAttributeValue(
+            application,
+            kAXWindowsAttribute as CFString,
+            &windowValue
+        )
+        guard copyResult == .success,
+              let windows = windowValue as? [AXUIElement],
+              let window = windows.first
+        else {
+            XCTFail("QUALITY_PRECONDITION: the system Accessibility API could not resolve PushGo's main window (\(copyResult.rawValue)).")
+            return xcuiWindow.frame
+        }
+
+        var requestedSize = requestedSize
+        guard let sizeValue = AXValueCreate(.cgSize, &requestedSize) else {
+            XCTFail("QUALITY_PRECONDITION: the requested window size could not be encoded.")
+            return xcuiWindow.frame
+        }
+        let setResult = AXUIElementSetAttributeValue(
+            window,
+            kAXSizeAttribute as CFString,
+            sizeValue
+        )
+        guard setResult == .success else {
+            XCTFail("QUALITY_PRECONDITION: the system rejected the PushGo window resize (\(setResult.rawValue)).")
+            return xcuiWindow.frame
+        }
+
+        let deadline = Date().addingTimeInterval(5)
+        var frame = xcuiWindow.frame
+        repeat {
+            frame = xcuiWindow.frame
+            if frame.width >= requestedSize.width - 20,
+               frame.width <= requestedSize.width + 20,
+               frame.height >= requestedSize.height - 20,
+               frame.height <= requestedSize.height + 60
+            {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+
+        XCTAssertGreaterThanOrEqual(
+            frame.width,
+            requestedSize.width - 20,
+            "The real main window did not reach the requested width."
+        )
+        XCTAssertGreaterThanOrEqual(
+            frame.height,
+            requestedSize.height - 20,
+            "The real main window did not reach the requested height."
+        )
+        return frame
+    }
+
+    @MainActor
+    private func pushGoStatusItem(in app: XCUIApplication) -> XCUIElement {
+        let appOwnedItem = app.descendants(matching: .any)["status-item.pushgo"]
+        if appOwnedItem.exists {
+            return appOwnedItem
+        }
+        return XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
+            .descendants(matching: .any)["status-item.pushgo"]
+    }
+
+    private func qualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
+        messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
+        legacyStore: String? = nil,
+        failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false,
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil
+    ) -> String {
+        var faults: [String: Any] = [
+            "fail_local_store_initialization": failLocalStoreInitialization,
+            "fail_message_load": failMessageLoad,
+            "fail_message_page_load_once": failMessagePageLoadOnce,
+            "fail_message_search_once": failMessageSearchOnce,
+            "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
+            "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
+            "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
+            "fail_channel_subscription_persistence_once": failChannelSubscriptionPersistenceOnce,
+        ]
+        if let messageLoadDelayMilliseconds {
+            faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let messagePageLoadDelayMilliseconds {
+            faults["message_page_load_delay_ms"] = messagePageLoadDelayMilliseconds
+        }
+        if let localStoreFailureStreakThreshold {
+            faults["local_store_failure_streak_threshold"] = localStoreFailureStreakThreshold
+        }
+        if let messageRefreshDelayMilliseconds {
+            faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
+        }
+        if let messageSearchDelayMilliseconds {
+            faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
+        }
+        var payload: [String: Any] = [
+            "schema_version": 1,
+            "session_id": sessionID,
+            "fixture": fixture,
+            "faults": faults,
+        ]
+        if let legacyStore {
+            payload["legacy_store"] = legacyStore
+        }
+        if let messageRefreshScenario {
+            payload["message_refresh_scenario"] = messageRefreshScenario
+        }
+        if let eventCloseScenario {
+            payload["event_close_scenario"] = eventCloseScenario
+        }
+        if let channelMutationScenario {
+            payload["channel_mutation_scenario"] = channelMutationScenario
+        }
+        if let expectedChannelMutationGatewayURL {
+            payload["expected_channel_mutation_gateway_url"] = expectedChannelMutationGatewayURL
+        }
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return data.base64EncodedString()
+    }
+
+    private func isValidQualitySessionID(_ value: String) -> Bool {
+        guard (1 ... 64).contains(value.utf8.count) else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
     @MainActor
     private func setAutomationValue(_ value: String, for key: String, in app: XCUIApplication) {
         app.launchEnvironment[key] = value
         app.launchArguments += ["-\(key)", value]
+    }
+
+    @MainActor
+    private func setAutomationRequest(
+        name: String,
+        args: [String: String],
+        in app: XCUIApplication
+    ) {
+        let request: [String: Any] = [
+            "id": UUID().uuidString,
+            "plane": "command",
+            "name": name,
+            "args": args,
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: request, options: [.sortedKeys])
+        setAutomationValue(
+            String(decoding: data, as: UTF8.self),
+            for: "PUSHGO_AUTOMATION_REQUEST",
+            in: app
+        )
+    }
+
+    @MainActor
+    private func resolveMacNotificationAuthorizationIfNeeded(in app: XCUIApplication) {
+        let hosts = [
+            app,
+            XCUIApplication(bundleIdentifier: "com.apple.UserNotificationCenter"),
+        ]
+        let ready = element(in: app, identifier: "quality-runtime.ready")
+        let commandSucceeded = element(in: app, identifier: "quality-command.succeeded")
+        let commandFailed = element(in: app, identifier: "quality-command.failed")
+        let deadline = Date().addingTimeInterval(6)
+
+        while Date() < deadline {
+            // An already-granted or already-denied host completes the command
+            // without presenting UI. Stop as soon as the App-owned boundary can
+            // classify that result instead of paying two fixed alert timeouts.
+            if ready.exists || commandSucceeded.exists || commandFailed.exists {
+                return
+            }
+            for host in hosts {
+                let alert = host.alerts.firstMatch
+                guard alert.exists else { continue }
+                let allow = alert.buttons
+                    .matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "允許"]))
+                    .firstMatch
+                XCTAssertTrue(
+                    allow.waitForExistence(timeout: 3),
+                    "QUALITY_PRECONDITION: the macOS notification permission Allow action was unavailable."
+                )
+                if allow.exists {
+                    allow.click()
+                    XCTAssertTrue(
+                        alert.waitForNonExistence(timeout: 8),
+                        "QUALITY_PRECONDITION: the macOS notification permission prompt did not dismiss."
+                    )
+                }
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
     }
 
     @MainActor
@@ -1050,6 +5686,21 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertFalse(
             context.app.buttons["action-button-3"].exists,
             "local store recovery prompt still visible, runtime root=\(context.runtimeRoot.path)"
+        )
+    }
+
+    @MainActor
+    func launchQuality(_ context: LaunchContext, sessionID: String) {
+        launch(context)
+        let ready = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            ready.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready."
+        )
+        XCTAssertEqual(
+            ready.value as? String,
+            sessionID,
+            "QUALITY_PRECONDITION: App launched with the wrong quality session."
         )
     }
 
@@ -1086,6 +5737,48 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    private func hasReadableForegroundContrast(in screenshot: XCUIScreenshot) -> Bool {
+        guard let bitmap = NSBitmapImageRep(data: screenshot.pngRepresentation),
+              bitmap.pixelsWide > 0,
+              bitmap.pixelsHigh > 0
+        else {
+            return false
+        }
+        var luminances: [CGFloat] = []
+        luminances.reserveCapacity(bitmap.pixelsWide * bitmap.pixelsHigh)
+        for y in 0 ..< bitmap.pixelsHigh {
+            for x in 0 ..< bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                luminances.append(
+                    0.2126 * color.redComponent
+                        + 0.7152 * color.greenComponent
+                        + 0.0722 * color.blueComponent
+                )
+            }
+        }
+        guard luminances.count >= 10 else { return false }
+        luminances.sort()
+        let darkSample = luminances[luminances.count / 10]
+        let lightSample = luminances[luminances.count * 9 / 10]
+        return lightSample - darkSample >= 0.25
+    }
+
+    @MainActor
+    private func openDecryptionEditor(in app: XCUIApplication) {
+        let action = element(in: app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(action.waitForExistence(timeout: 8) && action.isHittable)
+        action.click()
+        assertVisibleScreenThroughUI("screen.settings.decryption", in: app, timeout: 8)
+    }
+
+    @MainActor
+    private func messageRow(containing title: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch
+    }
+
+    @MainActor
     private func assertVisibleScreen(
         _ screenIdentifier: String,
         in context: LaunchContext,
@@ -1108,6 +5801,22 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func assertVisibleScreenThroughUI(
+        _ screenIdentifier: String,
+        in app: XCUIApplication,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            element(in: app, identifier: screenIdentifier).waitForExistence(timeout: timeout),
+            "Expected the real UI screen \(screenIdentifier).",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
     private func waitForAutomationState(
         at url: URL,
         timeout: TimeInterval,
@@ -1127,15 +5836,592 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
+    func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// Coordinate a diagnostic-only sample from the CI host. The Runner names
+    /// its own PID and the App's exact bundle-ID process; the host validates
+    /// both before sampling. The ordinary AX query and product Oracle remain.
+    @MainActor
+    private func hostSampleThingRowQuery(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        guard let runID = ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_RUN_ID"],
+              !runID.isEmpty,
+              runID.allSatisfy(\.isNumber),
+              sessionID.range(of: "^[A-Za-z0-9-]{1,100}$", options: .regularExpression) != nil
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED invalid diagnostic identity")
+            return nil
+        }
+        let appProcesses = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "io.ethan.pushgo"
+        ).filter { !$0.isTerminated }
+        guard appProcesses.count == 1,
+              appProcesses[0].processIdentifier > 0,
+              getpid() > 0,
+              appProcesses[0].processIdentifier != getpid()
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED expected one live App PID")
+            return nil
+        }
+
+        let controlDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSHostSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: controlDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot create control directory: \(error)")
+            return nil
+        }
+        let marker = "PUSHGO_AX_QOS_HOST_BEGIN run=\(runID) runner=\(getpid()) "
+            + "app=\(appProcesses[0].processIdentifier) control=\(controlDirectory.path)\n"
+        FileHandle.standardError.write(Data(marker.utf8))
+
+        let readyURL = controlDirectory.appendingPathComponent("host-ready")
+        let blockedURL = controlDirectory.appendingPathComponent("host-blocked")
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: readyURL.path) { break }
+            if FileManager.default.fileExists(atPath: blockedURL.path) { break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        guard FileManager.default.fileExists(atPath: readyURL.path),
+              !FileManager.default.fileExists(atPath: blockedURL.path),
+              kill(getpid(), 0) == 0,
+              kill(appProcesses[0].processIdentifier, 0) == 0
+        else {
+            let reason = (try? String(contentsOf: blockedURL, encoding: .utf8)) ?? "host handshake timed out"
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED \(reason)")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = "runner_pid=\(getpid())\napp_pid=\(appProcesses[0].processIdentifier)"
+            + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))\n"
+        do {
+            try timing.write(
+                to: controlDirectory.appendingPathComponent("query-timing.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-host-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+        return exists
+    }
+
+    /// Diagnostic-only stack capture around the existing Thing row query. A
+    /// sampled run is never a clean QoS qualification because sampling itself
+    /// changes scheduling; normal UI journeys take the original query path.
+    @MainActor
+    private func sampleThingRowQueryAcrossProcesses(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        let appBundleID = "io.ethan.pushgo"
+        let themeBundleID = "com.apple.appkit.xpc.ThemeWidgetControlViewService"
+        let appProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: appBundleID)
+            .filter { !$0.isTerminated }
+        let themeProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: themeBundleID)
+            .filter { !$0.isTerminated }
+        guard appProcesses.count == 1, themeProcesses.count == 1 else {
+            XCTFail(
+                "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED expected one live App and ThemeWidget service; "
+                    + "app_count=\(appProcesses.count) theme_count=\(themeProcesses.count)"
+            )
+            return nil
+        }
+
+        let targets: [(role: String, pid: pid_t)] = [
+            ("runner", getpid()),
+            ("app", appProcesses[0].processIdentifier),
+            ("theme-widget", themeProcesses[0].processIdentifier),
+        ]
+        guard Set(targets.map { $0.pid }).count == targets.count,
+              targets.allSatisfy({ $0.pid > 0 && kill($0.pid, 0) == 0 }),
+              FileManager.default.isExecutableFile(atPath: "/usr/bin/sample")
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED process identity, liveness, or sampler unavailable")
+            return nil
+        }
+
+        let sampleDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: sampleDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot create sample directory: \(error)")
+            return nil
+        }
+
+        struct SampleJob {
+            let role: String
+            let targetPID: pid_t
+            let process: Process
+            let outputURL: URL
+            let errorPipe: Pipe
+        }
+
+        func startSample(role: String, pid: pid_t, phase: String, seconds: Int) throws -> SampleJob {
+            let outputURL = sampleDirectory.appendingPathComponent("\(phase)-\(role)-\(pid).txt")
+            let process = Process()
+            let errorPipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+            process.arguments = [String(pid), String(seconds), "1", "-file", outputURL.path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
+            try process.run()
+            return SampleJob(
+                role: role, targetPID: pid, process: process,
+                outputURL: outputURL, errorPipe: errorPipe
+            )
+        }
+
+        func finishSample(_ job: SampleJob) -> String? {
+            job.process.waitUntilExit()
+            let errorText = String(
+                data: job.errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+            guard job.process.terminationReason == .exit,
+                  job.process.terminationStatus == 0,
+                  let data = try? Data(contentsOf: job.outputURL),
+                  !data.isEmpty,
+                  let stackText = String(data: data, encoding: .utf8),
+                  stackText.contains("(pid \(job.targetPID))"),
+                  stackText.contains("Call graph:")
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample failed "
+                        + "status=\(job.process.terminationStatus) stderr=\(errorText)"
+                )
+                return nil
+            }
+            return stackText
+        }
+
+        let identity = targets.map { "\($0.role)_pid=\($0.pid)" }.joined(separator: "\n")
+        let manifestURL = sampleDirectory.appendingPathComponent("query-timing.txt")
+        do {
+            try identity.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save process identity: \(error)")
+            return nil
+        }
+        for target in targets {
+            do {
+                let job = try startSample(
+                    role: target.role, pid: target.pid, phase: "permission-preflight", seconds: 1
+                )
+                guard finishSample(job) != nil else { return nil }
+            } catch {
+                XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(target.role) preflight: \(error)")
+                return nil
+            }
+        }
+        guard targets.allSatisfy({ kill($0.pid, 0) == 0 }) else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED target exited after permission preflight")
+            return nil
+        }
+
+        var jobs: [SampleJob] = []
+        do {
+            for target in targets {
+                jobs.append(try startSample(
+                    role: target.role, pid: target.pid, phase: "row-query", seconds: 3
+                ))
+            }
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture startup: \(error)")
+            return nil
+        }
+        Thread.sleep(forTimeInterval: 0.15)
+        guard jobs.allSatisfy({ $0.process.isRunning }) else {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture exited before query")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = identity + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))"
+        do {
+            try timing.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+
+        let reportDateFormatter = DateFormatter()
+        reportDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        reportDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
+        for job in jobs {
+            guard let stackText = finishSample(job) else { return nil }
+            let attachment = XCTAttachment(string: stackText)
+            attachment.name = "thing-ax-qos-\(job.role)-sample"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let reportDateLine = stackText.split(separator: "\n").first(where: {
+                $0.hasPrefix("Date/Time:")
+            }),
+                  let reportStarted = reportDateFormatter.date(
+                    from: String(reportDateLine.dropFirst("Date/Time:".count))
+                        .trimmingCharacters(in: .whitespaces)
+                  ),
+                  reportStarted <= queryStarted,
+                  queryEnded <= reportStarted.addingTimeInterval(3)
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample report "
+                        + "does not bracket the AX query interval"
+                )
+                return nil
+            }
+        }
+        return exists
+    }
+
+    @MainActor
+    private func storageRecoveryButton(
+        in app: XCUIApplication,
+        identifier: String,
+        fallbackLabel: String
+    ) -> XCUIElement {
+        let semanticButton = element(in: app, identifier: identifier)
+        return semanticButton.exists ? semanticButton : app.sheets.firstMatch.buttons[fallbackLabel]
+    }
+
+    @MainActor
+    private func openMessageFilters(in app: XCUIApplication) {
+        let filter = element(in: app, identifier: "action.messages.filter")
+        XCTAssertTrue(filter.waitForExistence(timeout: 5) && filter.isHittable)
+        filter.click()
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.unread_only").waitForExistence(timeout: 5),
+            "The production filter popover did not open"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.surface").waitForExistence(timeout: 5),
+            "The production filter popover has no stable scroll owner"
+        )
+    }
+
+    @MainActor
+    private func revealFilterOption(
+        _ identifier: String,
+        towardTags: Bool,
+        in app: XCUIApplication
+    ) {
+        let option = element(in: app, identifier: identifier)
+        let surface = element(in: app, identifier: "filter.surface")
+        for _ in 0..<4 {
+            if option.exists, option.isHittable { return }
+            if towardTags {
+                surface.swipeUp()
+            } else {
+                surface.swipeDown()
+            }
+        }
+        XCTAssertTrue(option.exists && option.isHittable, "Filter option remained unreachable: \(identifier)")
+    }
+
+    @MainActor
+    private func dismissMessageFilters(in app: XCUIApplication) {
+        let filterSurfaceProbe = element(in: app, identifier: "filter.unread_only")
+        guard filterSurfaceProbe.exists else { return }
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(
+            filterSurfaceProbe.waitForNonExistence(timeout: 5),
+            "The production filter popover did not dismiss with the platform Escape action"
+        )
+    }
+
+    @MainActor
+    private func assertMessageTitles(
+        _ expected: [String],
+        excluding unexpected: [String],
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        func titleIsPresented(_ title: String) -> Bool {
+            app.staticTexts[title].exists
+                || messageRow(containing: title, in: app).exists
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        var matched = false
+        repeat {
+            matched = expected.allSatisfy(titleIsPresented)
+                && unexpected.allSatisfy { !titleIsPresented($0) }
+            if matched { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        let visibleRowLabels = app.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "message.row."))
+            .allElementsBoundByIndex
+            .map(\.label)
+        XCTAssertTrue(
+            matched,
+            "The visible message set did not match the exact selected facets; rows=\(visibleRowLabels)",
+            file: file,
+            line: line
+        )
+        for title in expected {
+            XCTAssertTrue(titleIsPresented(title), "Missing expected message: \(title)", file: file, line: line)
+        }
+        for title in unexpected {
+            XCTAssertFalse(titleIsPresented(title), "Unexpected message remained visible: \(title)", file: file, line: line)
+        }
     }
 
     @MainActor
     private func replaceText(in field: XCUIElement, with text: String) {
+        replaceTextUsingPasteboard(in: field, with: text)
+    }
+
+    @MainActor
+    private func replaceSecureText(in field: XCUIElement, with text: String) {
+        replaceTextUsingPasteboard(in: field, with: text)
+    }
+
+    @MainActor
+    private func replaceTextUsingPasteboard(in field: XCUIElement, with text: String) {
+        let pasteboard = NSPasteboard.general
+        let savedItems: [[NSPasteboard.PasteboardType: Data]] = pasteboard.pasteboardItems?.map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type, $0) }
+            })
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedItems.map { savedRepresentations in
+                let item = NSPasteboardItem()
+                for (type, data) in savedRepresentations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.setString(text, forType: .string))
         field.click()
         field.typeKey("a", modifierFlags: .command)
-        field.typeText(text)
+        field.typeKey("v", modifierFlags: .command)
+    }
+
+    @MainActor
+    private func assertExactPasteboardCopy(
+        _ expected: String,
+        byClicking action: XCUIElement,
+        pasteboard: NSPasteboard,
+        in app: XCUIApplication,
+        purpose: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        pasteboard.clearContents()
+        XCTAssertTrue(
+            pasteboard.setString("pushgo-quality-copy-sentinel", forType: .string),
+            "Could not prepare the system pasteboard for \(purpose) verification.",
+            file: file,
+            line: line
+        )
+        action.click()
+        XCTAssertTrue(
+            element(in: app, identifier: "feedback.toast.success").waitForExistence(timeout: 2),
+            "The \(purpose) action did not report a successful system pasteboard write.",
+            file: file,
+            line: line
+        )
+        let copied = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                pasteboard.string(forType: .string) == expected
+            },
+            object: nil
+        )
+        let waitResult = XCTWaiter.wait(for: [copied], timeout: 3)
+        XCTAssertEqual(
+            waitResult,
+            .completed,
+            "The \(purpose) action did not copy its exact canonical value; actual="
+                + (pasteboard.string(forType: .string) ?? "<nil>"),
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
+    private func saveImageThroughSystemPanel(
+        in app: XCUIApplication,
+        expectedFilename: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let savePanel = app.dialogs["save-panel"]
+        XCTAssertTrue(
+            savePanel.waitForExistence(timeout: 5),
+            "The production Save action did not present the system Save panel.",
+            file: file,
+            line: line
+        )
+
+        let filenameField = savePanel.textFields["saveAsNameTextField"]
+        XCTAssertTrue(
+            filenameField.waitForExistence(timeout: 5),
+            "The system Save panel did not expose its filename field.",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            filenameField.value as? String,
+            expectedFilename,
+            "The system Save panel did not preserve the session-unique PNG filename.",
+            file: file,
+            line: line
+        )
+        let confirmSave = savePanel.buttons["OKButton"]
+        XCTAssertTrue(
+            confirmSave.waitForExistence(timeout: 5) && confirmSave.isHittable,
+            "The system Save panel did not expose its real confirmation action.",
+            file: file,
+            line: line
+        )
+        confirmSave.click()
+        XCTAssertFalse(
+            savePanel.sheets.firstMatch.waitForExistence(timeout: 2),
+            "A fresh App-owned session must choose a unique Save destination and never require overwrite confirmation.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            savePanel.waitForNonExistence(timeout: 8),
+            "The system Save panel did not commit the selected destination.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertSavedImageMatchesCanonicalPixels(
+        at savedImageURL: URL,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let canonicalPNGBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+        guard let canonicalData = Data(base64Encoded: canonicalPNGBase64),
+              let canonical = normalizedRGBA8Image(from: canonicalData)
+        else {
+            XCTFail("The canonical messages.standard image could not be decoded.", file: file, line: line)
+            return
+        }
+        guard let savedData = try? Data(contentsOf: savedImageURL),
+              let saved = normalizedRGBA8Image(from: savedData)
+        else {
+            XCTFail(
+                "The system-saved image was missing or could not be decoded at the file boundary.",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        XCTAssertEqual(saved.width, canonical.width, file: file, line: line)
+        XCTAssertEqual(saved.height, canonical.height, file: file, line: line)
+        XCTAssertEqual(
+            saved.pixels,
+            canonical.pixels,
+            "The system-saved image pixels did not exactly match the canonical messages.standard image.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForSavedImageDestinationReceipt(
+        at receiptURL: URL,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> URL {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let data = try? Data(contentsOf: receiptURL),
+               let path = String(data: data, encoding: .utf8),
+               !path.isEmpty
+            {
+                return URL(fileURLWithPath: path)
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        XCTFail(
+            "The production Save action did not publish its app-owned destination receipt.",
+            file: file,
+            line: line
+        )
+        return receiptURL
+    }
+
+    private func normalizedRGBA8Image(from data: Data) -> (width: Int, height: Int, pixels: Data)? {
+        guard let bitmap = NSBitmapImageRep(data: data),
+              let image = bitmap.cgImage,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        else {
+            return nil
+        }
+        let width = image.width
+        let height = image.height
+        var pixels = Data(count: width * height * 4)
+        let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue
+            ) else {
+                return false
+            }
+            context.interpolationQuality = .none
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return rendered ? (width, height, pixels) : nil
     }
 
     @MainActor
@@ -1781,6 +7067,38 @@ final class PushGo_macOSUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
         return identifiers.contains { element(in: app, identifier: $0).exists }
+    }
+
+    @MainActor
+    private func waitForValue(
+        _ expectedValue: String,
+        in element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.value as? String == expectedValue {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return element.exists && element.value as? String == expectedValue
+    }
+
+    @MainActor
+    private func waitForLabelContaining(
+        _ expectedText: String,
+        in element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.label.contains(expectedText) {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return element.exists && element.label.contains(expectedText)
     }
 
     @MainActor

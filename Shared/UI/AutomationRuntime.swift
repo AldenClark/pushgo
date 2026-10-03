@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -6,9 +7,177 @@ import Darwin
 #endif
 #if os(macOS)
 import AppKit
+import UserNotifications
 #endif
 
 #if DEBUG && !os(watchOS)
+@MainActor
+final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, ChannelSubscriptionSyncRoundTrip {
+    private let scenario: PushGoQualityChannelMutationScenario
+    private let expectedGatewayURL: String?
+    private var subscribeAttempts = 0
+    private var renameAttempts = 0
+    private var activeCreatedChannelIDs = Set<String>()
+    private var existingSubscriptionWasCompensated = false
+
+    init(scenario: PushGoQualityChannelMutationScenario, expectedGatewayURL: String? = nil) {
+        self.scenario = scenario
+        self.expectedGatewayURL = expectedGatewayURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    func subscribe(
+        baseURL: URL,
+        token: String?,
+        channelId: String?,
+        channelName: String?,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        try requireExpectedGateway(baseURL)
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        subscribeAttempts += 1
+        if (scenario == .rejectOnceThenAccepted
+            || scenario == .subscribeAndRenameRejectOnceThenAccepted),
+           subscribeAttempts == 1
+        {
+            throw AppError.typedLocal(
+                code: "password_mismatch",
+                category: .conflict,
+                message: "Channel password is incorrect. Check the password and retry."
+            )
+        }
+        let resolvedID = channelId ?? "01H00000000000000000000003"
+        if scenario == .existingSubscribeMustNotCompensate,
+           channelId != nil,
+           existingSubscriptionWasCompensated
+        {
+            throw AppError.typedLocal(
+                code: "existing_channel_subscription_was_compensated",
+                category: .conflict,
+                message: "The existing channel subscription was incorrectly revoked."
+            )
+        }
+        if scenario == .requireCreateCompensation,
+           channelId == nil,
+           activeCreatedChannelIDs.contains(resolvedID)
+        {
+            throw AppError.typedLocal(
+                code: "channel_compensation_missing",
+                category: .conflict,
+                message: "The previous channel creation was not compensated."
+            )
+        }
+        if channelId == nil {
+            activeCreatedChannelIDs.insert(resolvedID)
+        }
+        let resolvedName = channelName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ChannelSubscriptionService.SubscribePayload(
+            channelId: resolvedID,
+            channelName: resolvedName.flatMap { $0.isEmpty ? nil : $0 } ?? resolvedID,
+            created: channelId == nil,
+            subscribed: true
+        )
+    }
+
+    func rename(
+        baseURL: URL,
+        token: String?,
+        channelId: String,
+        channelName: String,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.RenamePayload {
+        try requireExpectedGateway(baseURL)
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        renameAttempts += 1
+        if (scenario == .renameRejectOnceThenAccepted
+            || scenario == .subscribeAndRenameRejectOnceThenAccepted),
+           renameAttempts == 1
+        {
+            throw AppError.typedLocal(
+                code: "channel_rename_rejected",
+                category: .conflict,
+                message: "The channel rename was rejected. Check the name and retry."
+            )
+        }
+        return ChannelSubscriptionService.RenamePayload(
+            channelId: channelId,
+            channelName: channelName
+        )
+    }
+
+    func unsubscribe(baseURL: URL, token: String?, channelId: String) async throws {
+        try requireExpectedGateway(baseURL)
+        guard !channelId.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_id_required",
+                category: .validation,
+                message: "A channel identifier is required."
+            )
+        }
+        if scenario == .existingSubscribeMustNotCompensate,
+           !activeCreatedChannelIDs.contains(channelId)
+        {
+            existingSubscriptionWasCompensated = true
+            return
+        }
+        activeCreatedChannelIDs.remove(channelId)
+    }
+
+    private func requireExpectedGateway(_ baseURL: URL) throws {
+        guard let expectedGatewayURL else { return }
+        let actual = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard actual == expectedGatewayURL else {
+            throw AppError.typedLocal(
+                code: "quality_channel_wrong_gateway",
+                category: .internalError,
+                message: "The channel operation was routed through the wrong gateway.",
+                detail: "expected=\(expectedGatewayURL); actual=\(actual)"
+            )
+        }
+    }
+
+    func sync(
+        baseURL: URL,
+        channels: [ChannelSubscriptionService.SyncItem]
+    ) async throws -> ChannelSubscriptionService.SyncPayload {
+        // Keep the recovery Oracle on the same business boundary as the
+        // production controller: a sync that reaches another Gateway must fail
+        // even when the channel mutation itself would still be accepted.
+        try requireExpectedGateway(baseURL)
+        let results = channels.map { item in
+            ChannelSubscriptionService.SyncResult(
+                channelId: item.channelId,
+                // The candidate-scoped fixture uses this rename as its
+                // observable business result.  A row that merely exists proves
+                // fixture loading; this changed name proves reconciliation ran.
+                channelName: item.channelId == "01H00000000000000000000004"
+                    ? "Quality Recovery Sync Completed"
+                    : nil,
+                subscribed: true,
+                error: nil,
+                errorCode: nil,
+                problem: nil
+            )
+        }
+        return ChannelSubscriptionService.SyncPayload(
+            success: results.count,
+            failed: 0,
+            channels: results
+        )
+    }
+}
+
 @MainActor
 private final class PushGoAutomationPerformanceMonitor: NSObject {
     static let shared = PushGoAutomationPerformanceMonitor()
@@ -107,6 +276,8 @@ private struct PushGoAutomationRequest: Decodable {
         let baseURL: String?
         let token: String?
         let notificationRequestId: String?
+        let title: String?
+        let body: String?
         let key: String?
         let encoding: String?
 
@@ -122,6 +293,8 @@ private struct PushGoAutomationRequest: Decodable {
             case baseURL = "base_url"
             case token
             case notificationRequestId = "notification_request_id"
+            case title
+            case body
             case key
             case encoding
         }
@@ -247,6 +420,30 @@ private struct PushGoAutomationRuntimeError: Equatable {
     let code: String?
     let message: String
     let timestamp: String
+}
+
+private struct PushGoQualityReadinessSnapshot: Encodable {
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: String
+    let status: String
+    let localStoreMode: String
+    let localStoreReason: String?
+    let totalMessageCount: Int
+    let runtimeErrorCount: Int
+    let generatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+        case status
+        case localStoreMode = "local_store_mode"
+        case localStoreReason = "local_store_reason"
+        case totalMessageCount = "total_message_count"
+        case runtimeErrorCount = "runtime_error_count"
+        case generatedAt = "generated_at"
+    }
 }
 
 private struct PushGoAutomationDetailReadySample: Equatable {
@@ -470,6 +667,20 @@ private struct PushGoAutomationFixtureSubscription: Decodable {
     }
 }
 
+private struct PushGoQualityFixtureInitializationMarker: Codable, Equatable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: PushGoQualityFixture
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+    }
+}
+
 @MainActor
 final class PushGoAutomationRuntime {
     static let shared = PushGoAutomationRuntime()
@@ -488,6 +699,7 @@ final class PushGoAutomationRuntime {
     private var latestState: PushGoAutomationState?
     private var lastNotificationAction: String?
     private var lastNotificationTarget: String?
+    private var nextSearchResultsRevision = 0
     private var lastFixtureImportPath: String?
     private var lastFixtureImportMessageCount = 0
     private var lastFixtureImportEntityRecordCount = 0
@@ -514,12 +726,15 @@ final class PushGoAutomationRuntime {
     private var markdownAttachmentAnimatedCount = 0
     private var activeTrace: PushGoAutomationActiveTrace?
     private var expensiveStateEnrichmentSuspensionCount = 0
+    private(set) var startupRequestStatus: String?
+    private(set) var startupRequestError: String?
 
     private init() {}
 
     func configureFromProcessEnvironment() {
         guard !configured else { return }
         configured = true
+        _ = PushGoAutomationContext.cleanupPriorQualitySessionsIfNeeded()
         PushGoAutomationPerformanceMonitor.shared.startIfNeeded()
         responseURL = fileURL(for: PushGoAutomationEnvironment.responsePath)
         stateURL = fileURL(for: PushGoAutomationEnvironment.statePath)
@@ -544,6 +759,51 @@ final class PushGoAutomationRuntime {
         } catch {
             requestDecodeError = "Failed to decode automation request: \(error.localizedDescription)"
         }
+    }
+
+    func finalizeQualityReadiness(environment: AppEnvironment) async -> String? {
+        configureFromProcessEnvironment()
+        guard let session = PushGoAutomationContext.qualitySession else { return nil }
+
+        let state = await currentState(environment: environment)
+        // Readiness proves that this session's fixture transaction completed and
+        // the app-owned store reopened cleanly. Live row counts are product state,
+        // not preparation state: journeys may legitimately create, delete, close,
+        // or unsubscribe before relaunching the same session.
+        let fixtureReady = (try? qualityFixtureWasInitialized(for: session)) == true
+        let status = state.localStoreMode == "persistent"
+            && state.runtimeErrorCount == 0
+            && fixtureReady
+            ? "ready"
+            : "failed"
+        let snapshot = PushGoQualityReadinessSnapshot(
+            schemaVersion: PushGoQualitySessionDescriptor.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture.rawValue,
+            status: status,
+            localStoreMode: state.localStoreMode,
+            localStoreReason: state.localStoreReason,
+            totalMessageCount: state.totalMessageCount,
+            runtimeErrorCount: state.runtimeErrorCount,
+            generatedAt: ISO8601DateFormatter().string(from: Date())
+        )
+        writeJSON(
+            snapshot,
+            to: PushGoAutomationContext.qualityArtifactURL(filename: "quality-readiness.json")
+        )
+        writeEvent(
+            type: "quality.readiness",
+            command: nil,
+            details: [
+                "session_id": session.sessionID,
+                "fixture": session.fixture.rawValue,
+                "status": status,
+                "local_store_mode": state.localStoreMode,
+                "total_message_count": String(state.totalMessageCount),
+                "runtime_error_count": String(state.runtimeErrorCount),
+            ]
+        )
+        return status
     }
 
     func recordBootstrapCheckpoint(_ source: String, details: [String: String] = [:]) {
@@ -654,6 +914,8 @@ final class PushGoAutomationRuntime {
         didExecuteStartupRequest = true
 
         if let requestDecodeError {
+            startupRequestStatus = "failed"
+            startupRequestError = requestDecodeError
             await writeResponse(ok: false, error: requestDecodeError, environment: environment)
             return
         }
@@ -761,6 +1023,8 @@ final class PushGoAutomationRuntime {
                 try await updateGatewayConfig(request: request, environment: environment)
             case "notification.open":
                 try await handleNotificationOpen(request: request, environment: environment)
+            case "notification.schedule_system":
+                try await scheduleSystemNotification(request: request)
             case "notification.mark_read":
                 try await handleNotificationAction(request: request, action: .markRead, environment: environment)
             case "notification.delete":
@@ -842,6 +1106,8 @@ final class PushGoAutomationRuntime {
             )
             writeEvent(type: "command.completed", command: request.name, details: [:])
             endCommandTrace(status: "ok", attributes: [:], errorCode: nil, errorMessage: nil)
+            startupRequestStatus = "succeeded"
+            startupRequestError = nil
             await writeResponse(ok: true, error: nil, environment: environment)
         } catch {
             let commandTotalMs = max(0, Int(Date().timeIntervalSince(commandStartedAt) * 1_000))
@@ -880,6 +1146,8 @@ final class PushGoAutomationRuntime {
                 errorCode: nil,
                 errorMessage: error.localizedDescription
             )
+            startupRequestStatus = "failed"
+            startupRequestError = error.localizedDescription
             await writeResponse(ok: false, error: error.localizedDescription, environment: environment)
         }
     }
@@ -988,15 +1256,40 @@ final class PushGoAutomationRuntime {
         configureFromProcessEnvironment()
         guard !didImportStartupFixture else { return }
         didImportStartupFixture = true
-        guard startupFixturePath != nil || startupFixtureBase64 != nil else { return }
+        guard PushGoAutomationContext.qualitySession != nil
+            || startupFixturePath != nil
+            || startupFixtureBase64 != nil
+        else { return }
 
         do {
+            if let session = PushGoAutomationContext.qualitySession,
+               try qualityFixtureWasInitialized(for: session)
+            {
+                writeEvent(
+                    type: "fixture.initialization_reused",
+                    command: nil,
+                    details: [
+                        "session_id": session.sessionID,
+                        "fixture": session.fixture.rawValue,
+                    ]
+                )
+                refreshState(environment: environment)
+                return
+            }
             let bundle = try loadStartupFixtureBundle()
+            if let fixture = PushGoAutomationContext.qualitySession?.fixture,
+               fixture == .messagesStandard || fixture == .corePositive
+            {
+                try await prepareQualityStandardMessageImage()
+            }
             try await applyFixtureBundle(
                 bundle,
                 sourcePath: startupFixturePath,
                 environment: environment
             )
+            if let session = PushGoAutomationContext.qualitySession {
+                try recordQualityFixtureInitialization(for: session)
+            }
             refreshState(environment: environment)
         } catch {
             recordRuntimeError(
@@ -1007,6 +1300,43 @@ final class PushGoAutomationRuntime {
             )
             refreshState(environment: environment)
         }
+    }
+
+    private func qualityFixtureWasInitialized(
+        for session: PushGoQualitySessionDescriptor
+    ) throws -> Bool {
+        guard let markerURL = qualityFixtureInitializationMarkerURL() else { return false }
+        guard FileManager.default.fileExists(atPath: markerURL.path) else { return false }
+        let data = try Data(contentsOf: markerURL)
+        let marker = try JSONDecoder().decode(PushGoQualityFixtureInitializationMarker.self, from: data)
+        return marker == PushGoQualityFixtureInitializationMarker(
+            schemaVersion: PushGoQualityFixtureInitializationMarker.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture
+        )
+    }
+
+    private func recordQualityFixtureInitialization(
+        for session: PushGoQualitySessionDescriptor
+    ) throws {
+        guard let markerURL = qualityFixtureInitializationMarkerURL() else {
+            throw PushGoAutomationError.invalidArgument("quality_session_root")
+        }
+        try FileManager.default.createDirectory(
+            at: markerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let marker = PushGoQualityFixtureInitializationMarker(
+            schemaVersion: PushGoQualityFixtureInitializationMarker.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture
+        )
+        try JSONEncoder().encode(marker).write(to: markerURL, options: .atomic)
+    }
+
+    private func qualityFixtureInitializationMarkerURL() -> URL? {
+        PushGoAutomationContext.qualitySessionRootURL?
+            .appendingPathComponent("fixture-initialization.json", isDirectory: false)
     }
 
     private var platformIdentifier: String {
@@ -1264,6 +1594,24 @@ final class PushGoAutomationRuntime {
     }
 
     private func fileURL(for environmentKey: String) -> URL? {
+        if PushGoAutomationContext.qualitySession != nil {
+            let filename: String?
+            switch environmentKey {
+            case PushGoAutomationEnvironment.responsePath:
+                filename = "automation-response.json"
+            case PushGoAutomationEnvironment.statePath:
+                filename = "automation-state.json"
+            case PushGoAutomationEnvironment.eventsPath:
+                filename = "automation-events.jsonl"
+            case PushGoAutomationEnvironment.tracePath:
+                filename = "automation-trace.json"
+            default:
+                filename = nil
+            }
+            if let filename {
+                return PushGoAutomationContext.qualityArtifactURL(filename: filename)
+            }
+        }
         guard let rawPath = environmentValue(for: environmentKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawPath.isEmpty
@@ -1293,6 +1641,11 @@ final class PushGoAutomationRuntime {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(value)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
             try data.write(to: url, options: .atomic)
         } catch {
         }
@@ -1369,14 +1722,25 @@ final class PushGoAutomationRuntime {
         writeTraceAnnotation(type: type, command: command, details: details)
     }
 
-    func recordSearchResultsUpdated(query: String, resultCount: Int) {
+    func recordSearchResultsUpdated(
+        query: String,
+        resultCount: Int,
+        domain: String = "messages",
+        resultIDs: [String] = []
+    ) {
         configureFromProcessEnvironment()
+        nextSearchResultsRevision += 1
+        let normalizedResultIDs = resultIDs.compactMap(normalizedIdentifier)
         writeEvent(
             type: "search.results_updated",
             command: nil,
             details: [
+                "search_domain": domain,
                 "search_query": query,
                 "result_count": String(resultCount),
+                "result_ids": normalizedResultIDs.joined(separator: ","),
+                "search_revision": String(nextSearchResultsRevision),
+                "settled": "true",
             ]
         )
     }
@@ -3131,7 +3495,7 @@ final class PushGoAutomationRuntime {
             updatedAt: Date()
         )
         await environment.dataStore.saveManualKeyPreferences(encoding: encoding.rawValue)
-        await environment.updateNotificationMaterial(material)
+        try await environment.updateNotificationMaterial(material)
     }
 
     private func normalizedNotificationKeyData(
@@ -3192,6 +3556,63 @@ final class PushGoAutomationRuntime {
             throw PushGoAutomationError.missingArgument("entity_id")
         }
         await environment.handleNotificationOpen(entityType: entityType, entityId: entityId)
+    }
+
+    private func scheduleSystemNotification(request: PushGoAutomationRequest) async throws {
+        #if os(macOS)
+        guard PushGoAutomationContext.qualitySession != nil else {
+            throw PushGoAutomationError.invalidArgument("quality_session")
+        }
+        guard let requestID = normalizedIdentifier(request.args?.notificationRequestId) else {
+            throw PushGoAutomationError.missingArgument("notification_request_id")
+        }
+        guard let messageID = normalizedIdentifier(request.args?.messageId) else {
+            throw PushGoAutomationError.missingArgument("message_id")
+        }
+        guard let title = normalizedIdentifier(request.args?.title) else {
+            throw PushGoAutomationError.missingArgument("title")
+        }
+        guard let body = normalizedIdentifier(request.args?.body) else {
+            throw PushGoAutomationError.missingArgument("body")
+        }
+
+        let center = UNUserNotificationCenter.current()
+        let authorized = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+        guard authorized else {
+            throw PushGoAutomationError.invalidArgument("notification_authorization")
+        }
+
+        center.removePendingNotificationRequests(withIdentifiers: [requestID])
+        center.removeDeliveredNotifications(withIdentifiers: [requestID])
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = AppConstants.notificationDefaultCategoryIdentifier
+        content.threadIdentifier = "quality-system-route"
+        content.userInfo = [
+            "entity_type": "message",
+            "entity_id": messageID,
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": "quality-system-route",
+            "severity": "normal",
+            "sent_at": String(Int(Date().timeIntervalSince1970 * 1_000)),
+        ]
+        // The UI journey must move the App to the background before delivery;
+        // leave enough room for an already-authorized host to finish launch and
+        // readiness checks without accidentally exercising willPresent instead.
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 12, repeats: false)
+        try await center.add(UNNotificationRequest(
+            identifier: requestID,
+            content: content,
+            trigger: trigger
+        ))
+        #else
+        throw PushGoAutomationError.unsupportedCommand("notification.schedule_system")
+        #endif
     }
 
     private func handleNotificationAction(
@@ -3312,7 +3733,11 @@ final class PushGoAutomationRuntime {
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
-            )
+            ) { phase in
+                await MainActor.run {
+                    environment.markQualityRuntimeReadiness("seeding.messages.\(phase)")
+                }
+            }
         }
         try await withPhaseMarker(command: command, phase: "fixture.refresh_state") {
             await environment.refreshMessageCountsAndNotify()
@@ -3369,6 +3794,9 @@ final class PushGoAutomationRuntime {
     }
 
     private func loadStartupFixtureBundle() throws -> PushGoAutomationFixtureBundle {
+        if let session = PushGoAutomationContext.qualitySession {
+            return try loadQualityFixtureBundle(session.fixture)
+        }
         if let startupFixtureBase64 {
             return try loadFixtureBundle(base64Encoded: startupFixtureBase64)
         }
@@ -3376,6 +3804,713 @@ final class PushGoAutomationRuntime {
             throw PushGoAutomationError.missingArgument("startup_fixture")
         }
         return try loadFixtureBundle(path: startupFixturePath)
+    }
+
+    private func loadQualityFixtureBundle(
+        _ fixture: PushGoQualityFixture
+    ) throws -> PushGoAutomationFixtureBundle {
+        let messages: [[String: Any]]
+        let entityRecords: [[String: Any]]
+        let channelSubscriptions: [[String: Any]]
+        switch fixture {
+        case .emptyClean:
+            messages = []
+            entityRecords = []
+            channelSubscriptions = []
+        case .corePositive:
+            // One dense, purpose-level fixture feeds each primary product domain
+            // through the same production-shaped ingestion path used by its focused
+            // lifecycle test. It stays shallow in behavior and state transitions:
+            // the older control rows exercise the high-unread navigation boundary,
+            // while mutations and faults remain impact-selected or Release evidence.
+            messages = [qualityFixtureMessage(index: 0, includesMedia: true)]
+                + (1..<100).map { qualityHighUnreadNavigationMessage(index: $0) }
+                + [
+                    qualityEventFixture(),
+                    qualityThingInitialFixture(),
+                    qualityThingFixture(),
+                    qualityThingDistractorFixture(),
+                    qualityThingRelatedEventFixture(),
+                    qualityThingRelatedMessageFixture(),
+                    qualityChannelFixtureMessage(
+                        id: "00000000-0000-0000-0000-00000000c001",
+                        messageID: "quality-channel-keep-message",
+                        title: "Quality Keep History Message",
+                        channelID: "01H00000000000000000000001",
+                        isRead: false,
+                        receivedAt: "2026-01-15T08:01:00Z"
+                    ),
+                ]
+            entityRecords = []
+            channelSubscriptions = [
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000001",
+                    displayName: "Quality Keep History"
+                ),
+            ]
+        case .channelsStandard:
+            messages = [
+                qualityChannelFixtureMessage(
+                    id: "00000000-0000-0000-0000-00000000c001",
+                    messageID: "quality-channel-keep-message",
+                    title: "Quality Keep History Message",
+                    channelID: "01H00000000000000000000001",
+                    isRead: false,
+                    receivedAt: "2026-01-15T08:01:00Z"
+                ),
+                qualityChannelFixtureMessage(
+                    id: "00000000-0000-0000-0000-00000000c002",
+                    messageID: "quality-channel-delete-message",
+                    title: "Quality Delete History Message",
+                    channelID: "01H00000000000000000000002",
+                    isRead: false,
+                    receivedAt: "2026-01-15T09:02:00Z"
+                ),
+            ]
+            entityRecords = []
+            channelSubscriptions = [
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000001",
+                    displayName: "Quality Keep History"
+                ),
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000002",
+                    displayName: "Quality Delete History"
+                ),
+            ] + (PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+                .flatMap { normalizedIdentifier($0) }
+                .map {
+                    [qualityChannelFixtureSubscription(
+                        channelID: "01H00000000000000000000004",
+                        displayName: "Quality Recovery Sync Pending",
+                        gateway: $0
+                    )]
+                } ?? [])
+        case .messagesStandard:
+            messages = [qualityFixtureMessage(index: 0, includesMedia: true)]
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesEncryptedValid, .messagesEncryptedCorrupt:
+            // This fixture is inserted through the production notification ingress
+            // below so the initial missing-key state cannot be fabricated as a row.
+            messages = []
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesWorkflow:
+            // The P0 contract requires 125 canonical rows across all three
+            // production page-size=50 segments. Rows added above the original
+            // 52-row workflow stay read so this does not create a second badge
+            // or mutation matrix inside the same UI journey.
+            messages = (0..<125).map(qualityWorkflowFixtureMessage)
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesFilters:
+            messages = qualityFilterFixtureMessages()
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesCleanup:
+            messages = qualityCleanupFixtureMessages()
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesMarkdown:
+            messages = [qualityMarkdownFixtureMessage()]
+            entityRecords = []
+            channelSubscriptions = []
+        case .messagesLarge:
+            messages = (0..<1_000).map { qualityFixtureMessage(index: $0) }
+            entityRecords = []
+            channelSubscriptions = []
+        case .eventStandard:
+            // Events enter the product through the message ingestion path. Saving this
+            // as an entity record would bypass projection, so the detail could never
+            // be opened even though a fixture row existed. The linked Thing keeps the
+            // close journey on one canonical state transition across every consumer.
+            messages = [
+                qualityThingInitialFixture(),
+                qualityThingFixture(),
+                qualityEventFixture(thingID: "quality-thing-rich"),
+                qualityEventControlFixture(),
+            ] + (0..<16).map(qualityEventNavigationFixture)
+            entityRecords = []
+            channelSubscriptions = []
+        case .thingStandard:
+            // Things use the same user-visible ingestion path as production pushes.
+            messages = [
+                qualityThingInitialFixture(),
+                qualityThingFixture(),
+                qualityThingDistractorFixture(),
+                qualityThingRelatedEventFixture(),
+                qualityThingRelatedMessageFixture(),
+            ] + (0..<16).map(qualityThingNavigationFixture)
+            entityRecords = []
+            channelSubscriptions = []
+        }
+        let payload: [String: Any] = [
+            "messages": messages,
+            "entity_records": entityRecords,
+            "channel_subscriptions": channelSubscriptions,
+        ]
+        return try decodeFixtureBundle(data: JSONSerialization.data(withJSONObject: payload))
+    }
+
+    private func qualityFixtureMessage(index: Int, includesMedia: Bool = false) -> [String: Any] {
+        let suffix = String(format: "%012x", index + 1)
+        let stableID = index == 0 ? "quality-standard-message" : "quality-large-\(index)"
+        let title = index == 0 ? "P2 Split Seed Message" : "Quality message \(index)"
+        let body = index == 0
+            ? "Seeded from fixture.seed_messages for UI validation."
+            : "Deterministic app-owned performance fixture row \(index)."
+        var rawPayload: [String: Any] = [
+            "entity_type": "message",
+            "message_id": stableID,
+            "delivery_id": "quality-delivery-\(stableID)",
+        ]
+        if includesMedia {
+            rawPayload["images"] = "[\"\(Self.qualityStandardMessageImageURL.absoluteString)\"]"
+            rawPayload["metadata"] = ["environment": "quality-fixture"]
+        }
+        var message: [String: Any] = [
+            "id": "00000000-0000-0000-0000-\(suffix)",
+            "message_id": stableID,
+            "title": title,
+            "body": body,
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": rawPayload,
+            "status": "normal",
+        ]
+        if includesMedia {
+            message["url"] = "https://pushgo.dev/quality-message"
+        }
+        return message
+    }
+
+    private func qualityHighUnreadNavigationMessage(index: Int) -> [String: Any] {
+        var message = qualityFixtureMessage(index: index)
+        message["received_at"] = "2025-12-31T00:00:00Z"
+        return message
+    }
+
+    private func qualityCleanupFixtureMessages(referenceDate: Date = Date()) -> [[String: Any]] {
+        let calendar = Calendar(identifier: .gregorian)
+        let formatter = ISO8601DateFormatter()
+        let oldDate = calendar.date(byAdding: .day, value: -45, to: referenceDate) ?? .distantPast
+        let recentDate = calendar.date(byAdding: .day, value: -2, to: referenceDate) ?? referenceDate
+
+        return [
+            qualityCleanupFixtureMessage(
+                id: "00000000-0000-0000-0000-00000000c101",
+                messageID: "quality-old-cleanup-target",
+                title: "Quality Old Cleanup Target",
+                receivedAt: formatter.string(from: oldDate)
+            ),
+            qualityCleanupFixtureMessage(
+                id: "00000000-0000-0000-0000-00000000c102",
+                messageID: "quality-recent-cleanup-control",
+                title: "Quality Recent Cleanup Control",
+                receivedAt: formatter.string(from: recentDate)
+            ),
+        ]
+    }
+
+    private func qualityCleanupFixtureMessage(
+        id: String,
+        messageID: String,
+        title: String,
+        receivedAt: String
+    ) -> [String: Any] {
+        [
+            "id": id,
+            "message_id": messageID,
+            "title": title,
+            "body": "Positive cleanup coverage fixture.",
+            "channel_id": "quality-cleanup",
+            "is_read": false,
+            "received_at": receivedAt,
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private static let qualityStandardMessageImageURL = URL(
+        string: "https://quality-media.pushgo.dev/standard-message.png"
+    )!
+
+    private func prepareQualityStandardMessageImage() async throws {
+        guard let data = Data(base64Encoded: Self.qualityStandardMessagePNGBase64) else {
+            throw PushGoAutomationError.invalidArgument("quality_standard_message_image")
+        }
+        guard await SharedImageCache.store(
+            data: data,
+            for: Self.qualityStandardMessageImageURL,
+            rendition: .original
+        ) != nil else {
+            throw PushGoAutomationError.invalidArgument("quality_standard_message_image_cache")
+        }
+        _ = await SharedImageCache.store(
+            data: data,
+            for: Self.qualityStandardMessageImageURL,
+            rendition: .listThumbnail
+        )
+    }
+
+    private static let qualityStandardMessagePNGBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+
+    private func qualityMarkdownFixtureMessage() -> [String: Any] {
+        let longContent = (1...24).map { index in
+            "Long content paragraph \(index): multilingual text 中文繁體 العربية emoji 👩🏽‍💻 remains readable after wrapping."
+        }.joined(separator: "\n\n")
+        let body = """
+        # Quality Markdown Heading
+
+        - [x] Completed deployment check
+        - Pending operator review
+
+        > Production quote remains visible
+
+        | Service | State |
+        | --- | --- |
+        | Gateway | Healthy |
+
+        `pushgo status` and [Open quality guide](https://example.com/pushgo-quality)
+
+        ```json
+        {"environment":"quality"}
+        ```
+
+        \(longContent)
+
+        ## Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻
+        """
+        return [
+            "id": "00000000-0000-0000-0000-00000000d001",
+            "message_id": "quality-markdown-message",
+            "title": "Quality Markdown Structure",
+            "body": body,
+            "channel_id": "quality-markdown",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": "quality-markdown-message",
+                "delivery_id": "quality-delivery-markdown",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityChannelFixtureMessage(
+        id: String,
+        messageID: String,
+        title: String,
+        channelID: String,
+        isRead: Bool,
+        receivedAt: String
+    ) -> [String: Any] {
+        let body = "Deterministic history owned by \(channelID)."
+        return [
+            "id": id,
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": channelID,
+            "is_read": isRead,
+            "received_at": receivedAt,
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+                "channel_id": channelID,
+                "title": title,
+                "body": body,
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityChannelFixtureSubscription(
+        channelID: String,
+        displayName: String,
+        gateway: String? = nil
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "channel_id": channelID,
+            "display_name": displayName,
+            "password": "quality-channel-fixture-value",
+            "last_synced_at": "2026-01-15T08:00:00Z",
+            "updated_at": "2026-01-15T08:00:00Z",
+        ]
+        if let gateway {
+            payload["gateway"] = gateway
+        }
+        return payload
+    }
+
+    private func qualityWorkflowFixtureMessage(index: Int) -> [String: Any] {
+        let suffix = String(format: "%012x", index + 1)
+        let stableID = "quality-workflow-\(index)"
+        let title = "Quality workflow \(index)"
+        let body = "Cross-page deterministic workflow row \(index)."
+        let receivedAt = Date(timeIntervalSince1970: 1_768_464_000 + Double(index))
+        // Keep the established 39-unread count while separating the navigation
+        // oracles: a reselect lands on row 39, whereas a double-tap lands on the newest row.
+        let isRead = index >= 40 || (index.isMultiple(of: 4) && index > 32)
+        return [
+            "id": "00000000-0000-0000-0000-\(suffix)",
+            "message_id": stableID,
+            "title": title,
+            "body": body,
+            "channel_id": index.isMultiple(of: 2) ? "workflow-alpha" : "workflow-beta",
+            "is_read": isRead,
+            "received_at": ISO8601DateFormatter().string(from: receivedAt),
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": stableID,
+                "delivery_id": "quality-delivery-\(stableID)",
+                "tags": ["workflow", index.isMultiple(of: 2) ? "even" : "odd"],
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityFilterFixtureMessages() -> [[String: Any]] {
+        [
+            qualityFilterFixtureMessage(
+                suffix: "f001",
+                messageID: "quality-filter-alpha-even",
+                title: "Quality filter alpha even",
+                channelID: "filter-alpha",
+                tags: ["workflow", "even"],
+                isRead: false,
+                offset: 5
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f002",
+                messageID: "quality-filter-alpha-odd",
+                title: "Quality filter alpha odd",
+                channelID: "filter-alpha",
+                tags: ["workflow", "odd"],
+                isRead: true,
+                offset: 4
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f003",
+                messageID: "quality-filter-beta-odd",
+                title: "Quality filter beta odd",
+                channelID: "filter-beta",
+                tags: ["workflow", "odd"],
+                isRead: false,
+                offset: 3
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f004",
+                messageID: "quality-filter-beta-even",
+                title: "Quality filter beta even",
+                channelID: "filter-beta",
+                tags: ["ops", "even"],
+                isRead: false,
+                offset: 2
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f005",
+                messageID: "quality-filter-ungrouped",
+                title: "Quality filter ungrouped orphan",
+                channelID: "",
+                tags: ["orphan"],
+                isRead: false,
+                offset: 1
+            ),
+        ]
+    }
+
+    private func qualityFilterFixtureMessage(
+        suffix: String,
+        messageID: String,
+        title: String,
+        channelID: String,
+        tags: [String],
+        isRead: Bool,
+        offset: TimeInterval
+    ) -> [String: Any] {
+        let body = "Exact filter fixture body for \(messageID)."
+        return [
+            "id": "00000000-0000-0000-0000-00000000\(suffix)",
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": channelID,
+            "is_read": isRead,
+            "received_at": ISO8601DateFormatter().string(
+                from: Date(timeIntervalSince1970: 1_768_464_000 + offset)
+            ),
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+                "channel_id": channelID,
+                "title": title,
+                "body": body,
+                "tags": tags,
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityEventFixture(thingID: String? = nil) -> [String: Any] {
+        var rawPayload: [String: Any] = [
+            "entity_type": "event",
+            "entity_id": "quality-event-active",
+            "event_id": "quality-event-active",
+            "event_state": "active",
+            "status": "ongoing",
+            "message": "Event fixture for app-owned UI validation.",
+            "severity": "high",
+            "event_title": "P2 Event Active",
+            "event_message": "Event fixture for app-owned UI validation.",
+            "projection_destination": "event_head",
+        ]
+        if let thingID {
+            rawPayload["thing_id"] = thingID
+        }
+        return [
+            "id": "00000000-0000-0000-0000-00000000e001",
+            "message_id": "quality-event-message",
+            "title": "P2 Event Active",
+            "body": "Event fixture for app-owned UI validation.",
+            "channel_id": "01H00000000000000000000000",
+            "is_read": false,
+            "received_at": "2026-01-15T08:01:00Z",
+            "raw_payload": rawPayload,
+            "status": "normal",
+        ]
+    }
+
+    private func qualityEventControlFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000e002",
+            "message_id": "quality-event-control-message",
+            "title": "P3 Event Control",
+            "body": "Control event must become the selected detail after deleting the current event.",
+            "channel_id": "01H00000000000000000000000",
+            "is_read": true,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": "quality-event-control",
+                "event_id": "quality-event-control",
+                "event_state": "active",
+                "status": "ongoing",
+                "message": "Control event must become the selected detail after deleting the current event.",
+                "severity": "normal",
+                "event_title": "P3 Event Control",
+                "event_message": "Control event must become the selected detail after deleting the current event.",
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityEventNavigationFixture(index: Int) -> [String: Any] {
+        let suffix = String(format: "%02d", index)
+        let eventID = "quality-event-navigation-\(suffix)"
+        let title = "Navigation Event \(suffix)"
+        let receivedAt = "2026-01-15T07:\(suffix):00Z"
+        return [
+            "id": "00000000-0000-0000-0000-00000000e1\(suffix)",
+            "message_id": "\(eventID)-message",
+            "title": title,
+            "body": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+            "channel_id": "quality-navigation",
+            "is_read": true,
+            "received_at": receivedAt,
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": eventID,
+                "event_id": eventID,
+                "event_state": "closed",
+                "status": "closed",
+                "message": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+                "severity": "normal",
+                "event_title": title,
+                "event_message": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+                "event_time": receivedAt,
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a001",
+            "message_id": "quality-thing-message",
+            "title": "P2 Thing Rich",
+            "body": "Thing fixture for app-owned UI validation.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:02:00Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-rich",
+                "thing_id": "quality-thing-rich",
+                "title": "P2 Thing Rich",
+                "description": "Fixture thing summary",
+                "thing_title": "P2 Thing Rich",
+                "thing_summary": "Fixture thing summary",
+                "op_id": "quality-op-thing-current",
+                "delivery_id": "quality-delivery-thing-current",
+                "observed_at": "2026-01-15T08:02:00Z",
+                "state": "active",
+                "tags": ["filter-shared", "filter-target"],
+                "attrs": "{\"region\":\"cn-sh\",\"owner\":\"qa\"}",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingInitialFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a000",
+            "message_id": "quality-thing-initial",
+            "title": "Quality Initial Thing Snapshot",
+            "body": "Initial deterministic Thing state before the current snapshot.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-rich",
+                "thing_id": "quality-thing-rich",
+                "title": "Quality Initial Thing Snapshot",
+                "description": "Initial deterministic Thing state before the current snapshot.",
+                "thing_title": "Quality Initial Thing Snapshot",
+                "thing_summary": "Initial deterministic Thing state before the current snapshot.",
+                "op_id": "quality-op-thing-initial",
+                "delivery_id": "quality-delivery-thing-initial",
+                "observed_at": "2026-01-15T08:00:00Z",
+                "state": "active",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingDistractorFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a004",
+            "message_id": "quality-thing-distractor-message",
+            "title": "Quality Pump Beta",
+            "body": "Secondary fixture that must be excluded by the target search.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:01:30Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+                "thing_id": "quality-thing-distractor",
+                "title": "Quality Pump Beta",
+                "description": "Secondary fixture that must be excluded by the target search.",
+                "thing_title": "Quality Pump Beta",
+                "thing_summary": "Secondary fixture that must be excluded by the target search.",
+                "op_id": "quality-op-thing-distractor",
+                "delivery_id": "quality-delivery-thing-distractor",
+                "observed_at": "2026-01-15T08:01:30Z",
+                "state": "active",
+                "tags": ["filter-control"],
+                "attrs": "{\"region\":\"eu-west\",\"owner\":\"operations\"}",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingNavigationFixture(index: Int) -> [String: Any] {
+        let suffix = String(format: "%02d", index)
+        let thingID = "quality-thing-navigation-\(suffix)"
+        let title = "Navigation Thing \(suffix)"
+        let observedAt = "2026-01-15T07:\(suffix):00Z"
+        return [
+            "id": "00000000-0000-0000-0000-00000000a1\(suffix)",
+            "message_id": "\(thingID)-message",
+            "title": title,
+            "body": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+            "channel_id": "quality-navigation",
+            "is_read": true,
+            "received_at": observedAt,
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": thingID,
+                "thing_id": thingID,
+                "title": title,
+                "description": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+                "thing_title": title,
+                "thing_summary": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+                "op_id": "quality-op-\(thingID)",
+                "delivery_id": "quality-delivery-\(thingID)",
+                "observed_at": observedAt,
+                "state": "active",
+                "tags": index == 15 ? ["filter-shared", "filter-other-channel"] : ["navigation"],
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingRelatedEventFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a002",
+            "message_id": "quality-related-event-message",
+            "title": "Quality Related Event",
+            "body": "A deterministic event associated with P2 Thing Rich.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:03:00Z",
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": "quality-related-event",
+                "event_id": "quality-related-event",
+                "thing_id": "quality-thing-rich",
+                "event_state": "active",
+                "status": "ongoing",
+                "message": "Inspect the deterministic Thing relation.",
+                "severity": "high",
+                "event_title": "Quality Related Event",
+                "event_message": "A deterministic event associated with P2 Thing Rich.",
+                "op_id": "quality-op-related-event",
+                "delivery_id": "quality-delivery-related-event",
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingRelatedMessageFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a003",
+            "message_id": "quality-related-message",
+            "title": "Quality Related Message",
+            "body": "The linked Thing message opens its canonical detail.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:04:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "entity_id": "quality-related-message",
+                "message_id": "quality-related-message",
+                "thing_id": "quality-thing-rich",
+                "op_id": "quality-op-related-message",
+                "delivery_id": "quality-delivery-related-message",
+                "occurred_at": "2026-01-15T08:04:00Z",
+            ],
+            "status": "normal",
+        ]
     }
 
     private func loadFixtureBundle(path: String) throws -> PushGoAutomationFixtureBundle {
@@ -3402,32 +4537,103 @@ final class PushGoAutomationRuntime {
         sourcePath: String?,
         environment: AppEnvironment,
     ) async throws {
+        var importedMessageCount = bundle.messages.count
+        if let encryptedFixture = PushGoAutomationContext.qualitySession?.fixture,
+           encryptedFixture == .messagesEncryptedValid || encryptedFixture == .messagesEncryptedCorrupt
+        {
+            environment.markQualityRuntimeReadiness("seeding.encrypted_message")
+            let isCorrupt = encryptedFixture == .messagesEncryptedCorrupt
+            let outcome = await environment.persistRemotePayloadIfNeeded(
+                try qualityEncryptedRemotePayload(corruptCiphertext: isCorrupt),
+                requestIdentifier: isCorrupt
+                    ? "quality-corrupt-encrypted-delivery"
+                    : "quality-encrypted-delivery"
+            )
+            guard case .persistedMain = outcome else {
+                throw PushGoAutomationError.invalidArgument("\(encryptedFixture.rawValue) ingress outcome")
+            }
+            importedMessageCount += 1
+            environment.markQualityRuntimeReadiness("seeding.encrypted_message.saved")
+        }
         if !bundle.messages.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.messages")
+            for message in bundle.messages.map({ $0.toPushMessage() }) {
+                // App-owned fixtures bypass the provider ingress coordinator, so
+                // explicitly reproduce its page-visibility side effect before saving.
+                environment.autoEnableDataPageIfNeeded(for: message)
+            }
             try await environment.dataStore.saveMessages(
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
-            )
+            ) { phase in
+                await MainActor.run {
+                    environment.markQualityRuntimeReadiness("seeding.messages.\(phase)")
+                }
+            }
+            environment.markQualityRuntimeReadiness("seeding.messages.saved")
         }
         if !bundle.entityRecords.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.entities")
             try await environment.dataStore.saveEntityRecords(
                 bundle.entityRecords
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
             )
+            environment.markQualityRuntimeReadiness("seeding.entities.saved")
         }
         if !bundle.channelSubscriptions.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.channels")
             try await applyFixtureSubscriptions(bundle.channelSubscriptions, environment: environment)
+            environment.markQualityRuntimeReadiness("seeding.channels.saved")
         }
+        environment.markQualityRuntimeReadiness("seeding.refresh")
         await environment.refreshMessageCountsAndNotify()
         environment.publishStoreRefreshForAutomation()
         await environment.refreshChannelSubscriptions()
+        environment.markQualityRuntimeReadiness("seeding.complete")
         recordFixtureImport(
             path: sourcePath,
-            messageCount: bundle.messages.count,
+            messageCount: importedMessageCount,
             entityRecordCount: bundle.entityRecords.count,
             subscriptionCount: bundle.channelSubscriptions.count
         )
+    }
+
+    private func qualityEncryptedRemotePayload(
+        corruptCiphertext: Bool = false
+    ) throws -> [AnyHashable: Any] {
+        let keyData = Data("QualityKey123456".utf8)
+        let nonceData = Data((0..<12).map(UInt8.init))
+        let plaintext: [String: Any] = [
+            "title": "Recovered Quality Message",
+            "body": "Recovered from the original encrypted payload.",
+        ]
+        let plaintextData = try JSONSerialization.data(withJSONObject: plaintext, options: [.sortedKeys])
+        let sealedBox = try AES.GCM.seal(
+            plaintextData,
+            using: SymmetricKey(data: keyData),
+            nonce: AES.GCM.Nonce(data: nonceData)
+        )
+        var envelope = sealedBox.ciphertext
+        envelope.append(sealedBox.tag)
+        envelope.append(nonceData)
+        if corruptCiphertext, !envelope.isEmpty {
+            envelope[envelope.startIndex] ^= 0x01
+        }
+        return [
+            "entity_type": "message",
+            "message_id": corruptCiphertext
+                ? "quality-corrupt-encrypted-message"
+                : "quality-encrypted-message",
+            "delivery_id": corruptCiphertext
+                ? "quality-corrupt-encrypted-delivery"
+                : "quality-encrypted-delivery",
+            "title": corruptCiphertext ? "Corrupt Encrypted Message" : "Encrypted Quality Message",
+            "body": "Configure decryption to read this message.",
+            "ciphertext": envelope.base64EncodedString(),
+            "sent_at": "2026-01-15T08:00:00Z",
+        ]
     }
 
     private func applyFixtureSubscriptions(

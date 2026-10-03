@@ -15,7 +15,12 @@ struct WatchThingDetailScreen: View {
             if let thing {
                 Section {
                     HStack(alignment: .top, spacing: 10) {
-                        WatchEntityAvatar(url: thing.imageURL, size: 44)
+                        WatchEntityAvatar(
+                            url: thing.imageURL,
+                            size: 44,
+                            loadedImageAccessibilityIdentifier: "image.thing.detail.\(thing.thingId)",
+                            loadedImageAccessibilityLabel: localizationManager.localized("image")
+                        )
                         VStack(alignment: .leading, spacing: WatchEntityVisualTokens.sectionSpacing) {
                             Text(thing.title)
                                 .font(.headline)
@@ -40,9 +45,18 @@ struct WatchThingDetailScreen: View {
                 }
 
                 Section(localizationManager.localized("attributes")) {
-                    if let attrsJSON = thing.attrsJSON, !attrsJSON.isEmpty {
-                        Text(attrsJSON)
-                            .font(.system(.caption2, design: .monospaced))
+                    let attributes = parseWatchEntityAttributes(from: thing.attrsJSON)
+                    if !attributes.isEmpty {
+                        ForEach(attributes) { attribute in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(attribute.displayLabel)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.appTextSecondary)
+                                Text(attribute.value)
+                                    .font(.footnote)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     } else {
                         Text(localizationManager.localized("no_attributes"))
                             .font(.footnote)
@@ -55,6 +69,7 @@ struct WatchThingDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.thing.detail")
         .navigationTitle(thing?.title ?? "")
     }
 }
