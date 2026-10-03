@@ -1,5 +1,17 @@
 import Foundation
 
+struct MessagePageCursor: Hashable, Sendable {
+    let receivedAt: Date
+    let id: UUID
+    let isRead: Bool
+
+    init(receivedAt: Date, id: UUID, isRead: Bool = false) {
+        self.receivedAt = receivedAt
+        self.id = id
+        self.isRead = isRead
+    }
+}
+
 enum MessagePaginationError: Error {
     case cursorDidNotAdvance
 }

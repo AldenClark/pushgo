@@ -2,18 +2,6 @@ import Foundation
 import GRDB
 import os
 
-struct MessagePageCursor: Hashable, Sendable {
-    let receivedAt: Date
-    let id: UUID
-    let isRead: Bool
-
-    init(receivedAt: Date, id: UUID, isRead: Bool = false) {
-        self.receivedAt = receivedAt
-        self.id = id
-        self.isRead = isRead
-    }
-}
-
 struct EntityProjectionPageCursor: Hashable, Sendable {
     let receivedAt: Date
     let id: UUID
