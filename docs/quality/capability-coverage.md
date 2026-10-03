@@ -1,5 +1,7 @@
 # Apple 能力覆盖索引
 
+2026-10-03 当前源码 Release 产物复核：本地 `736ff6c`（相对已验证 `1e541eb3` 的产品/测试/构建/runner 输入无差异）完成未签名 iOS/watchOS 设备 SDK 与 macOS Release 构建，实际 12 个 App/扩展载荷版本/构建号一致，逐目标架构与 Mach-O 平台准确，20 项 Release 隔离 source guards PASS。本机工具链与原 CI 工具链分别记录；不替代 Simulator、物理设备、生产签名或正式质量门禁。详见 [统一证据](evidence/apple-release-refresh-20261003.json)。
+
 2026-10-03 核心搜索分页修复：待删除消息隐藏后，旧搜索补页将游标推进到未消费批次末尾；真实 Store 43 条匹配/隐藏 2 条时只返回 23 条，漏 18 条。现在游标停在最后实际消费的消息，定点 2/2 通过，41 条完整顺序/唯一性、重开续页和 43 条 canonical 内容均准确。最终产品源码 `1e541eb3`：Core 457 注册/453 执行 PASS，4 个规模 opt-in 明确跳过；iOS 原生分页已读、搜索恢复、删除 Undo 重开 3/3 PASS，零重试/警告；macOS/watchOS/iOS 严格并发编译、TSAN 3 项和 Core CI PASS。首次 NSE 类型作用域编译失败已通过共享游标修正，原失败保留；正式质量 CI 仍因过期 QoS 登记与 P1-STORE deadline 失败，产品 NOT_RUN，未关闭整个 P1-SEARCH 或改动门禁。详见 [统一证据](evidence/apple-search-paging-20261003.json)。
 
 2026-10-02 签名执行边界复核：远端 metadata/ASC GET 已通过，本机现存有效 Store profile 引用仍为 0。实际签名需要人工准备可消费的临时 keychain/九 profile 引用或脱敏签名诊断回执；此前凭据库写入审批拒绝保持，产品/正式签名门禁不降级。公开汇总沿用 apple-signing-metadata-20261002.json；QoS/P1 未关闭。
