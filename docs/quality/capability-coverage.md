@@ -1,6 +1,6 @@
 # Apple 能力覆盖索引
 
-2026-10-03 核心搜索分页修复：待删除消息被隐藏时，旧 Search ViewModel 为补足结果跨页读取，却把游标推进到整批末尾，真实 Store 定点复现 43 条匹配/隐藏 2 条后仅返回 23 条（漏 18 条）。搜索现在使用共享的逐条消费 helper，游标停在最后实际消费的消息；定点 2/2 通过，完整 41 条顺序/唯一性、重开后的续页和 43 条 canonical 数量均准确。保留修复前失败和修复后日志于 build/quality-results/apple-search-paging-20261003/。iOS 原生集成待执行；这不关闭整个 P1-SEARCH，不修改 deadline、QoS 或签名门禁。
+2026-10-03 核心搜索分页修复：待删除消息隐藏后，旧搜索补页将游标推进到未消费批次末尾；真实 Store 43 条匹配/隐藏 2 条时只返回 23 条，漏 18 条。现在游标停在最后实际消费的消息，定点 2/2 通过，41 条完整顺序/唯一性、重开续页和 43 条 canonical 内容均准确。最终产品源码 `1e541eb3`：Core 457 注册/453 执行 PASS，4 个规模 opt-in 明确跳过；iOS 原生分页已读、搜索恢复、删除 Undo 重开 3/3 PASS，零重试/警告；macOS/watchOS/iOS 严格并发编译、TSAN 3 项和 Core CI PASS。首次 NSE 类型作用域编译失败已通过共享游标修正，原失败保留；正式质量 CI 仍因过期 QoS 登记与 P1-STORE deadline 失败，产品 NOT_RUN，未关闭整个 P1-SEARCH 或改动门禁。详见 [统一证据](evidence/apple-search-paging-20261003.json)。
 
 2026-10-02 签名执行边界复核：远端 metadata/ASC GET 已通过，本机现存有效 Store profile 引用仍为 0。实际签名需要人工准备可消费的临时 keychain/九 profile 引用或脱敏签名诊断回执；此前凭据库写入审批拒绝保持，产品/正式签名门禁不降级。公开汇总沿用 apple-signing-metadata-20261002.json；QoS/P1 未关闭。
 
