@@ -1,5 +1,7 @@
 # PushGo 全栈质量体系实施进度
 
+2026-10-03 核心搜索分页修复：待删除消息被隐藏时，旧 Search ViewModel 为补足结果跨页读取，却把游标推进到整批末尾，真实 Store 定点复现 43 条匹配/隐藏 2 条后仅返回 23 条（漏 18 条）。搜索现在使用共享的逐条消费 helper，游标停在最后实际消费的消息；定点 2/2 通过，完整 41 条顺序/唯一性、重开后的续页和 43 条 canonical 数量均准确。保留修复前失败和修复后日志于 build/quality-results/apple-search-paging-20261003/。iOS 原生集成待执行；这不关闭整个 P1-SEARCH，不修改 deadline、QoS 或签名门禁。
+
 2026-10-02 签名执行边界复核：远端 metadata/ASC GET 已通过，本机现存有效 Store profile 引用仍为 0。实际签名需要人工准备可消费的临时 keychain/九 profile 引用或脱敏签名诊断回执；此前凭据库写入审批拒绝保持，产品/正式签名门禁不降级。公开汇总沿用 apple-signing-metadata-20261002.json；QoS/P1 未关闭。
 
 2026-10-02 ASC 只读权限补齐：[Actions](https://github.com/AldenClark/pushgo/actions/runs/37013035334) 在 `24d306c` SUCCESS，现有密钥完成 ES256 认证，五个自动 profile 目标 Bundle ID 均存在，profiles 与 App record 的 GET 可读；同场六项显式签名资产元数据仍 PASS。4 项 Ruby 合同测试（18 assertions）及既有 Python 入口通过，完整 241 项脚本检查仅原 P1-STORE 逾期 failure / QoS 登记过期 error，未延期或豁免。仅证明读取权限，不声称创建、上传或实际签名通过；详情沿用 apple-signing-metadata-20261002.json。
