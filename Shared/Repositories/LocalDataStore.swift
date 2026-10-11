@@ -473,7 +473,14 @@ actor LocalDataStore {
         storageState = sharedResources.storageState
         searchIndex = sharedResources.searchIndex
         metadataIndex = sharedResources.metadataIndex
+        #if DEBUG
+        self.spotlightIndexer = spotlightIndexerForQualitySession(
+            spotlightIndexer,
+            session: PushGoAutomationContext.qualitySession
+        )
+        #else
         self.spotlightIndexer = spotlightIndexer
+        #endif
         self.canonicalDerivedWorkRetryDelay = max(0.01, canonicalDerivedWorkRetryDelay)
         self.canonicalLiveActivityHandler = canonicalLiveActivityHandler
         remainingQualityNotificationMaterialPersistenceFailures =

@@ -10,6 +10,20 @@ protocol PushGoSpotlightIndexing: Sendable {
     func deleteAll() async throws
 }
 
+#if DEBUG
+func spotlightIndexerForQualitySession(
+    _ candidate: (any PushGoSpotlightIndexing)?,
+    session: PushGoQualitySessionDescriptor?
+) -> (any PushGoSpotlightIndexing)? {
+    guard let session, !session.allowsSystemColdLaunch,
+          candidate is CoreSpotlightPushGoIndexer
+    else { return candidate }
+    // App-owned UI fixtures verify local storage and projections. Keep the
+    // external Spotlight daemon out of their readiness/commit path.
+    return RecordingPushGoSpotlightIndexer()
+}
+#endif
+
 enum PushGoSpotlightIndexingError: Error, Equatable {
     case unavailable
 }

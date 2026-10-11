@@ -143,6 +143,11 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
     let privateDetail: String?
     let ackPendingCount: Int
     let channelCount: Int
+    let watchProvisioningGeneration: Int64?
+    let watchProvisioningDigest: String?
+    let watchProvisioningGatewayBaseURL: String?
+    let watchProvisioningTokenPresent: Bool
+    let watchProvisioningChannelIDs: [String]
     let localStoreMode: String
     let localStoreReason: String?
     let runtimeErrorCount: Int
@@ -181,6 +186,11 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
         case privateDetail = "private_detail"
         case ackPendingCount = "ack_pending_count"
         case channelCount = "channel_count"
+        case watchProvisioningGeneration = "watch_provisioning_generation"
+        case watchProvisioningDigest = "watch_provisioning_digest"
+        case watchProvisioningGatewayBaseURL = "watch_provisioning_gateway_base_url"
+        case watchProvisioningTokenPresent = "watch_provisioning_token_present"
+        case watchProvisioningChannelIDs = "watch_provisioning_channel_ids"
         case localStoreMode = "local_store_mode"
         case localStoreReason = "local_store_reason"
         case runtimeErrorCount = "runtime_error_count"
@@ -478,6 +488,11 @@ final class PushGoWatchAutomationRuntime {
             privateDetail: nil,
             ackPendingCount: 0,
             channelCount: environment.channelSubscriptions.count,
+            watchProvisioningGeneration: nil,
+            watchProvisioningDigest: nil,
+            watchProvisioningGatewayBaseURL: nil,
+            watchProvisioningTokenPresent: false,
+            watchProvisioningChannelIDs: [],
             localStoreMode: localStoreMode(environment.dataStore.storageState),
             localStoreReason: normalizedIdentifier(environment.dataStore.storageState.reason),
             runtimeErrorCount: runtimeErrorCount,
@@ -629,6 +644,9 @@ final class PushGoWatchAutomationRuntime {
             ?? PushGoAutomationContext.providerToken
         let deviceKey = await environment.dataStore.cachedDeviceKey(for: platformIdentifier)
         let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        let provisioningState = await environment.dataStore.loadWatchProvisioningState()
+        let provisioningConfig = try? await environment.dataStore.loadWatchProvisioningServerConfig()?.normalized()
+        let provisioningChannels = (try? await environment.dataStore.loadChannelSubscriptions(includeDeleted: false)) ?? []
         let ackPendingCount = 0
         let messages = (try? await environment.dataStore.loadWatchLightMessages()) ?? []
         let totalMessageCount = messages.count
@@ -683,6 +701,11 @@ final class PushGoWatchAutomationRuntime {
             privateDetail: privateDetail,
             ackPendingCount: ackPendingCount,
             channelCount: environment.channelSubscriptions.count,
+            watchProvisioningGeneration: provisioningState?.generation,
+            watchProvisioningDigest: provisioningState?.contentDigest,
+            watchProvisioningGatewayBaseURL: provisioningConfig?.normalizedBaseURL.absoluteString,
+            watchProvisioningTokenPresent: normalizedIdentifier(provisioningConfig?.token) != nil,
+            watchProvisioningChannelIDs: provisioningChannels.map(\.channelId).sorted(),
             localStoreMode: state.localStoreMode,
             localStoreReason: state.localStoreReason,
             runtimeErrorCount: state.runtimeErrorCount,
@@ -1319,6 +1342,11 @@ final class PushGoWatchAutomationRuntime {
             privateDetail: nil,
             ackPendingCount: 0,
             channelCount: environment.channelSubscriptions.count,
+            watchProvisioningGeneration: nil,
+            watchProvisioningDigest: nil,
+            watchProvisioningGatewayBaseURL: nil,
+            watchProvisioningTokenPresent: false,
+            watchProvisioningChannelIDs: [],
             localStoreMode: localStoreMode(environment.dataStore.storageState),
             localStoreReason: normalizedIdentifier(environment.dataStore.storageState.reason),
             runtimeErrorCount: runtimeErrorCount,

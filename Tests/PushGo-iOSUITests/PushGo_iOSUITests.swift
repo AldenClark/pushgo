@@ -3242,7 +3242,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let filteredEventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(filteredEventRow.waitForNonExistence(timeout: 8))
 
-        let thingsTab = element(in: context.app, identifier: "tab.things")
+        let thingsTab = thingsTab(in: context.app)
         tapWhenHittable(thingsTab, timeout: 8, message: "The linked Thing must remain reachable")
         let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
         tapWhenHittable(linkedThing, timeout: 8, message: "The exact linked Thing must open")
@@ -3384,7 +3384,7 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let thingsTab = element(in: context.app, identifier: "tab.things")
+        let thingsTab = thingsTab(in: context.app)
         XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
         thingsTab.tap()
         let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
@@ -3661,9 +3661,19 @@ final class PushGo_iOSUITests: XCTestCase {
             Date.FormatStyle(date: .abbreviated, time: .shortened)
                 .locale(Locale(identifier: "en_US"))
         )
+        // The device's 24-hour preference can differ from the XCTest runner.
+        // Both representations must still name the exact canonical timestamp.
+        let clock24 = DateFormatter()
+        clock24.locale = Locale(identifier: "en_US_POSIX")
+        clock24.timeZone = .current
+        clock24.dateFormat = "H:mm"
+        let keepLatest24HourText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .omitted)
+                .locale(Locale(identifier: "en_US"))
+        ) + " at " + clock24.string(from: keepLatestDate)
         XCTAssertTrue(
-            keepActivity.label.contains(keepLatestText),
-            "The Channel row must expose the latest canonical message time, not only its subscription."
+            [keepLatestText, keepLatest24HourText].contains { keepActivity.label.contains($0) },
+            "The Channel row must expose the latest canonical message time. Expected \(keepLatestText) or \(keepLatest24HourText); actual \(keepActivity.label). Runner timezone: \(TimeZone.current.identifier)."
         )
         let subscribedChannelID = "01H00000000000000000000004"
         tapWhenHittable(
@@ -5428,6 +5438,19 @@ final class PushGo_iOSUITests: XCTestCase {
         // Channels is the only mandatory destination and is always the final
         // tab, even when optional data pages are hidden.
         return tabBar.buttons.element(boundBy: tabBar.buttons.count - 1)
+    }
+
+    private func thingsTab(in app: XCUIApplication) -> XCUIElement {
+        let identified = element(in: app, identifier: "tab.things")
+        if identified.waitForExistence(timeout: 2) { return identified }
+        let tabBar = app.tabBars.firstMatch
+        guard tabBar.waitForExistence(timeout: 8) else { return identified }
+        let labels = Set(["Objects", "对象", "物件"])
+        let candidates = tabBar.buttons.allElementsBoundByIndex.filter {
+            labels.contains($0.label)
+        }
+        // Resolve only one actual product tab; the flow verifies its real rows.
+        return candidates.count == 1 ? candidates[0] : identified
     }
 
     private func messagesTab(in app: XCUIApplication) -> XCUIElement {

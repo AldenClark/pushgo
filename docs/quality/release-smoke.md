@@ -56,3 +56,21 @@ Final repair checks: Gateway smoke 6/6; Apple profile-source contracts 8/8; AI h
 ## Integration candidate (2026-10-11)
 
 The paired Gateway pin now names published fixed candidate `0286d6e46b6e5ce5a169ea12bcfefcbc702676c3`, including the lifecycle repair and h2 0.4.20. Historical dirty-source receipts above remain historical; fresh paired CI must pass against this exact revision before accepting the candidate. QoS registration and P1 ledger expiry remain WAIVED rather than product evidence.
+
+
+## 2026-10-11 acceptance follow-up
+
+Gateway PR #1 merged as `1f6489ec4c65287c875700b9dcad117bf870305b`; candidate `0286d6e46b6e5ce5a169ea12bcfefcbc702676c3` passed CI `38103263644` (strict Clippy, six core smokes, rollback/restore, three-database parity and route transitions). The Apple paired integration's shallow checkout failed before execution; its workflow now fetches the required migration history. Fresh paired CI remains required.
+
+Apple manual signing runs `38103210673` (App Store archive/export) and `38103221312` (Developer ID DMG/notarization) passed without upload/publication. Receipts name source `558b0a220c29686bd378a1e2f2afda5eed8064ec` and `source_dirty=true`; these certify signed artifacts, not a clean-tree runtime acceptance. Independent local strict signature, Gatekeeper and DMG stapling checks passed; the app bundle itself has no separate stapled ticket.
+
+iPhone 16: initial 12 selected journeys yielded 10 passes and two failures. The Channel failure was the device's 24-hour preference differing from the runner's 12-hour formatter; exact canonical time is retained for both valid display conventions. The Thing selector now uses the actual unique localized tab title if iOS omits the identifier; its full lifecycle/relations/unavailable-target flow passed in `ios-device/affected2-20261011/tests.xcresult`. A later Channel run failed at the quality-session handshake before product assertions (`ios-device/channel-clock-20261011/tests.xcresult`); this remains BLOCKED, not PASS.
+
+Paired iPhone/Watch Simulator provisioning passed in `watch-paired-ready-20261011/watch-provisioning-smoke.json`: real WCSession connection, exact generation/digest ACK, Watch store recreation retaining Gateway configuration and both channel IDs. `transport-observation.json` independently records the received inline application-context key. The first attempt issued resync before companion activation; Debug acceptance now waits boundedly for the actual companion state. This proves paired Simulator provisioning only, not real APNs, physical Watch or standalone-ready token delivery.
+
+The Chinese accessibility CI fixture stalled in real Spotlight indexing. Ordinary App-owned quality sessions now use the recording indexer, while explicit injected indexers and system-cold-launch profiles keep their original path; Release is unchanged. The focused ownership test passed 1/1. Current native CI remains required.
+
+
+2026-10-11 Android physical acceptance: Redmi K30i 5G/API31/1080x2400 first core run executed 16 native tests (13 pass, three failures). Two assertions used English literals while the real UI was Chinese; they now resolve the app's own resources. Channel submission now dismisses an observed IME before the actual submit tap, leaving the full create/rename/both-unsubscribe persisted-result oracle intact. The affected three-case run passed Channel and actual system-notification tap/detail/read persistence; deletion failed because list readiness preceded asynchronous unavailable-target feedback. The test now waits boundedly for that exact feedback, and a prepared native one-case run passed in 17.337s (`android-physical-deleted-target-prepared-20261011/instrumentation.log`). This is composite device evidence, not a fresh full 16-case pass. MIUI installation and test-bootstrap launch authorizations were clicked through actual UI; background activity permission was temporary test preparation. Real FCM and signed production installation remain NOT RUN.
+
+Android signing CI failed first on software-emulator startup, then on checking KVM permissions immediately after asynchronous udev trigger. The workflow now waits for udev completion and logs actual device permissions before validation; fresh signed CI is required. No publication was performed.
