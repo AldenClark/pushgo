@@ -11,6 +11,9 @@ first_run_id="${DIAGNOSTIC_FIRST_RUN_ID:-}"
 run_id="${GITHUB_RUN_ID:-local}"
 run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
 results_root="$repo_root/build/quality-results/apple-macos-adhoc-ui-diagnostic/trial-${trial}-run-${run_id}-${run_attempt}"
+if [[ "${DIAGNOSTIC_MACOS_SCOPE:-}" == 'release-smoke' && -n "${RESULTS_ROOT:-}" ]]; then
+  results_root="$RESULTS_ROOT"
+fi
 mkdir -p "$results_root"
 
 test_scopes=()
@@ -85,6 +88,14 @@ PY
 trap write_summary EXIT
 
 case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
+  release-smoke)
+    python3 scripts/release_smoke.py macos --check
+    while IFS= read -r scope; do test_scopes+=("$scope"); done < <(
+      python3 -c 'import json; print("\n".join(json.load(open("config/release-smoke.json"))["profiles"]["macos"]["tests"]))'
+    )
+    expected_test_count="${#test_scopes[@]}"
+    export PUSHGO_RELEASE_SMOKE_VERSION=1.3.3
+    ;;
   thing-ax-qos-host-sample)
     test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
     host_sample_capture_mode=1
@@ -128,7 +139,7 @@ if [[ "$trial" == '2' && ! "$first_run_id" =~ ^[0-9]+$ ]]; then
   reason=trial_two_requires_reviewed_clean_trial_one_run_id
   exit 2
 fi
-if [[ "$run_id" == 'local' ]]; then
+if [[ "$run_id" == 'local' && "${DIAGNOSTIC_MACOS_SCOPE:-}" != 'release-smoke' ]]; then
   reason=diagnostic_requires_isolated_github_runner
   exit 2
 fi
@@ -143,6 +154,9 @@ xcodebuild -version > "$results_root/xcode-version.log" 2>&1
 
 temporary_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pushgo-macos-adhoc-ui.XXXXXX")"
 derived_data_path="$temporary_root/derived-data"
+if [[ "${DIAGNOSTIC_MACOS_SCOPE:-}" == 'release-smoke' && -n "${DERIVED_DATA_PATH:-}" ]]; then
+  derived_data_path="$DERIVED_DATA_PATH"
+fi
 entitlements_file="$temporary_root/sandbox-only.entitlements"
 cat > "$entitlements_file" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -426,7 +440,10 @@ try:
     classification["runner_status"] = runner_status
     executed = counts["passedTests"] + counts["failedTests"] + counts["expectedFailures"]
     log = Path(log_path).read_text(errors="replace")
-    if executed != expected_count or counts["skippedTests"] or counts["expectedFailures"]:
+    if runner_status == "BLOCKED" and counts["passedTests"] == 0:
+        classification["test_system_status"] = "BLOCKED"
+        classification["reason"] = "native_runner_blocked_before_product_oracle"
+    elif executed != expected_count or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_test_not_exactly_executed"
     elif host_sample_capture_mode == "1":
         failures = summary.get("testFailures", [])
@@ -548,6 +565,17 @@ else:
                and classification["test_system_status"] == "PASSED")
 raise SystemExit(0 if success else 1)
 PY
+  if [[ "${DIAGNOSTIC_MACOS_SCOPE:-}" == 'release-smoke' ]]; then
+    PYTHONPATH="$repo_root/scripts" python3 - "$result_bundle" <<'PY'
+import json
+import sys
+from pathlib import Path
+from release_smoke import verify_ui_bundle
+
+selected = json.loads(Path("config/release-smoke.json").read_text())["profiles"]["macos"]["tests"]
+verify_ui_bundle(Path(sys.argv[1]), selected)
+PY
+  fi
   exit 0
 else
   exit 1

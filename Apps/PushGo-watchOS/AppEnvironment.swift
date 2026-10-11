@@ -1724,6 +1724,16 @@ final class AppEnvironment {
     }
 
     private func scheduleMessageListRefresh() {
+#if DEBUG
+        if WatchQualityRuntime.isHermeticRequested {
+            // The quality fixture must publish its committed Store revision
+            // even when Simulator reports the XCTest scene as inactive.
+            print("quality_watch_ui_refresh scene_active=\(isSceneActive) window_visible=\(isMainWindowVisible)")
+            messageStoreRevision = UUID()
+            pendingMessageListRefresh = false
+            return
+        }
+#endif
         guard canRefreshMessageList else {
             pendingMessageListRefresh = true
             return

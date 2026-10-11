@@ -29,7 +29,7 @@
   "rules": [
     {
       "id": "quality-system",
-      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json", "config/quality-waivers.json"],
+      "paths": ["AGENTS.md", "scripts/release_smoke.py", "config/release-smoke.json", ".github/workflows/apple-release-smoke.yml", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json", "config/quality-waivers.json", "scripts/release_smoke_gateway.py"],
       "exclude_paths": ["scripts/quality_ui_entrypoints.py", "scripts/tests/test_quality_ui_entrypoints.py", "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift", "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift", "Tests/PushGo-watchOSUITests/PushGo_watchOSUITests.swift"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
@@ -301,7 +301,7 @@
       "capabilities": ["watch-messages-events-things", "watch-receiver-complication"],
       "minimum_evidence": ["Watch model/connectivity/quantizer tests", "App-owned watchOS simulator UI journey with visible fields, delete cancellation/commit, and relaunch persistence", "message Store failure remains owned by Messages while Event/Thing tasks stay usable"],
       "lane": "nightly",
-      "known_evidence_gaps": ["watchOS Messages/Event/Thing representative P0 UI and message-delete persistence are covered; standalone mark-read persistence has partial focused evidence but needs a clean final journey, while images/decryption, Receiver Health, physical notification route/receiver/complication, VoiceOver, and size matrix remain incomplete. Legacy mirror ACK is tested only when an explicit mixed-version compatibility commitment exists."],
+      "known_evidence_gaps": ["The 2026-10-05 four-case native Watch smoke covers Messages/Event/Thing UI, exact read/delete across relaunch, rendered fixture images, Receiver Health copy, migration and route/provisioning recovery. Signed Keychain/App Group integration, provider decryption/delivery, paired physical notification/receiver/complication and VoiceOver remain unproven. Legacy mirror ACK is tested only with an explicit mixed-version commitment."],
       "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
     },
     {

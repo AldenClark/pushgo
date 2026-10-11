@@ -3845,6 +3845,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
 
         tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
         XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
 
@@ -5432,15 +5433,11 @@ final class PushGo_iOSUITests: XCTestCase {
     private func messagesTab(in app: XCUIApplication) -> XCUIElement {
         let tabBar = app.tabBars.firstMatch
         let identified = tabBar.buttons["tab.messages"]
-        if identified.exists {
-            return identified
-        }
         guard tabBar.waitForExistence(timeout: 8) else { return identified }
 
-        // iOS 27 may omit an identifier attached to a custom SwiftUI tab item
-        // from the final UITabBarButton. Resolve the same user-facing
-        // destination by its localized title, scoped to the production tab
-        // bar. Do not fall back to an ordinal: optional tabs can change order.
+        // Resolve the visible Messages destination by its localized title
+        // before using the custom identifier. iOS 27 can associate an
+        // identifier query with the wrong tab's hit frame after a tab update.
         let labels = Set(["Messages", "消息", "訊息"])
         let deadline = Date().addingTimeInterval(2)
         repeat {
@@ -5699,13 +5696,20 @@ final class PushGo_iOSUITests: XCTestCase {
         if hasEnteredText {
             field.typeKey("a", modifierFlags: .command)
             field.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+            // Only use the fallback when selection did not clear the field.
+            // Empty fields can expose their placeholder as their AX value.
+            let remaining = (field.value as? String) ?? ""
+            let cleared = remaining.isEmpty
+                || (remaining == field.placeholderValue && existing != field.placeholderValue)
             // If selection was not honored by the current software keyboard,
             // move to the end and apply a bounded fallback clear. XCUI may
             // expose only the first whitespace-delimited token as `value`.
-            field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
-            field.typeText(
-                String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
-            )
+            if !cleared {
+                field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
+                field.typeText(
+                    String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
+                )
+            }
         }
         if !text.isEmpty {
             field.typeText(text)

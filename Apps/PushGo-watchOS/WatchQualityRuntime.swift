@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import ImageIO
 import SQLite3
 
 enum WatchQualityRuntime {
@@ -11,7 +12,7 @@ enum WatchQualityRuntime {
         string: "https://quality-media.pushgo.dev/watch-standard.png"
     )!
     private static let standardImagePNGBase64 =
-        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGPQqLgDRAwQCgAmzgXxe7wbGAAAAABJRU5ErkJggg=="
 
     static var isHermeticRequested: Bool {
         normalizedEnvironmentValue(profileEnvironmentKey) == "hermetic"
@@ -268,6 +269,8 @@ enum WatchQualityRuntime {
 
     private static func prepareStandardImage() async throws {
         guard let data = Data(base64Encoded: standardImagePNGBase64),
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceCreateImageAtIndex(source, 0, nil) != nil,
               await SharedImageCache.store(data: data, for: standardImageURL) != nil,
               await SharedImageCache.cachedData(for: standardImageURL) == data
         else {

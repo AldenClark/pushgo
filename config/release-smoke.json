@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "release_version": "1.3.3",
+  "governance_waivers": [
+    {
+      "id": "apple-xctest-qos-priority-inversion",
+      "scope": "registration_expiry_only",
+      "status": "WAIVED",
+      "release_version": "1.3.3",
+      "authority": "User explicitly requested skip on 2026-10-03; runtime warnings and product failures remain failures"
+    },
+    {
+      "id": "p1-deferral-ledger-expiry",
+      "scope": "historical_ledger_expiry_only",
+      "status": "WAIVED",
+      "approved_on": "2026-10-03",
+      "release_version": "1.3.3",
+      "authority": "User explicitly requested skip on 2026-10-03"
+    }
+  ],
+  "profiles": {
+    "core": {
+      "suites": [
+        "LocalDataStoreTests",
+        "LocalDataStoreStoreRecoveryTests",
+        "NotificationHandlingTests",
+        "NotificationIngressInboxTests",
+        "NotificationOpenControllerTests",
+        "NotificationSoundSettingsTests",
+        "MessagePaginationConsumptionTests",
+        "MessageSearchPaginationTests",
+        "PendingLocalDeletionControllerTests",
+        "ChannelSubscriptionServiceTests",
+        "PushRegistrationServiceTests",
+        "ProviderIngressCoordinatorTests",
+        "ProviderRouteControllerTests",
+        "WatchConnectivityModelTests",
+        "PushGoSystemIntegrationTests",
+        "PushGoSystemSurfaceSnapshotTests"
+      ]
+    },
+    "ios": {
+      "source": "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift",
+      "tests": [
+        "PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testThingLifecycleFiltersRelationsAndUnavailableTargetFallback",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch",
+        "PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult"
+      ]
+    },
+    "macos": {
+      "source": "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
+      "tests": [
+        "PushGo-macOSUITests/PushGo_macOSUITests/testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testEventDetailCloseAndRelaunchPreserveAccurateProjection",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testEncryptedMessageWrongKeyThenCorrectKeyRecoversAndSurvivesRelaunch",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch",
+        "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch"
+      ]
+    },
+    "watchos": {
+      "source": "Tests/PushGo-watchOSUITests/PushGo_watchOSUITests.swift",
+      "tests": [
+        "PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch",
+        "PushGo-watchOSUITests/PushGo_watchOSUITests/testLegacyWatchStoreMigratesAccurateMessageAndKeepsNewDataAcrossRelaunch",
+        "PushGo-watchOSUITests/PushGo_watchOSUITests/testGatewayRouteCleanupRecoversAfterRelaunchAndNeverReusesRetiredKey",
+        "PushGo-watchOSUITests/PushGo_watchOSUITests/testInterruptedPhoneProvisioningBlocksMixedCredentialsUntilReplay"
+      ]
+    },
+    "ios-notification": {
+      "source": "Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift",
+      "tests": [
+        "PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
+      ]
+    },
+    "gateway-integration": {
+      "suites": [
+        "ReleaseGatewayJourneyTests"
+      ],
+      "purpose": "Real loopback Gateway registration/subscription/send/pull -> production persistence -> exact open/read/replay/delete -> ACK/unsubscribe isolation",
+      "gateway_repository": "AldenClark/pushgo-gateway",
+      "gateway_revision": "131f56c5f2ac49fb8e526180e4f1797b8e020275"
+    }
+  },
+  "not_proven": [
+    "signed_distribution_install_update",
+    "physical_APNs_delivery",
+    "physical_iPhone_WatchConnectivity",
+    "Release_UI_parity"
+  ]
+}
