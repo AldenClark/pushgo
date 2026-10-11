@@ -462,10 +462,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
             'python3 "$repo_root/scripts/quality_impact.py" "${impact_args[@]}" --check',
             runner,
         )
-        self.assertIn(
-            'json.load(open(sys.argv[1]))["recommended_lane"]',
-            runner,
-        )
+        self.assertIn('python3 - "$repo_root/scripts" "$impact_file"', runner)
+        self.assertIn('plan = json.load(open(sys.argv[2]))', runner)
 
     def test_impact_selected_channel_sheet_claim_is_identical_to_executed_claim(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

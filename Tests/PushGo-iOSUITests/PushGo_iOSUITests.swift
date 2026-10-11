@@ -985,12 +985,14 @@ final class PushGo_iOSUITests: XCTestCase {
                 )
             }
         }
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
         let swipeUpAndRecord = {
             list.swipeUp()
-            recordVisibleWorkflowRows()
+            // Capture the transient loading state before expensive per-row AX
+            // queries consume the controlled request's ten-second delay.
+            if !pageLoading.exists { recordVisibleWorkflowRows() }
         }
         recordVisibleWorkflowRows()
-        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
         for _ in 0..<12 where !pageLoading.exists {
             swipeUpAndRecord()
         }
@@ -1006,11 +1008,14 @@ final class PushGo_iOSUITests: XCTestCase {
         let loadingText = context.app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "正在加载更早的消息")
         ).firstMatch
-        let nearbyLoadingTextIsVisible = loadingText.exists
-            && loadingText.frame.width > 0
-            && loadingText.frame.height > 0
-            && loadingText.frame.intersects(context.app.windows.firstMatch.frame)
-            && abs(loadingText.frame.midY - observedLoadingFrame.midY) < 40
+        var nearbyLoadingTextIsVisible = false
+        if !observedLoadingLabel.contains("正在加载更早的消息"), loadingText.exists {
+            let textFrame = loadingText.frame
+            nearbyLoadingTextIsVisible = textFrame.width > 0
+                && textFrame.height > 0
+                && textFrame.intersects(context.app.windows.firstMatch.frame)
+                && abs(textFrame.midY - observedLoadingFrame.midY) < 40
+        }
         XCTAssertTrue(
             observedLoadingLabel.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
             "The visible bottom progress must include its nearby zh-Hans explanation, not only a spinner."
@@ -1019,6 +1024,7 @@ final class PushGo_iOSUITests: XCTestCase {
             context.app.staticTexts["Quality workflow 75"].exists,
             "The last row from page 1 must remain usable while page 2 is loading"
         )
+        recordVisibleWorkflowRows()
         let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
         XCTAssertTrue(
             pageFailure.waitForExistence(timeout: 8) && pageFailure.isHittable,
@@ -3378,9 +3384,10 @@ final class PushGo_iOSUITests: XCTestCase {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         )
-        let encodedSession = qualitySessionPayload(
+        let encodedSession = pendingDeletionQualitySessionPayload(
             sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
-            fixture: "thing.standard"
+            fixture: "thing.standard",
+            timeoutMilliseconds: 30_000
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
@@ -3566,6 +3573,19 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app,
             identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
         )
+        // The initial update follows the newer snapshot in the production
+        // scroll surface. Reveal that exact older row through the real user
+        // gesture rather than assuming every relation fits in one viewport.
+        let thingDetail = element(in: context.app, identifier: "sheet.thing.detail")
+        if !relatedUpdate.isHittable {
+            let beforeScroll = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            beforeScroll.name = "thing-updates-before-scroll"
+            beforeScroll.lifetime = .keepAlways
+            add(beforeScroll)
+        }
+        for _ in 0..<3 where !relatedUpdate.isHittable {
+            thingDetail.swipeUp()
+        }
         tapWhenHittable(relatedUpdate, timeout: 8, message: "Related Update must open")
         assertElementExists("screen.thing.update.detail", in: context.app, timeout: 8)
         XCTAssertTrue(

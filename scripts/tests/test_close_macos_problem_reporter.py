@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 import subprocess
+import json
+import sys
+import tempfile
 import time
 import unittest
 
@@ -19,13 +22,13 @@ CURRENT_REPORTER_COMMAND = (
 class CloseMacOSProblemReporterTests(unittest.TestCase):
     def test_default_rule_closes_both_exact_system_reporter_processes_only(self) -> None:
         legacy_target = subprocess.Popen(
-            [SYSTEM_REPORTER_COMMAND, "30"],
+            [f"pushgo-test-legacy-reporter-{os.getpid()}", "30"],
             executable="/bin/sleep",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         current_target = subprocess.Popen(
-            [CURRENT_REPORTER_COMMAND, "30"],
+            [f"pushgo-test-current-reporter-{os.getpid()}", "30"],
             executable="/bin/sleep",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -38,13 +41,32 @@ class CloseMacOSProblemReporterTests(unittest.TestCase):
         )
         try:
             time.sleep(0.1)
-            result = subprocess.run(
-                [str(CLEANER)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            self.assertIn("problem_reporter_closed=", result.stdout)
+            # Default-pattern coverage must not create globally named system
+            # processes: a concurrent UI watcher can kill those fixtures before
+            # this test's cleaner, making a correct cleanup look like failure.
+            # Keep the native signals/liveness checks; scope discovery to only
+            # our owned PIDs and evaluate the cleaner's actual default pattern.
+            with tempfile.TemporaryDirectory() as directory:
+                fixture = Path(directory) / "processes.json"
+                fixture.write_text(json.dumps([
+                    [legacy_target.pid, SYSTEM_REPORTER_COMMAND + " 30"],
+                    [current_target.pid, CURRENT_REPORTER_COMMAND + " 30"],
+                    [unrelated.pid, "pushgo-unrelated-fixture 30"],
+                ]))
+                pgrep = Path(directory) / "pgrep"
+                pgrep.write_text("#!" + sys.executable + "\n" +
+                    "import json, os, re, sys\n" +
+                    "assert sys.argv[1] == '-f'\n" +
+                    "matches = [str(pid) for pid, command in json.load(open(os.environ['PUSHGO_TEST_PROCESSES'])) if re.search(sys.argv[2], command)]\n" +
+                    "print('\\n'.join(matches)) if matches else None\n" +
+                    "sys.exit(0 if matches else 1)\n")
+                pgrep.chmod(0o755)
+                result = subprocess.run(
+                    [str(CLEANER)], check=True, capture_output=True, text=True,
+                    env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
+                         "PUSHGO_TEST_PROCESSES": str(fixture)},
+                )
+            self.assertIn("problem_reporter_closed=2", result.stdout)
             legacy_target.wait(timeout=2)
             current_target.wait(timeout=2)
             self.assertIsNone(unrelated.poll())

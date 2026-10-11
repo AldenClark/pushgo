@@ -141,3 +141,7 @@ python3 scripts/quality_ai_history.py --check \
 ## AI 交付报告模板
 
 交付时必须回答：改了哪个用户目的；新增/强化了什么可信 Oracle；跑了哪些 lane 和新鲜结果；哪些系统能力仍是 `BLOCKED/NOT RUN`；是否更新能力矩阵；是否存在因价值较低而明确延期的场景。禁止用“测试文件存在”“编译通过”替代功能结论。
+
+## 2026-10-11 执行收敛
+
+实施约束以 [验收清单与执行合同](../../../docs/quality/acceptance-execution.md) 为准：固定必保结果；累计义务与 draft 本次执行分开，ready_for_review 恢复累计验收；保存阶段结果，失败后定点归因，连续两轮仅修 harness 时停止。原有核心断言与正式门禁保留。

@@ -14,7 +14,7 @@ on:
     # select those iOS methods separately after the mixed run failed.
     # apple-macos-thing-ax-qos-sample-diagnostic captures stacks around the
     # original Thing query; sampled execution never closes the QoS issue.
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
     branches: [ main ]
     tags: [ "v*" ]
@@ -112,13 +112,14 @@ jobs:
             --audit-product-tree \
             --output build/quality-results/apple-impact-tree-audit.json \
             --check
-          python3 scripts/quality_impact.py \
+          python3 scripts/quality_ci_plan.py \
             --base "$QUALITY_BASE_SHA" \
             --head "$GITHUB_SHA" \
+            --event "$GITHUB_EVENT_PATH" \
             --output build/quality-results/apple-impact-plan.json \
             --check
           echo "QUALITY_IMPACT_PLAN=build/quality-results/apple-impact-plan.json" >> "$GITHUB_ENV"
-          impact_lane="$(python3 -c 'import json; print(json.load(open("build/quality-results/apple-impact-plan.json"))["recommended_lane"])')"
+          impact_lane="$(python3 -c 'import json; print((lambda p: p.get("execution_lane", p["recommended_lane"]))(json.load(open("build/quality-results/apple-impact-plan.json"))))')"
           if [[ "$impact_lane" == "not-run" ]]; then
             echo "QUALITY_SKIP_PRODUCT=1" >> "$GITHUB_ENV"
           else

@@ -553,3 +553,7 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 
 
 2026-10-11 actual macOS APNs click accepted: the signed DMG process at `/Volumes/PushGo-macOS-v1.3.3/PushGo.app` received a new task-owned provider message while inactive. Native `macos-real-provider-20261011/notification-registered-signed-candidate.xcresult` passed 1/1 in 8.288s, with no fixture notification injection: the exact system card activated that same running candidate and displayed the exact canonical title/body. A read-only query of the task-owned unique message confirms persisted `is_read=1`. The first click activated an older task-owned Release build registered under the same bundle ID; its failed identity gate is retained. After unregistering that stale build and registering the signed candidate, a distinct task-owned message proved the correct path. The opt-in mode uses `PUSHGO_LIVE_PROVIDER_APP_PATH`, `PUSHGO_LIVE_PROVIDER_TITLE`, and `PUSHGO_LIVE_PROVIDER_BODY` in the test target's TestingEnvironmentVariables and overrides UITargetAppPath to the installed candidate; it does not launch/replace the candidate or synthesize delivery. Default fixture coverage is unchanged. This closes macOS production-APNs notification arrival/open/read for the tested DMG, not physical iPhone APNs, Watch provider execution, Sparkle installation or the unresolved Settings geometry warnings.
+
+## 2026-10-11 测试执行整改
+
+[验收执行合同](acceptance-execution.md) 固定必保结果与现有用例所有者，区分累计义务和草稿诊断，保留正式累计验收、所有核心断言及未完成状态；不以规划/诊断通过声称发布验收完成。整改结果记录在该合同与 workstream progress，历史失败不覆盖。
