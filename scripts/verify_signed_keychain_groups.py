@@ -10,7 +10,10 @@ import subprocess
 def verify_metadata(info, entitlements):
     group = info.get("PushGoKeychainAccessGroup")
     if group is None:
-        if info.get("CFBundleIdentifier") in {"io.ethan.pushgo", "io.ethan.pushgo.NotificationServiceExtension"}:
+        if info.get("CFBundleIdentifier") in {
+            "io.ethan.pushgo", "io.ethan.pushgo.NotificationServiceExtension",
+            "io.ethan.pushgo.watchkitapp", "io.ethan.pushgo.watchkitapp.NotificationServiceExtension",
+        }:
             raise ValueError("runtime Keychain access group is missing")
         return False  # Bundle does not configure this runtime Keychain client.
     if not isinstance(group, str) or "$" in group or group not in entitlements.get("keychain-access-groups", []):
@@ -20,7 +23,7 @@ def verify_metadata(info, entitlements):
 
 def verify(app):
     checked = 0
-    for bundle in [app, *sorted(app.rglob("*.appex"))]:
+    for bundle in [app, *sorted(app.rglob("*.app")), *sorted(app.rglob("*.appex"))]:
         path = bundle / "Contents/Info.plist"
         if not path.exists():
             path = bundle / "Info.plist"

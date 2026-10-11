@@ -112,6 +112,7 @@ platform :ios do
         actual_entitlements_by_bundle_id: extracted_entitlements_by_bundle_id(app_path),
         expected_entitlements_by_bundle_id: expected_store_entitlements_by_bundle_id(ios_store_entitlements_sources)
       )
+      sh("python3 #{Shellwords.escape(resolve_from_repo('scripts/verify_signed_keychain_groups.py'))} --app #{Shellwords.escape(app_path)}")
     ensure
       FileUtils.rm_rf(scratch_dir)
     end
@@ -138,6 +139,7 @@ platform :ios do
         actual_entitlements_by_bundle_id: extracted_entitlements_by_bundle_id(app_path),
         expected_entitlements_by_bundle_id: expected_store_entitlements_by_bundle_id(macos_store_entitlements_sources)
       )
+      sh("python3 #{Shellwords.escape(resolve_from_repo('scripts/verify_signed_keychain_groups.py'))} --app #{Shellwords.escape(app_path)}")
     ensure
       FileUtils.rm_rf(scratch_root)
     end
