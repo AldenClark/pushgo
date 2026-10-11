@@ -86,6 +86,12 @@ jobs:
     env:
       QUALITY_LANE: ${{ github.event_name == 'schedule' && github.event.schedule == '29 19 * * 6' && 'performance' || github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && inputs.lane || startsWith(github.ref, 'refs/tags/') && 'release' || 'pr' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,6 +180,12 @@ jobs:
       DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
       DIAGNOSTIC_MACOS_SCOPE: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-thing-host-sample') && 'thing-ax-qos-host-sample' || (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-refresh-failure') && 'message-refresh-failure' || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-thing-ax-qos-sample-diagnostic') && 'thing-ax-qos-sample' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:
@@ -226,6 +238,12 @@ jobs:
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:
@@ -277,6 +295,12 @@ jobs:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
       DIAGNOSTIC_IOS_SCOPE: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-refresh-failure') && 'message-refresh-failure' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-history') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-history-diagnostic')) && 'message-history-cleanup' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-facets') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-facets-diagnostic')) && 'message-facets' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:
