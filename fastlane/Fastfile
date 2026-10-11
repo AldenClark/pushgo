@@ -912,6 +912,8 @@ platform :ios do
     reference_derived_data_path = nil
     reference_entitlements_by_bundle_id = {}
     direct_widget_bundle_setting = "PUSHGO_MACOS_WIDGET_BUNDLE_ID=io.ethan.pushgo.widgets.mac"
+    # Unsigned builds have no inferred signing prefix, but runtime Keychain queries need it.
+    direct_keychain_prefix_setting = "AppIdentifierPrefix=#{Shellwords.escape(ensure_team_id! + '.')}"
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
@@ -930,6 +932,7 @@ platform :ios do
         "build " \
         "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
         "#{direct_widget_bundle_setting} " \
+        "#{direct_keychain_prefix_setting} " \
         "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
       )
       reference_app_path = Dir.glob(File.join(reference_derived_data_path, "Build", "Products", "Release", "*.app")).first
@@ -947,6 +950,7 @@ platform :ios do
         "archive " \
         "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
         "#{direct_widget_bundle_setting} " \
+        "#{direct_keychain_prefix_setting} " \
         "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
       )
 
@@ -966,6 +970,7 @@ platform :ios do
       )
       sh("codesign --verify --deep --strict --verbose=2 #{Shellwords.escape(app_path)}")
       verify_developer_id_app_signature!(app_path)
+      sh("python3 #{Shellwords.escape(resolve_from_repo('scripts/verify_signed_keychain_groups.py'))} --app #{Shellwords.escape(app_path)}")
 
       FileUtils.rm_rf(staging_dir)
       sh(
