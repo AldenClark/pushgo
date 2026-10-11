@@ -840,3 +840,21 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 按用户本轮限定，只执行受影响 Thing 流程；通用 PR、accessibility、跨平台累计验收和远端 CI 不执行、不升绿。两项被验证为不足的试改（presentation host identity、Update hit area）已全部撤回。修复保留本地，不推送、不发布，现有远端失败不是此本地补丁的新验证。
 
 本地提交记录（2026-10-12）：提交范围仅上述 iOS 修复、能力覆盖索引与本进度记录。按用户要求本次不重跑测试、不推送。沿用修复阶段的 1/1 原生验证及 275 项脚本预检，不将提交描述为一次新的验证。产品文件 SHA-256 `0f15744f6a0b66ed76bd25bf1bc3e65221e0553722cc6acb6829af8d92fccc06`，原测试文件 SHA-256 `b6d3c2800310141e01f1dbb5aebefaedb1388fb2e76d036dd9e087208d7717ca`。两项撤回假设的失败证据仍保留于 `build/quality-results/thing-relation-fix-20261011/`、`build/quality-results/thing-update-hit-area-20261011/`；工作区完整报告为仓库外 `../docs/test-acceptance-remediation-2026-10-11.md`。
+
+## iOS Thing 列表与详情的数据边界（2026-10-12）
+
+用户同意列表负责分页浏览、详情按准确 ID 读取 Store；本轮只理顺这条边界。删除 `syncSelectedThingSnapshot` 的列表覆盖/补偿和页内成员判断，选中状态改为 ID/channel 路由。`ThingStoreDetailScreen` 独立拥有完整快照，`loadThingDetail` 为无列表副作用的纯查询。读错保留现有详情并可手动重试；读到不存在或待删除对象才回落；异步取消防止过期结果写回。活动详情监听已有 Store revision，而非分页列表变化；未扩展共享缓存、数据库或对象级事件架构，未改其他平台调用或删除期限。
+
+必要验证及首个失败均保留：
+
+- 原核心方法 `testThingLifecycleFiltersRelationsAndUnavailableTargetFallback` 本轮首次批次 PASS 1/1（116.507s），筛选、回顶、单对象删除/控制对象、关联 Message/旧 Update/Event、重启后的不可用反馈均保持。该批次另一个新增用例准备失败，整个批次收据仍 FAILED；独立原方法的通过由 native 结果证明，未重跑它。结果 `build/quality-results/thing-detail-boundary-20261012/ios/run-1-20261012-002317.xcresult`，共 1 passed/1 failed/0 skipped、runtimeWarnings=[]。
+- 新增分页外用例前三次未进入目标详情核心流程：首次错误读取了外部 automation response（质量会话实际写 App 容器）；第二次对合并可访问标签的列表行查找 StaticText；第三次所有控制对象时间相同，指定控制行不是确定首行。三项均为本轮新增测试准备/定位缺陷，人工复核分类 FAILED_TEST_SYSTEM；原始 runner 收据仍保持 FAILED，未改写成产品通过。结果分别保留于 `thing-detail-boundary-20261012`、`thing-detail-boundary-final-20261012`、`thing-detail-boundary-paged-20261012`，均 MAX_RETRIES=0。修复仅读取真实行内容、采用整行语义定位和确定的连续时间，不改产品排序/分页，不加全局 timeout、不删业务断言。
+- 修正后 `testThingOutsideFirstPageKeepsRelationsAcrossStoreRefresh` 在最终相关字节 PASS 1/1（44.234s），0 skip、runtimeWarnings=[]，无 runner retry。904 条持久化记录包括 901 个更新控制 Thing、目标两次更新和未读关联 Message；目标在生产首屏 900 条之外，重启按准确 ID 打开，查看关联正文并返回触发真实 Store 刷新后，旧 Update 准确标题/正文和返回仍成功。结果 `build/quality-results/thing-detail-boundary-ordered-20261012/ios/run-1-20261012-003249.xcresult`，对应 focused 收据 product/test-system PASSED、base `0f19f69`、source_dirty=true。
+- Store 定点 `LocalDataStoreTests.thingDetailExistenceAndHistoryAreIndependentOfTheCurrentPage` PASS 1/1（0.377s）。首次夹具使用 1970 年极小 epoch，碰到现有历史时间单位兼容处理，排序/当前 head 两断言失败；改用正常日期后仅复验此方法，断言不变，未改生产 Store。首次和最终日志见 `build/quality-results/thing-detail-boundary-evidence-20261012/`。
+- plan-only `quality_changed.sh` 最终 275 项脚本检查 PASS（10.811s），impact READY，推荐 nightly。初次预检因新增 UI 方法后旧数量期望 34 而实际 35 失败；仅同步这个精确预期，未改选择规则或风险等级。首次预检日志同上保留；构造 QoS FAILED_TEST_SYSTEM 行属于脚本负控，native 两份结果均无 runtime warning。
+
+原核心方法通过后唯一相关产品字节整理是将不存在的 loading 文案键改为原生 ProgressView；最终新增旅程已重新编译并覆盖打开/加载与真实刷新链。没有因新增测试准备失败重跑原核心/全量功能。最终产品 SHA-256：ThingListScreen `1c1af5f4ae6e31b6fc4f18214c90f15a6e659b34014f9fc72aaff16ee2cbf87c`；ThingDetailScreen `e41c05de3283446980a9e2a0c49079a8d4f50e22b7af534dc45335438702aa58`；EntityScreens `f0d26190cefa815de600bafbd65c1167e56084fee79afc7f89c12ed0a73d60f8`。
+
+用户范围要求优先于广泛车道默认要求：PR/nightly/accessibility/性能/跨平台/真实 Provider/生产签名及远端 CI 保持 NOT_RUN，未降低或改写正式发布门禁。完成此本地补丁和必要复验后停止，不提交、不推送、不发布。
+
+本地提交阶段（2026-10-12）：用户随后要求保存本次数据边界修复及相关记录。提交包括三个产品文件、iOS/Store 定点回归、UI 方法数量预检同步、能力索引和本进度记录；只执行 Git 范围/空白检查与提交状态确认，不重跑上述测试，不推送、不发布。验证结论仍来自修复阶段，提交本身不构成新验收。仓库外完整报告 `../docs/test-acceptance-remediation-2026-10-11.md` 另记录最终提交身份。

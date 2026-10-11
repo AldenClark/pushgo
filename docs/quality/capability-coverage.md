@@ -566,3 +566,13 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 原 `testThingLifecycleFiltersRelationsAndUnavailableTargetFallback` 在最终本地工作树上通过 1/1（129.000s），0 skip、0 retry、xcresult runtimeWarnings=[]。包含筛选/清除、准确搜索、独立对象删除/控制对象、关联 Message 正文/返回、旧 Update 准确标题/返回、重启后已删除目标不可用反馈，以及幸存 Thing 的关联 Event。删除点击 t=71.27s，旧 Update 点击 t=103.76s，仍覆盖既有 30 秒质量删除窗口后的真实流程。结果 `build/quality-results/thing-detail-rehydration-20261011/ios/run-1-20261012-000453.xcresult`，收据 `build/quality-results/thing-detail-rehydration-20261011/apple-focused-summary.json`（product/test-system PASSED；base fb28a83b、source_dirty=true）。测试断言及 fixture 未改变，前次失败保留作为敏感性证据。
 
 按用户本轮限定，只执行受影响 Thing 流程；通用 PR、accessibility、跨平台累计验收和远端 CI 不执行、不升绿。两项被验证为不足的试改（presentation host identity、Update hit area）已全部撤回。修复保留本地，不推送、不发布，现有远端失败不是此本地补丁的新验证。
+
+## iOS Thing 列表与详情的数据边界（2026-10-12）
+
+此轮替代上节的覆盖后重读补偿。列表只持有分页摘要和选中 ID；详情独立持有按准确 ID 从 Store 读取的完整快照，纯读取不回写列表，也不向分页数组补插目标。分页数组变化不再覆盖或关闭详情；Store 不存在/本地删除抑制才触发不可用回落。读取错误保留旧快照并提供重试，切换目标/关闭后的旧任务不能写回。
+
+受影响范围为 iOS Things 的详情及关联 Message/Update/Event、准确目标打开和删除回落。Shared VM 仅新增纯读取入口；既有 macOS/Watch 水合 API 未改变。活动详情沿用现有全局 Store revision 刷新，未引入新的缓存或按对象事件体系。
+
+原核心旅程本轮通过 1/1（116.507s）；新增 `testThingOutsideFirstPageKeepsRelationsAcrossStoreRefresh` 在最终相关字节通过 1/1（44.234s）：901 个更晚控制对象将目标置于生产首屏 900 条之外，普通重启按 ID 打开，查看未读关联 Message、返回后仍可打开旧 Update 的准确标题/正文并返回。两份 native 结果均 0 skip、runtimeWarnings=[]；runner MAX_RETRIES=0。Store 定点测试通过 1/1，验证分页外对象完整历史、删除其他对象不误伤、实际删除目标后确认为空。
+
+首次批次与新增用例的准备/定位失败保留，未更改原核心断言或升绿失败收据。最终分页外收据 `build/quality-results/thing-detail-boundary-ordered-20261012/apple-focused-summary.json` 双 PASSED，base `0f19f69`、source_dirty=true；完整失败分类和来源见 workstream progress 的同名节。275 项脚本检查 PASS，impact READY/nightly；按用户范围要求，PR/nightly/accessibility/跨平台/远端验收均 NOT_RUN，不代表正式发布通过。修复验证阶段未提交；随后按用户要求将本次修复及记录保存为本地提交，未重跑测试、不推送、不发布。

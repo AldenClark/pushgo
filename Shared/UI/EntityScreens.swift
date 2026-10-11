@@ -240,6 +240,13 @@ final class EntityProjectionViewModel {
         return nil
     }
 
+    // Detail reads do not hydrate or mutate the paged list. The caller owns
+    // the selected detail snapshot and distinguishes missing data from errors.
+    func loadThingDetail(thingId: String) async throws -> ThingProjection? {
+        let detail = try await dataStore.loadThingProjectionDetail(thingId: thingId)
+        return buildThingProjection(from: detail, thingId: thingId)
+    }
+
     @discardableResult
     func ensureThingDetailsLoaded(thingId: String, forceRefresh: Bool = false) async -> ThingProjection? {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)

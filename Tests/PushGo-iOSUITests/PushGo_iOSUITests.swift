@@ -3380,6 +3380,79 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testThingOutsideFirstPageKeepsRelationsAcrossStoreRefresh() throws {
+        let runtimeRoot = makeRuntimeRoot()
+        let fixtureURL = runtimeRoot.appendingPathComponent("paged-things.json")
+        try FileManager.default.createDirectory(at: runtimeRoot, withIntermediateDirectories: true)
+        let base = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: thingFixturePath))) as! [String: Any]
+        var messages = base["messages"] as! [[String: Any]]
+        var initial = messages[0]
+        initial["id"] = "00000000-0000-0000-0000-00000000a000"
+        initial["message_id"] = "paged-thing-initial"
+        initial["title"] = "Paged initial Thing snapshot"
+        initial["body"] = "Canonical history outside the first Thing page."
+        initial["received_at"] = "2026-03-01T10:00:00Z"
+        messages.append(initial)
+        messages.append([
+            "id": "00000000-0000-0000-0000-00000000a002",
+            "message_id": "paged-related-message",
+            "title": "Paged related message",
+            "body": "Canonical linked content survives a list reset.",
+            "channel_id": "p2", "is_read": false,
+            "received_at": "2026-03-01T10:02:00Z",
+            "raw_payload": ["entity_type": "message", "entity_id": "paged-related-message",
+                            "thing_id": thingFixtureId, "projection_destination": "thing_sub_message"],
+            "status": "normal"
+        ])
+        // Production page size is 900; these newer heads put the target beyond
+        // page one without changing product limits or fabricating list state.
+        let formatter = ISO8601DateFormatter()
+        let controlStart = formatter.date(from: "2026-03-02T10:00:00Z")!
+        for index in 0...900 {
+            messages.append([
+                "id": String(format: "10000000-0000-0000-0000-%012x", index),
+                "message_id": "page-control-message-\(index)",
+                "title": "Thing page control \(index)", "body": "Newer control head.",
+                "channel_id": "p2", "is_read": true,
+                "received_at": formatter.string(from: controlStart.addingTimeInterval(Double(index))),
+                "raw_payload": ["entity_type": "thing", "entity_id": "page-control-\(index)",
+                                "thing_id": "page-control-\(index)",
+                                "thing_title": "Thing page control \(index)",
+                                "projection_destination": "things"],
+                "status": "normal"
+            ])
+        }
+        try JSONSerialization.data(withJSONObject: ["messages": messages]).write(to: fixtureURL)
+        let session = qualitySessionPayload(sessionID: "paged-thing-\(UUID().uuidString)", fixture: "empty.clean")
+        let seeded = configuredLaunchContext(runtimeRoot: runtimeRoot, requestName: "fixture.seed_messages", args: ["path": fixtureURL.path], launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(seeded.app)
+        // Quality sessions write receipts inside the App container; the
+        // user-visible row below is the seed completion oracle.
+        tapWhenHittable(thingsTab(in: seeded.app), timeout: 8)
+        let newestControl = element(in: seeded.app, identifier: "thing.row.page-control-900")
+        XCTAssertTrue(newestControl.waitForExistence(timeout: 8))
+        XCTAssertTrue(newestControl.label.contains("Thing page control 900"))
+        seeded.app.terminate()
+
+        let opened = configuredLaunchContext(runtimeRoot: runtimeRoot, requestName: "entity.open", args: ["entity_type": "thing", "entity_id": thingFixtureId], launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        opened.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(opened.app)
+        XCTAssertTrue(opened.app.staticTexts["P2 Thing Rich"].waitForExistence(timeout: 15))
+        tapWhenHittable(element(in: opened.app, identifier: "tab.thing.detail.messages"), timeout: 8)
+        tapWhenHittable(element(in: opened.app, identifier: "thing.related.message.paged-related-message"), timeout: 8)
+        XCTAssertTrue(opened.app.staticTexts["Canonical linked content survives a list reset."].waitForExistence(timeout: 8))
+        // Opening the unread canonical message marks it read through production
+        // code, triggering the real Store revision/list refresh while in detail.
+        tapWhenHittable(element(in: opened.app, identifier: "action.message.close"), timeout: 8)
+        tapWhenHittable(element(in: opened.app, identifier: "tab.thing.detail.updates"), timeout: 8, message: "A target outside page one must remain open after the Store refresh")
+        tapWhenHittable(element(in: opened.app, identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"), timeout: 8)
+        XCTAssertTrue(opened.app.staticTexts["Paged initial Thing snapshot"].waitForExistence(timeout: 8))
+        XCTAssertTrue(opened.app.staticTexts["Canonical history outside the first Thing page."].waitForExistence(timeout: 8))
+        tapWhenHittable(element(in: opened.app, identifier: "action.thing.update.close"), timeout: 8)
+        XCTAssertTrue(element(in: opened.app, identifier: "tab.thing.detail.updates").waitForExistence(timeout: 8))
+    }
+
     func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback() {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

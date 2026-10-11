@@ -1,5 +1,71 @@
 import SwiftUI
 
+// A detail destination owns its Store snapshot independently of list paging.
+struct ThingStoreDetailScreen: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(LocalizationManager.self) private var localizationManager
+    @Environment(PendingLocalDeletionController.self) private var pendingDeletion
+
+    let thingId: String
+    let viewModel: EntityProjectionViewModel
+    let onUnavailable: () -> Void
+    let onCommitDelete: @MainActor () async throws -> Void
+    let onPrepareDelete: () -> Void
+    @State private var snapshot: ThingProjection?
+    @State private var loadError: String?
+    @State private var retryToken = 0
+
+    private struct LoadKey: Equatable {
+        let storeRevision: UUID
+        let retryToken: Int
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let loadError {
+                AppInlineFeedbackBanner(
+                    message: loadError,
+                    tone: .danger
+                )
+                Button(localizationManager.localized("retry")) { retryToken += 1 }
+            }
+            if let snapshot {
+                ThingDetailScreen(
+                    thing: snapshot,
+                    onCommitDelete: onCommitDelete,
+                    onPrepareDelete: onPrepareDelete
+                )
+            } else if loadError == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: LoadKey(storeRevision: environment.messageStoreRevision, retryToken: retryToken)) {
+            do {
+                let loaded = try await viewModel.loadThingDetail(thingId: thingId)
+                guard !Task.isCancelled else { return }
+                guard let loaded,
+                      !pendingDeletion.suppressesThing(id: loaded.id, channelId: loaded.channelId)
+                else {
+                    onUnavailable()
+                    return
+                }
+                snapshot = loaded
+                loadError = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                loadError = error.localizedDescription
+            }
+        }
+        .onChange(of: pendingDeletion.effectiveScope) { _, _ in
+            guard let snapshot,
+                  pendingDeletion.suppressesThing(id: snapshot.id, channelId: snapshot.channelId)
+            else { return }
+            onPrepareDelete()
+        }
+    }
+}
+
 struct ThingDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppEnvironment.self) private var environment: AppEnvironment

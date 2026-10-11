@@ -5,6 +5,38 @@ import Testing
 
 struct LocalDataStoreTests {
     @Test
+    func thingDetailExistenceAndHistoryAreIndependentOfTheCurrentPage() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            func record(_ thingId: String, _ suffix: String, _ time: TimeInterval) -> PushMessage {
+                makeMessage(
+                    messageId: "\(thingId)-\(suffix)", notificationRequestId: "\(thingId)-\(suffix)",
+                    title: "\(thingId) \(suffix)", body: "Exact canonical \(suffix).",
+                    receivedAt: Date(timeIntervalSince1970: 1_800_000_000 + time),
+                    rawPayload: ["entity_type": "thing", "entity_id": thingId, "thing_id": thingId,
+                                 "projection_destination": "things", "thing_title": "\(thingId) \(suffix)"]
+                )
+            }
+            let initial = record("old-target", "initial", 100)
+            let current = record("old-target", "current", 101)
+            let controls = [record("control-a", "current", 200), record("control-b", "current", 201)]
+            try await store.saveMessages([initial, current] + controls)
+            let firstPage = try await store.loadThingMessagesForProjectionPage(before: nil, limit: 2)
+            #expect(Set(firstPage.compactMap(\.thingId)) == Set(["control-a", "control-b"]))
+            let detail = try await store.loadThingProjectionDetail(thingId: "old-target")
+            #expect(detail.head?.id == current.id)
+            #expect(Set(detail.messages.map(\.id)) == Set([initial.id, current.id]))
+            #expect(detail.messages.contains { $0.body == "Exact canonical initial." })
+            _ = try await store.deleteThingRecords(thingId: "control-a")
+            let afterOtherDeletion = try await store.loadThingProjectionDetail(thingId: "old-target")
+            #expect(Set(afterOtherDeletion.messages.map(\.id)) == Set([initial.id, current.id]))
+            _ = try await store.deleteThingRecords(thingId: "old-target")
+            let missing = try await store.loadThingProjectionDetail(thingId: "old-target")
+            #expect(missing.head == nil)
+            #expect(missing.messages.isEmpty)
+        }
+    }
+
+    @Test
     func transientStorageBootstrapFailureDoesNotPoisonTheNextOpen() async throws {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             // Model the real preparation failure where the app-local container
