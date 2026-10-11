@@ -557,3 +557,12 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 ## 2026-10-11 测试执行整改
 
 [验收执行合同](acceptance-execution.md) 固定必保结果与现有用例所有者，区分累计义务和草稿诊断，保留正式累计验收、所有核心断言及未完成状态；不以规划/诊断通过声称发布验收完成。整改结果记录在该合同与 workstream progress，历史失败不覆盖。
+
+
+## Thing 关联 Update 定点修复
+
+列表重载只构造分页投影；iOS `ThingListScreen.syncSelectedThingSnapshot()` 原先直接以该投影覆盖已水合详情。其他对象删除提交或 Store 变更触发重载时，当前 Thing 的旧 Update/关联记录因不在列表页中而丢失。最终只修复该 iOS 同步方法：保留当前完整详情，从 Store 强制重读准确 Thing 的完整详情后再替换；同 ID 水合去重、完成时核对当前选中 ID、已不存在时关闭、读取错误时保留原详情。未修改 Shared VM、macOS、删除期限或测试源码。
+
+原 `testThingLifecycleFiltersRelationsAndUnavailableTargetFallback` 在最终本地工作树上通过 1/1（129.000s），0 skip、0 retry、xcresult runtimeWarnings=[]。包含筛选/清除、准确搜索、独立对象删除/控制对象、关联 Message 正文/返回、旧 Update 准确标题/返回、重启后已删除目标不可用反馈，以及幸存 Thing 的关联 Event。删除点击 t=71.27s，旧 Update 点击 t=103.76s，仍覆盖既有 30 秒质量删除窗口后的真实流程。结果 `build/quality-results/thing-detail-rehydration-20261011/ios/run-1-20261012-000453.xcresult`，收据 `build/quality-results/thing-detail-rehydration-20261011/apple-focused-summary.json`（product/test-system PASSED；base fb28a83b、source_dirty=true）。测试断言及 fixture 未改变，前次失败保留作为敏感性证据。
+
+按用户本轮限定，只执行受影响 Thing 流程；通用 PR、accessibility、跨平台累计验收和远端 CI 不执行、不升绿。两项被验证为不足的试改（presentation host identity、Update hit area）已全部撤回。修复保留本地，不推送、不发布，现有远端失败不是此本地补丁的新验证。

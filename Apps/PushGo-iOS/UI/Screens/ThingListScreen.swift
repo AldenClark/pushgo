@@ -450,10 +450,26 @@ struct ThingListScreen: View {
 
     private func syncSelectedThingSnapshot() {
         guard let selectedId = selectedThing?.id else { return }
-        if let refreshed = viewModel.things.first(where: { $0.id == selectedId }) {
-            selectedThing = refreshed
-        } else {
+        guard viewModel.things.contains(where: { $0.id == selectedId }) else {
             selectedThing = nil
+            return
+        }
+        // A list refresh carries only the paged projection, not the full relation
+        // history. Keep the active detail until its Store-backed snapshot loads.
+        guard !hydrationRequestedThingIDs.contains(selectedId) else { return }
+        hydrationRequestedThingIDs.insert(selectedId)
+        Task { @MainActor in
+            defer { hydrationRequestedThingIDs.remove(selectedId) }
+            let refreshed = await viewModel.ensureThingDetailsLoaded(
+                thingId: selectedId,
+                forceRefresh: true
+            )
+            guard selectedThing?.id == selectedId else { return }
+            if let refreshed {
+                selectedThing = refreshed
+            } else if viewModel.error == nil {
+                selectedThing = nil
+            }
         }
     }
 
