@@ -55,4 +55,4 @@ Final repair checks: Gateway smoke 6/6; Apple profile-source contracts 8/8; AI h
 
 ## Integration candidate (2026-10-11)
 
-The paired Gateway pin now names published fixed candidate `131f56c5f2ac49fb8e526180e4f1797b8e020275`, including the lifecycle repair and h2 0.4.20. Historical dirty-source receipts above remain historical; fresh paired CI must pass against this exact revision before accepting the candidate. QoS registration and P1 ledger expiry remain WAIVED rather than product evidence.
+The paired Gateway pin now names published fixed candidate `0286d6e46b6e5ce5a169ea12bcfefcbc702676c3`, including the lifecycle repair and h2 0.4.20. Historical dirty-source receipts above remain historical; fresh paired CI must pass against this exact revision before accepting the candidate. QoS registration and P1 ledger expiry remain WAIVED rather than product evidence.

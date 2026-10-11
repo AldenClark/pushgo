@@ -93,7 +93,7 @@
       ],
       "purpose": "Real loopback Gateway registration/subscription/send/pull -> production persistence -> exact open/read/replay/delete -> ACK/unsubscribe isolation",
       "gateway_repository": "AldenClark/pushgo-gateway",
-      "gateway_revision": "131f56c5f2ac49fb8e526180e4f1797b8e020275"
+      "gateway_revision": "0286d6e46b6e5ce5a169ea12bcfefcbc702676c3"
     }
   },
   "not_proven": [

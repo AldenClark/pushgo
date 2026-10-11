@@ -79,6 +79,11 @@ concurrency:
   cancel-in-progress: ${{ (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 jobs:
+  gateway-integration:
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled'
+    uses: ./.github/workflows/apple-release-smoke.yml
+    with:
+      platform: gateway-integration
   quality:
     if: ${{ (github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'labeled')) || (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'off') }}
     runs-on: macos-26
