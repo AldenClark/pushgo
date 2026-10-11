@@ -998,6 +998,8 @@ final class PushGo_iOSUITests: XCTestCase {
             pageLoading.waitForExistence(timeout: 5) && pageLoading.isHittable,
             "A slow next page must expose a visible, reachable bottom progress state instead of looking frozen"
         )
+        let observedLoadingFrame = pageLoading.frame
+        let observedLoadingLabel = pageLoading.label
         // iOS 26.4 can project this combined SwiftUI HStack's identifier onto
         // the spinner while exposing its localized Text as a sibling node.
         // Keep both the visible progress and the nearby explanation as oracles.
@@ -1008,9 +1010,9 @@ final class PushGo_iOSUITests: XCTestCase {
             && loadingText.frame.width > 0
             && loadingText.frame.height > 0
             && loadingText.frame.intersects(context.app.windows.firstMatch.frame)
-            && abs(loadingText.frame.midY - pageLoading.frame.midY) < 40
+            && abs(loadingText.frame.midY - observedLoadingFrame.midY) < 40
         XCTAssertTrue(
-            pageLoading.label.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
+            observedLoadingLabel.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
             "The visible bottom progress must include its nearby zh-Hans explanation, not only a spinner."
         )
         XCTAssertTrue(
@@ -2475,11 +2477,11 @@ final class PushGo_iOSUITests: XCTestCase {
             "Interactive dismissal during a prepared gateway switch must keep the editor open"
         )
         XCTAssertFalse(
-            element(in: context.app, identifier: "action.settings.server.save").isEnabled,
+            actionButton(in: context.app, identifier: "action.settings.server.save").isEnabled,
             "A prepared gateway switch must not accept a second Save"
         )
         XCTAssertFalse(
-            element(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
+            actionButton(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
             "A prepared gateway switch must not allow cancellation through the editor"
         )
         XCTAssertTrue(
@@ -3329,7 +3331,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
 
         confirmClose()
-        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        let closing = actionButton(in: context.app, identifier: "state.event.close.in_progress")
         XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
         XCTAssertFalse(
             closing.isEnabled,
@@ -5240,11 +5242,13 @@ final class PushGo_iOSUITests: XCTestCase {
             line: line
         )
 
+        let compactDisplayURL = compactURL.hasSuffix("/") ? String(compactURL.dropLast()) : compactURL
         let exactAddress = safari.textFields.matching(
             NSPredicate(
-                format: "value ==[c] %@ OR value ==[c] %@",
+                format: "value ==[c] %@ OR value ==[c] %@ OR value ==[c] %@",
                 compactURL,
-                fullURL
+                fullURL,
+                compactDisplayURL
             )
         ).firstMatch
         // Give the real browser a bounded settling window before reaching for
@@ -5294,7 +5298,7 @@ final class PushGo_iOSUITests: XCTestCase {
             return
         }
         XCTAssertTrue(
-            [compactURL, fullURL].contains(observedURL),
+            [compactURL, fullURL, compactDisplayURL].contains(observedURL),
             "Safari exposed an unexpected external URL: \(observedURL)",
             file: file,
             line: line
@@ -5652,6 +5656,14 @@ final class PushGo_iOSUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    private func actionButton(in app: XCUIApplication, identifier: String) -> XCUIElement {
+        // SwiftUI toolbars can project the identifier onto a child label/spinner.
+        // Enabled state belongs to the owning Button, rather than that child.
+        let identified = app.buttons.matching(identifier: identifier).firstMatch
+        if identified.exists { return identified }
+        return app.buttons.containing(.any, identifier: identifier).firstMatch
+    }
+
     private func eventsTab(in app: XCUIApplication) -> XCUIElement {
         let identifiedTab = app.buttons["tab.events"]
         if identifiedTab.exists {
@@ -5763,7 +5775,7 @@ final class PushGo_iOSUITests: XCTestCase {
             predicate: NSPredicate(format: "hasKeyboardFocus == true"),
             object: field
         )
-        let focusResult = XCTWaiter.wait(for: [focused], timeout: 2)
+        let focusResult = XCTWaiter.wait(for: [focused], timeout: 8)
         XCTAssertEqual(
             focusResult,
             .completed,

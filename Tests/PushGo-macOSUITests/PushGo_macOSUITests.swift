@@ -321,6 +321,11 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch() {
+        if let title = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_TITLE"],
+           let body = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_BODY"] {
+            assertAlreadyDeliveredLiveProviderNotification(title: title, body: body)
+            return
+        }
         let sessionID = "macos-system-notification-\(UUID().uuidString.lowercased())"
         let requestID = "quality-macos-notification-\(UUID().uuidString.lowercased())"
         let messageID = "quality-macos-message-\(UUID().uuidString.lowercased())"
@@ -726,6 +731,45 @@ final class PushGo_macOSUITests: XCTestCase {
             return AXUIElementPerformAction(pageDown, kAXPressAction as CFString) == .success
         }
         return false
+    }
+
+    @MainActor
+    private func assertAlreadyDeliveredLiveProviderNotification(title: String, body: String) {
+        // Explicit live mode observes a previously sent task-owned provider message.
+        // It never launches a fixture, injects a notification, or replaces the running candidate.
+        guard let path = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_APP_PATH"] else {
+            XCTFail("Live provider mode requires the exact installed candidate path")
+            return
+        }
+        let candidateURL = URL(fileURLWithPath: path).standardizedFileURL
+        let runningCandidate = NSRunningApplication.runningApplications(withBundleIdentifier: "io.ethan.pushgo")
+            .first { $0.bundleURL?.standardizedFileURL == candidateURL }
+        XCTAssertNotNil(runningCandidate, "The exact signed candidate must already be running")
+        // macOS background means inactive; a visible inactive window is not hidden.
+        XCTAssertEqual(runningCandidate?.isActive, false,
+                       "The existing signed candidate must be inactive before observation")
+        let candidate = XCUIApplication(url: candidateURL)
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        let card = notificationCenter.descendants(matching: .any).matching(
+            NSPredicate(format: "(label CONTAINS %@ AND label CONTAINS %@) OR " +
+                        "(value CONTAINS %@ AND value CONTAINS %@)", title, body, title, body)
+        ).firstMatch
+        if !card.waitForExistence(timeout: 5) {
+            XCTAssertTrue(revealNotificationCenter(), "The actual system notification panel must open")
+        }
+        XCTAssertTrue(card.waitForExistence(timeout: 10),
+                      "The exact externally delivered notification must exist; local injection is forbidden")
+        card.click()
+        let foreground = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isActive == true"), object: runningCandidate
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [foreground], timeout: 10), .completed,
+                       "System notification must activate the exact signed candidate, not a stale same-bundle build")
+        XCTAssertTrue(element(in: candidate, identifier: "screen.message.detail").waitForExistence(timeout: 10))
+        XCTAssertTrue(candidate.staticTexts[title].waitForExistence(timeout: 5))
+        XCTAssertTrue(candidate.staticTexts[body].waitForExistence(timeout: 5),
+                      "The system notification must open the exact canonical body")
+        print("LIVE_PROVIDER_NOTIFICATION_OPEN=PASSED fixture_injection=NOT_PERFORMED title=\(title)")
     }
 
     @MainActor
