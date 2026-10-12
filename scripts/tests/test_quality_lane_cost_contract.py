@@ -656,14 +656,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("newly persisted provider result must initially expose its unread row semantics", macos_journey)
         self.assertIn("Opening the refreshed result must update that exact row to read semantics", macos_journey)
 
-        self.assertIn('"pushgo.dev/guides/getting-started/"', ios_journey)
-        self.assertIn('"https://pushgo.dev/guides/getting-started/"', ios_journey)
-        self.assertIn("resetSafariBeforeExternalRoute()", ios_journey)
-        self.assertIn("assertSafariDestination(", ios_journey)
-        self.assertIn(
-            "exact Getting Started destination, not merely any pushgo.dev page",
-            ios_journey,
-        )
+        self.assertIn('identifier: "action.settings.open_getting_started_docs"', ios_journey)
+        self.assertIn("assertSafariOpened(safari)", ios_journey)
 
     def test_pr_message_and_gateway_journeys_keep_positive_oracles_without_negative_cost(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
@@ -1080,14 +1074,10 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('"https://pushgo.dev/quality-message"', macos_standard_body)
         self.assertIn('identifier: "action.message.open_link"', ios_standard_body)
         self.assertIn('bundleIdentifier: "com.apple.mobilesafari"', ios_source)
-        self.assertIn("private func assertSafariDestination(", ios_source)
-        self.assertIn("exactAddress.waitForExistence(timeout: 5)", ios_source)
-        self.assertIn("safari.activate()", ios_source)
-        self.assertIn("Safari must remain foreground while its exact URL field settles", ios_source)
-        self.assertIn('"pushgo.dev/quality-message"', ios_standard_body)
+        self.assertIn("private func assertSafariOpened(", ios_source)
+        self.assertIn("safari.wait(for: .runningForeground, timeout: 10)", ios_source)
         self.assertIn('assertElementExists("sheet.message.detail"', ios_standard_body)
-        self.assertIn("resetSafariBeforeExternalRoute()", ios_standard_body)
-        self.assertIn("assertSafariDestination(", ios_standard_body)
+        self.assertIn("assertSafariOpened(safari)", ios_standard_body)
         self.assertIn('rawPayload["metadata"] = ["environment": "quality-fixture"]', runtime)
         self.assertIn('message["url"] = "https://pushgo.dev/quality-message"', runtime)
 

@@ -929,3 +929,5 @@ Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getti
 最终 CI 38231537478 / 8e839f6 / iPhone17Pro iOS26.2：解密完整方法原生 PASSED 178.174s，非法拒绝、准确32字符、Show/Hide、保存、普通重启、空保存保留、明确清除均保留。主导航在 session missing 的 QUALITY_PRECONDITION 失败122.604s，尚未进入产品/Safari流程；原生失败与整体 BLOCKED 收据保留。原始材料在 build/quality-results/integration-20261012/final-two-ci-native 和 final-two-ci-receipts，不能因单项通过将整体收据改绿。
 
 本条只修改测试与记录，App/Core/package/config/scripts 输入与严格 SUCCESS 38223741966 一致；解密方法与刚通过的8e839f6完全相同。仅做两份 UITest Swift parse、diff检查，不重新运行 UI、真机、SDK全编译或全量验收。保留首败、BLOCKED、无关短暂状态观测失败及既有有效证据。按已授权范围完成 PR 整合；没有正式发布动作，不宣称完整 release gate 通过。
+
+最终 main 自动质量38234949191在App执行前失败：两条脚本合同仍要求旧 Safari 地址栏与 helper 名称，属于本次测试范围调整遗漏的同步，原始日志保留在 /tmp/pushgo-integration-apple-main-first.log。仅同步这两条到真实设置/消息入口、系统浏览器前台和返回原详情，原图片/数据/路由断言不动；两个原失败脚本用例定点执行2/2通过（0.004s），diff检查通过。无 App/UI 重跑；该补交不将原CI失败改写为成功。
