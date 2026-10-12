@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.tests.quality_registry_fixture import copy_quality_scripts_with_nonexpiring_registry
+
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -53,10 +55,11 @@ class QualityDiskPreflightTests(unittest.TestCase):
         canonical_receipt = REPO / "build/quality-results/apple-focused-summary.json"
         canonical_before = canonical_receipt.read_bytes() if canonical_receipt.exists() else None
         with tempfile.TemporaryDirectory() as directory:
-            isolated_root = Path(directory)
+            fixture = copy_quality_scripts_with_nonexpiring_registry(Path(directory) / "fixture")
+            isolated_root = Path(directory) / "results"
             process = subprocess.run(
-                [str(REPO / "scripts/quality_test.sh"), "focused"],
-                cwd=REPO,
+                [str(fixture / "scripts/quality_test.sh"), "focused"],
+                cwd=fixture,
                 env={
                     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
                     "QUALITY_MIN_FREE_BYTES": str(2**63 - 1),
@@ -81,11 +84,12 @@ class QualityDiskPreflightTests(unittest.TestCase):
 
     def test_explicit_lane_receipt_path_is_honored(self):
         with tempfile.TemporaryDirectory() as directory:
+            fixture = copy_quality_scripts_with_nonexpiring_registry(Path(directory) / "fixture")
             isolated_root = Path(directory) / "results"
             explicit_receipt = Path(directory) / "receipts/focused.json"
             process = subprocess.run(
-                [str(REPO / "scripts/quality_test.sh"), "focused"],
-                cwd=REPO,
+                [str(fixture / "scripts/quality_test.sh"), "focused"],
+                cwd=fixture,
                 env={
                     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
                     "QUALITY_MIN_FREE_BYTES": str(2**63 - 1),

@@ -341,38 +341,20 @@ final class MessageSearchViewModel {
         before cursor: MessagePageCursor?,
         targetVisibleCount: Int
     ) async throws -> (messages: [PushMessageSummary], nextCursor: MessagePageCursor?, hasMoreResults: Bool) {
-        guard targetVisibleCount > 0 else {
-            return ([], cursor, false)
-        }
-
-        var results: [PushMessageSummary] = []
-        var currentCursor = cursor
-
-        while results.count < targetVisibleCount {
-            let page = try await dataStore.searchMessageSummariesPage(
-                query: trimmedQuery,
-                before: currentCursor,
-                limit: pageSize,
-                sortMode: sortMode
-            )
-            guard !page.isEmpty else {
-                return (results, currentCursor, false)
-            }
-
-            currentCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-
-            let visiblePage = page.filter(self.isVisible)
-            let needed = targetVisibleCount - results.count
-            results.append(contentsOf: visiblePage.prefix(needed))
-
-            if page.count < pageSize {
-                return (results, currentCursor, false)
-            }
-        }
-
-        return (results, currentCursor, true)
+        try await loadVisibleMessageSearchPage(
+            before: cursor,
+            targetVisibleCount: targetVisibleCount,
+            pageSize: pageSize,
+            loadPage: { cursor, limit in
+                try await self.dataStore.searchMessageSummariesPage(
+                    query: trimmedQuery,
+                    before: cursor,
+                    limit: limit,
+                    sortMode: self.sortMode
+                )
+            },
+            isVisible: self.isVisible
+        )
     }
 
     private func isVisible(_ message: PushMessageSummary) -> Bool {

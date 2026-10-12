@@ -331,6 +331,10 @@ struct PushGoAutomationState: Encodable, Equatable {
     let gatewayTokenPresent: Bool
     let watchReceiverState: String?
     let watchCompanionAvailable: Bool
+    let watchProvisioningGeneration: Int64?
+    let watchProvisioningDigest: String?
+    let watchProvisioningAckGeneration: Int64?
+    let watchProvisioningAckDigest: String?
     let providerMode: String
     let providerTokenPresent: Bool
     let deviceKeyPresent: Bool
@@ -384,6 +388,10 @@ struct PushGoAutomationState: Encodable, Equatable {
         case gatewayTokenPresent = "gateway_token_present"
         case watchReceiverState = "watch_receiver_state"
         case watchCompanionAvailable = "watch_companion_available"
+        case watchProvisioningGeneration = "watch_provisioning_generation"
+        case watchProvisioningDigest = "watch_provisioning_digest"
+        case watchProvisioningAckGeneration = "watch_provisioning_ack_generation"
+        case watchProvisioningAckDigest = "watch_provisioning_ack_digest"
         case providerMode = "provider_mode"
         case providerTokenPresent = "provider_token_present"
         case deviceKeyPresent = "device_key_present"
@@ -827,6 +835,22 @@ final class PushGoAutomationRuntime {
         configureFromProcessEnvironment()
         let previousState = latestState
         let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        let watchProvisioningGeneration: Int64?
+        let watchProvisioningDigest: String?
+        let watchProvisioningAckGeneration: Int64?
+        let watchProvisioningAckDigest: String?
+#if os(iOS)
+        let watchProvisioningStatus = environment.watchProvisioningAutomationStatus()
+        watchProvisioningGeneration = watchProvisioningStatus.generation
+        watchProvisioningDigest = watchProvisioningStatus.digest
+        watchProvisioningAckGeneration = watchProvisioningStatus.acknowledgedGeneration
+        watchProvisioningAckDigest = watchProvisioningStatus.acknowledgedDigest
+#else
+        watchProvisioningGeneration = nil
+        watchProvisioningDigest = nil
+        watchProvisioningAckGeneration = nil
+        watchProvisioningAckDigest = nil
+#endif
         let state = PushGoAutomationState(
             platform: platformIdentifier,
             buildMode: "debug",
@@ -852,6 +876,10 @@ final class PushGoAutomationRuntime {
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
             watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
+            watchProvisioningGeneration: watchProvisioningGeneration,
+            watchProvisioningDigest: watchProvisioningDigest,
+            watchProvisioningAckGeneration: watchProvisioningAckGeneration,
+            watchProvisioningAckDigest: watchProvisioningAckDigest,
             providerMode: providerMode,
             providerTokenPresent: false,
             deviceKeyPresent: false,
@@ -1019,6 +1047,8 @@ final class PushGoAutomationRuntime {
                 try await updateNotificationKey(request: request, environment: environment)
             case "watch.resync_receiver":
                 try await resyncWatchReceiver(environment: environment)
+            case "watch.provisioning_acceptance":
+                try await verifyWatchProvisioningAcceptance(environment: environment)
             case "gateway.set_server":
                 try await updateGatewayConfig(request: request, environment: environment)
             case "notification.open":
@@ -1410,6 +1440,10 @@ final class PushGoAutomationRuntime {
             gatewayTokenPresent: refreshed.gatewayTokenPresent,
             watchReceiverState: refreshed.watchReceiverState,
             watchCompanionAvailable: refreshed.watchCompanionAvailable,
+            watchProvisioningGeneration: refreshed.watchProvisioningGeneration,
+            watchProvisioningDigest: refreshed.watchProvisioningDigest,
+            watchProvisioningAckGeneration: refreshed.watchProvisioningAckGeneration,
+            watchProvisioningAckDigest: refreshed.watchProvisioningAckDigest,
             providerMode: refreshed.providerMode,
             providerTokenPresent: refreshed.providerTokenPresent,
             deviceKeyPresent: refreshed.deviceKeyPresent,
@@ -1461,7 +1495,7 @@ final class PushGoAutomationRuntime {
     private func waitForStatePropagation(after commandName: String) async {
         await Task.yield()
         switch commandName {
-        case "nav.switch_tab", "message.open", "entity.open", "settings.open_decryption", "settings.set_page_visibility", "settings.set_decryption_key", "watch.resync_receiver":
+        case "nav.switch_tab", "message.open", "entity.open", "settings.open_decryption", "settings.set_page_visibility", "settings.set_decryption_key", "watch.resync_receiver", "watch.provisioning_acceptance":
             try? await Task.sleep(for: .milliseconds(200))
             await Task.yield()
         default:
@@ -2229,6 +2263,22 @@ final class PushGoAutomationRuntime {
 
     private func fallbackState(environment: AppEnvironment) async -> PushGoAutomationState {
         let activeTab = environment.activeMainTab.automationIdentifier
+        let watchProvisioningGeneration: Int64?
+        let watchProvisioningDigest: String?
+        let watchProvisioningAckGeneration: Int64?
+        let watchProvisioningAckDigest: String?
+#if os(iOS)
+        let watchProvisioningStatus = environment.watchProvisioningAutomationStatus()
+        watchProvisioningGeneration = watchProvisioningStatus.generation
+        watchProvisioningDigest = watchProvisioningStatus.digest
+        watchProvisioningAckGeneration = watchProvisioningStatus.acknowledgedGeneration
+        watchProvisioningAckDigest = watchProvisioningStatus.acknowledgedDigest
+#else
+        watchProvisioningGeneration = nil
+        watchProvisioningDigest = nil
+        watchProvisioningAckGeneration = nil
+        watchProvisioningAckDigest = nil
+#endif
         let openedMessageId = await resolvedAutomationMessageId(
             localMessageId: environment.pendingMessageToOpen,
             environment: environment
@@ -2261,6 +2311,10 @@ final class PushGoAutomationRuntime {
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
             watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
+            watchProvisioningGeneration: watchProvisioningGeneration,
+            watchProvisioningDigest: watchProvisioningDigest,
+            watchProvisioningAckGeneration: watchProvisioningAckGeneration,
+            watchProvisioningAckDigest: watchProvisioningAckDigest,
             providerMode: providerMode,
             providerTokenPresent: false,
             deviceKeyPresent: false,
@@ -3373,6 +3427,10 @@ final class PushGoAutomationRuntime {
             gatewayTokenPresent: state.gatewayTokenPresent,
             watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
+            watchProvisioningGeneration: state.watchProvisioningGeneration,
+            watchProvisioningDigest: state.watchProvisioningDigest,
+            watchProvisioningAckGeneration: state.watchProvisioningAckGeneration,
+            watchProvisioningAckDigest: state.watchProvisioningAckDigest,
             providerMode: state.providerMode,
             providerTokenPresent: providerTokenPresent,
             deviceKeyPresent: deviceKeyPresent,
@@ -3466,6 +3524,32 @@ final class PushGoAutomationRuntime {
         }
         #else
         throw PushGoAutomationError.unsupportedCommand("watch.resync_receiver")
+        #endif
+    }
+
+    private func verifyWatchProvisioningAcceptance(environment: AppEnvironment) async throws {
+        #if os(iOS)
+        let companionAvailable = await waitForAutomationState(environment: environment, timeout: 20.0) {
+            $0.watchCompanionAvailable
+        }
+        guard companionAvailable else {
+            throw PushGoAutomationError.invalidArgument("watch_companion_not_available")
+        }
+        try await environment.resyncWatchReceiverProvisioning()
+        let acknowledged = await waitForAutomationState(environment: environment, timeout: 30.0) { state in
+            guard let generation = state.watchProvisioningGeneration,
+                  generation > 0,
+                  let digest = state.watchProvisioningDigest,
+                  !digest.isEmpty
+            else { return false }
+            return state.watchProvisioningAckGeneration == generation
+                && state.watchProvisioningAckDigest == digest
+        }
+        guard acknowledged else {
+            throw PushGoAutomationError.invalidArgument("watch.provisioning_acceptance")
+        }
+        #else
+        throw PushGoAutomationError.unsupportedCommand("watch.provisioning_acceptance")
         #endif
     }
 
@@ -4566,7 +4650,11 @@ final class PushGoAutomationRuntime {
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
-            )
+            ) { phase in
+                await MainActor.run {
+                    environment.markQualityRuntimeReadiness("seeding.messages.\(phase)")
+                }
+            }
             environment.markQualityRuntimeReadiness("seeding.messages.saved")
         }
         if !bundle.entityRecords.isEmpty {

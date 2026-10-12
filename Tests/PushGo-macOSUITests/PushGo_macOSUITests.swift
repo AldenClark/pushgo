@@ -321,6 +321,11 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch() {
+        if let title = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_TITLE"],
+           let body = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_BODY"] {
+            assertAlreadyDeliveredLiveProviderNotification(title: title, body: body)
+            return
+        }
         let sessionID = "macos-system-notification-\(UUID().uuidString.lowercased())"
         let requestID = "quality-macos-notification-\(UUID().uuidString.lowercased())"
         let messageID = "quality-macos-message-\(UUID().uuidString.lowercased())"
@@ -726,6 +731,45 @@ final class PushGo_macOSUITests: XCTestCase {
             return AXUIElementPerformAction(pageDown, kAXPressAction as CFString) == .success
         }
         return false
+    }
+
+    @MainActor
+    private func assertAlreadyDeliveredLiveProviderNotification(title: String, body: String) {
+        // Explicit live mode observes a previously sent task-owned provider message.
+        // It never launches a fixture, injects a notification, or replaces the running candidate.
+        guard let path = ProcessInfo.processInfo.environment["PUSHGO_LIVE_PROVIDER_APP_PATH"] else {
+            XCTFail("Live provider mode requires the exact installed candidate path")
+            return
+        }
+        let candidateURL = URL(fileURLWithPath: path).standardizedFileURL
+        let runningCandidate = NSRunningApplication.runningApplications(withBundleIdentifier: "io.ethan.pushgo")
+            .first { $0.bundleURL?.standardizedFileURL == candidateURL }
+        XCTAssertNotNil(runningCandidate, "The exact signed candidate must already be running")
+        // macOS background means inactive; a visible inactive window is not hidden.
+        XCTAssertEqual(runningCandidate?.isActive, false,
+                       "The existing signed candidate must be inactive before observation")
+        let candidate = XCUIApplication(url: candidateURL)
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        let card = notificationCenter.descendants(matching: .any).matching(
+            NSPredicate(format: "(label CONTAINS %@ AND label CONTAINS %@) OR " +
+                        "(value CONTAINS %@ AND value CONTAINS %@)", title, body, title, body)
+        ).firstMatch
+        if !card.waitForExistence(timeout: 5) {
+            XCTAssertTrue(revealNotificationCenter(), "The actual system notification panel must open")
+        }
+        XCTAssertTrue(card.waitForExistence(timeout: 10),
+                      "The exact externally delivered notification must exist; local injection is forbidden")
+        card.click()
+        let foreground = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isActive == true"), object: runningCandidate
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [foreground], timeout: 10), .completed,
+                       "System notification must activate the exact signed candidate, not a stale same-bundle build")
+        XCTAssertTrue(element(in: candidate, identifier: "screen.message.detail").waitForExistence(timeout: 10))
+        XCTAssertTrue(candidate.staticTexts[title].waitForExistence(timeout: 5))
+        XCTAssertTrue(candidate.staticTexts[body].waitForExistence(timeout: 5),
+                      "The system notification must open the exact canonical body")
+        print("LIVE_PROVIDER_NOTIFICATION_OPEN=PASSED fixture_injection=NOT_PERFORMED title=\(title)")
     }
 
     @MainActor
@@ -2435,6 +2479,10 @@ final class PushGo_macOSUITests: XCTestCase {
             "The provider refresh failure must be visible on the Messages owner."
         )
         XCTAssertTrue(originalRow.exists, "A failed refresh must retain the last accurate snapshot.")
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not present a provider result before Retry."
+        )
         XCTAssertTrue(refresh.isHittable, "The same real Refresh control must remain usable for retry.")
         refresh.click()
 
@@ -2478,12 +2526,31 @@ final class PushGo_macOSUITests: XCTestCase {
             messageRefreshScenario: "fail_once_then_new_message"
         )
         launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = relaunched.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
         XCTAssertTrue(
-            relaunched.app.buttons
-                .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
-                .firstMatch
-                .waitForExistence(timeout: 8),
+            persistedRow.waitForExistence(timeout: 8),
             "The provider refresh result did not survive a real process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "The original canonical message must survive the refresh and relaunch."
+        )
+        XCTAssertTrue(
+            (persistedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The persisted provider result must retain its accurate body after relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted provider result must reopen its accurate detail after relaunch."
         )
         let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
         XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
@@ -3191,12 +3258,12 @@ final class PushGo_macOSUITests: XCTestCase {
         launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("things", in: context.app)
-        let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        let thingList = context.app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(thingList.waitForExistence(timeout: 8))
+        let thingRow = thingList.buttons["thing.row.quality-thing-rich"]
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
-        let distractorRow = element(
-            in: context.app,
-            identifier: "thing.row.quality-thing-distractor"
-        )
+        let distractorRow = thingList.buttons["thing.row.quality-thing-distractor"]
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
         distractorRow.click()
         let deleteThing = element(in: context.app, identifier: "action.thing.delete")
@@ -3235,18 +3302,18 @@ final class PushGo_macOSUITests: XCTestCase {
             .appendingPathComponent("artifacts", isDirectory: true)
             .appendingPathComponent("automation-events.jsonl")
         openSidebarTab("things", in: app)
-        let reopenedThingRow = element(in: app, identifier: "thing.row.quality-thing-rich")
-        let reopenedDistractorRow = element(
-            in: app,
-            identifier: "thing.row.quality-thing-distractor"
+        let reopenedThingList = app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(reopenedThingList.waitForExistence(timeout: 8))
+        let reopenedThingRow = reopenedThingList.buttons["thing.row.quality-thing-rich"]
+        let reopenedDistractorRow = reopenedThingList.buttons["thing.row.quality-thing-distractor"]
+        XCTAssertTrue(
+            reopenedThingRow.waitForExistence(timeout: 8),
+            "The surviving Thing must remain inside the owned list after relaunch."
         )
         XCTAssertTrue(
             reopenedDistractorRow.waitForNonExistence(timeout: 8),
             "The deleted Thing must not return after the production deadline commits and the App relaunches."
-        )
-        XCTAssertTrue(
-            reopenedThingRow.waitForExistence(timeout: 8),
-            "Deleting one Thing must preserve the independent control Thing across relaunch."
         )
 
         assertVisibleScreenThroughUI("screen.things.list", in: app, timeout: 8)
@@ -3320,11 +3387,27 @@ final class PushGo_macOSUITests: XCTestCase {
             settledSearch,
             "Thing search must publish an App-owned settled result snapshot before the UI Oracle continues."
         )
+        XCTAssertTrue(reopenedThingRow.exists)
+        let distractorExists: Bool
+        if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = hostSampleThingRowQuery(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = sampleThingRowQueryAcrossProcesses(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else {
+            distractorExists = reopenedDistractorRow.exists
+        }
         XCTAssertFalse(
-            reopenedDistractorRow.exists,
+            distractorExists,
             "Thing search must keep the exact target while excluding a real distractor."
         )
-        XCTAssertTrue(reopenedThingRow.exists)
         XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
         reopenedThingRow.click()
         assertVisibleScreenThroughUI("screen.things.detail", in: app, timeout: 8)
@@ -5466,6 +5549,15 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     private func pushGoStatusItem(in app: XCUIApplication) -> XCUIElement {
+        // macOS 27 renders third-party status buttons in MenuBarAgent. The
+        // app-owned StatusItem is only a projection and can retain stale
+        // geometry after activation/window transitions. Click the rendered
+        // button when available; older macOS versions retain the App owner.
+        let renderedButton = XCUIApplication(bundleIdentifier: "com.apple.MenuBarAgent")
+            .buttons["status-item.pushgo"]
+        if renderedButton.exists {
+            return renderedButton
+        }
         let appOwnedItem = app.descendants(matching: .any)["status-item.pushgo"]
         if appOwnedItem.exists {
             return appOwnedItem
@@ -5799,6 +5891,276 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// Coordinate a diagnostic-only sample from the CI host. The Runner names
+    /// its own PID and the App's exact bundle-ID process; the host validates
+    /// both before sampling. The ordinary AX query and product Oracle remain.
+    @MainActor
+    private func hostSampleThingRowQuery(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        guard let runID = ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_RUN_ID"],
+              !runID.isEmpty,
+              runID.allSatisfy(\.isNumber),
+              sessionID.range(of: "^[A-Za-z0-9-]{1,100}$", options: .regularExpression) != nil
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED invalid diagnostic identity")
+            return nil
+        }
+        let appProcesses = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "io.ethan.pushgo"
+        ).filter { !$0.isTerminated }
+        guard appProcesses.count == 1,
+              appProcesses[0].processIdentifier > 0,
+              getpid() > 0,
+              appProcesses[0].processIdentifier != getpid()
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED expected one live App PID")
+            return nil
+        }
+
+        let controlDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSHostSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: controlDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot create control directory: \(error)")
+            return nil
+        }
+        let marker = "PUSHGO_AX_QOS_HOST_BEGIN run=\(runID) runner=\(getpid()) "
+            + "app=\(appProcesses[0].processIdentifier) control=\(controlDirectory.path)\n"
+        FileHandle.standardError.write(Data(marker.utf8))
+
+        let readyURL = controlDirectory.appendingPathComponent("host-ready")
+        let blockedURL = controlDirectory.appendingPathComponent("host-blocked")
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: readyURL.path) { break }
+            if FileManager.default.fileExists(atPath: blockedURL.path) { break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        guard FileManager.default.fileExists(atPath: readyURL.path),
+              !FileManager.default.fileExists(atPath: blockedURL.path),
+              kill(getpid(), 0) == 0,
+              kill(appProcesses[0].processIdentifier, 0) == 0
+        else {
+            let reason = (try? String(contentsOf: blockedURL, encoding: .utf8)) ?? "host handshake timed out"
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED \(reason)")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = "runner_pid=\(getpid())\napp_pid=\(appProcesses[0].processIdentifier)"
+            + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))\n"
+        do {
+            try timing.write(
+                to: controlDirectory.appendingPathComponent("query-timing.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-host-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+        return exists
+    }
+
+    /// Diagnostic-only stack capture around the existing Thing row query. A
+    /// sampled run is never a clean QoS qualification because sampling itself
+    /// changes scheduling; normal UI journeys take the original query path.
+    @MainActor
+    private func sampleThingRowQueryAcrossProcesses(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        let appBundleID = "io.ethan.pushgo"
+        let themeBundleID = "com.apple.appkit.xpc.ThemeWidgetControlViewService"
+        let appProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: appBundleID)
+            .filter { !$0.isTerminated }
+        let themeProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: themeBundleID)
+            .filter { !$0.isTerminated }
+        guard appProcesses.count == 1, themeProcesses.count == 1 else {
+            XCTFail(
+                "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED expected one live App and ThemeWidget service; "
+                    + "app_count=\(appProcesses.count) theme_count=\(themeProcesses.count)"
+            )
+            return nil
+        }
+
+        let targets: [(role: String, pid: pid_t)] = [
+            ("runner", getpid()),
+            ("app", appProcesses[0].processIdentifier),
+            ("theme-widget", themeProcesses[0].processIdentifier),
+        ]
+        guard Set(targets.map { $0.pid }).count == targets.count,
+              targets.allSatisfy({ $0.pid > 0 && kill($0.pid, 0) == 0 }),
+              FileManager.default.isExecutableFile(atPath: "/usr/bin/sample")
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED process identity, liveness, or sampler unavailable")
+            return nil
+        }
+
+        let sampleDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: sampleDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot create sample directory: \(error)")
+            return nil
+        }
+
+        struct SampleJob {
+            let role: String
+            let targetPID: pid_t
+            let process: Process
+            let outputURL: URL
+            let errorPipe: Pipe
+        }
+
+        func startSample(role: String, pid: pid_t, phase: String, seconds: Int) throws -> SampleJob {
+            let outputURL = sampleDirectory.appendingPathComponent("\(phase)-\(role)-\(pid).txt")
+            let process = Process()
+            let errorPipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+            process.arguments = [String(pid), String(seconds), "1", "-file", outputURL.path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
+            try process.run()
+            return SampleJob(
+                role: role, targetPID: pid, process: process,
+                outputURL: outputURL, errorPipe: errorPipe
+            )
+        }
+
+        func finishSample(_ job: SampleJob) -> String? {
+            job.process.waitUntilExit()
+            let errorText = String(
+                data: job.errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+            guard job.process.terminationReason == .exit,
+                  job.process.terminationStatus == 0,
+                  let data = try? Data(contentsOf: job.outputURL),
+                  !data.isEmpty,
+                  let stackText = String(data: data, encoding: .utf8),
+                  stackText.contains("(pid \(job.targetPID))"),
+                  stackText.contains("Call graph:")
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample failed "
+                        + "status=\(job.process.terminationStatus) stderr=\(errorText)"
+                )
+                return nil
+            }
+            return stackText
+        }
+
+        let identity = targets.map { "\($0.role)_pid=\($0.pid)" }.joined(separator: "\n")
+        let manifestURL = sampleDirectory.appendingPathComponent("query-timing.txt")
+        do {
+            try identity.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save process identity: \(error)")
+            return nil
+        }
+        for target in targets {
+            do {
+                let job = try startSample(
+                    role: target.role, pid: target.pid, phase: "permission-preflight", seconds: 1
+                )
+                guard finishSample(job) != nil else { return nil }
+            } catch {
+                XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(target.role) preflight: \(error)")
+                return nil
+            }
+        }
+        guard targets.allSatisfy({ kill($0.pid, 0) == 0 }) else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED target exited after permission preflight")
+            return nil
+        }
+
+        var jobs: [SampleJob] = []
+        do {
+            for target in targets {
+                jobs.append(try startSample(
+                    role: target.role, pid: target.pid, phase: "row-query", seconds: 3
+                ))
+            }
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture startup: \(error)")
+            return nil
+        }
+        Thread.sleep(forTimeInterval: 0.15)
+        guard jobs.allSatisfy({ $0.process.isRunning }) else {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture exited before query")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = identity + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))"
+        do {
+            try timing.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+
+        let reportDateFormatter = DateFormatter()
+        reportDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        reportDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
+        for job in jobs {
+            guard let stackText = finishSample(job) else { return nil }
+            let attachment = XCTAttachment(string: stackText)
+            attachment.name = "thing-ax-qos-\(job.role)-sample"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let reportDateLine = stackText.split(separator: "\n").first(where: {
+                $0.hasPrefix("Date/Time:")
+            }),
+                  let reportStarted = reportDateFormatter.date(
+                    from: String(reportDateLine.dropFirst("Date/Time:".count))
+                        .trimmingCharacters(in: .whitespaces)
+                  ),
+                  reportStarted <= queryStarted,
+                  queryEnded <= reportStarted.addingTimeInterval(3)
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample report "
+                        + "does not bracket the AX query interval"
+                )
+                return nil
+            }
+        }
+        return exists
     }
 
     @MainActor

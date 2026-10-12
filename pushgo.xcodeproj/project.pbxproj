@@ -2982,6 +2982,7 @@
 				);
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "config/PushGo-watchOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -3038,6 +3039,7 @@
 				);
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "config/PushGo-watchOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";

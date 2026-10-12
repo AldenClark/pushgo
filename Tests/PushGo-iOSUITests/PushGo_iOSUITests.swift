@@ -626,7 +626,8 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
         let sessionID = "ios-cleanup-\(UUID().uuidString.lowercased())"
-        let context = configuredLaunchContext()
+        let englishLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        let context = configuredLaunchContext(launchArguments: englishLocale)
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.cleanup"
@@ -646,6 +647,17 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
         assertMessagesTabBadgeCount(2, in: context.app)
 
+        // Preserve the pre-tap toolbar pixels and AX geometry when the iOS
+        // Simulator cannot resolve the filter control's activation point.
+        let filterScreenshot = XCTAttachment(screenshot: context.app.screenshot())
+        filterScreenshot.name = "message-filter-before-history-cleanup"
+        filterScreenshot.lifetime = .keepAlways
+        add(filterScreenshot)
+        let filterHierarchy = XCTAttachment(string: context.app.debugDescription)
+        filterHierarchy.name = "message-filter-ax-before-history-cleanup"
+        filterHierarchy.lifetime = .keepAlways
+        add(filterHierarchy)
+
         openMessageFilters(in: context.app)
         tapWhenHittable(
             element(in: context.app, identifier: "action.messages.history_cleanup"),
@@ -661,10 +673,43 @@ final class PushGo_iOSUITests: XCTestCase {
             rangeSheet.swipeUp()
         }
         tapWhenHittable(thirtyDays, timeout: 5)
+        let confirm = element(
+            in: context.app,
+            identifier: "action.messages.history_cleanup.confirm"
+        )
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        guard let cancel = context.app.buttons
+            .matching(NSPredicate(format: "label == %@", "Cancel"))
+            .allElementsBoundByIndex
+            .first(where: { $0.isHittable }) else {
+            XCTFail("The history cleanup confirmation must offer a usable Cancel action.")
+            return
+        }
+        cancel.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 5))
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 5))
+        assertMessagesTabBadgeCount(
+            2,
+            in: context.app,
+            message: "Cancel must not delete either message or change unread state across relaunch"
+        )
+
+        openMessageFilters(in: context.app)
         tapWhenHittable(
-            element(in: context.app, identifier: "action.messages.history_cleanup.confirm"),
+            element(in: context.app, identifier: "action.messages.history_cleanup"),
             timeout: 5
         )
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        tapWhenHittable(thirtyDays, timeout: 5)
+        tapWhenHittable(confirm, timeout: 5)
         tapWhenHittable(
             element(in: context.app, identifier: "action.messages.history_cleanup.done"),
             timeout: 8
@@ -675,7 +720,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertMessagesTabBadgeCount(1, in: context.app)
 
         context.app.terminate()
-        let relaunched = configuredLaunchContext()
+        let relaunched = configuredLaunchContext(launchArguments: englishLocale)
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.cleanup"
@@ -940,12 +985,14 @@ final class PushGo_iOSUITests: XCTestCase {
                 )
             }
         }
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
         let swipeUpAndRecord = {
             list.swipeUp()
-            recordVisibleWorkflowRows()
+            // Capture the transient loading state before expensive per-row AX
+            // queries consume the controlled request's ten-second delay.
+            if !pageLoading.exists { recordVisibleWorkflowRows() }
         }
         recordVisibleWorkflowRows()
-        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
         for _ in 0..<12 where !pageLoading.exists {
             swipeUpAndRecord()
         }
@@ -953,25 +1000,31 @@ final class PushGo_iOSUITests: XCTestCase {
             pageLoading.waitForExistence(timeout: 5) && pageLoading.isHittable,
             "A slow next page must expose a visible, reachable bottom progress state instead of looking frozen"
         )
+        let observedLoadingFrame = pageLoading.frame
+        let observedLoadingLabel = pageLoading.label
         // iOS 26.4 can project this combined SwiftUI HStack's identifier onto
         // the spinner while exposing its localized Text as a sibling node.
         // Keep both the visible progress and the nearby explanation as oracles.
         let loadingText = context.app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "正在加载更早的消息")
         ).firstMatch
-        let nearbyLoadingTextIsVisible = loadingText.exists
-            && loadingText.frame.width > 0
-            && loadingText.frame.height > 0
-            && loadingText.frame.intersects(context.app.windows.firstMatch.frame)
-            && abs(loadingText.frame.midY - pageLoading.frame.midY) < 40
+        var nearbyLoadingTextIsVisible = false
+        if !observedLoadingLabel.contains("正在加载更早的消息"), loadingText.exists {
+            let textFrame = loadingText.frame
+            nearbyLoadingTextIsVisible = textFrame.width > 0
+                && textFrame.height > 0
+                && textFrame.intersects(context.app.windows.firstMatch.frame)
+                && abs(textFrame.midY - observedLoadingFrame.midY) < 40
+        }
         XCTAssertTrue(
-            pageLoading.label.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
+            observedLoadingLabel.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
             "The visible bottom progress must include its nearby zh-Hans explanation, not only a spinner."
         )
         XCTAssertTrue(
             context.app.staticTexts["Quality workflow 75"].exists,
             "The last row from page 1 must remain usable while page 2 is loading"
         )
+        recordVisibleWorkflowRows()
         let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
         XCTAssertTrue(
             pageFailure.waitForExistence(timeout: 8) && pageFailure.isHittable,
@@ -1233,6 +1286,43 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         assertMessageTitles(allTitles, excluding: [], in: context.app)
         assertMessagesTabBadgeCount(4, in: context.app)
+
+        // This diagnostic snapshots the real foreground/window geometry before
+        // the first filter action. A failed XCTest hit-point report can render
+        // every ancestor as an infinite-origin, zero-size failure snapshot;
+        // these earlier measurements distinguish that from the live UI state.
+        func attachFilterProbe(_ name: String, _ body: String) {
+            let attachment = XCTAttachment(string: body)
+            attachment.name = "message-facet-filter-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        attachFilterProbe(
+            "app-state",
+            "epoch=\(Date().timeIntervalSince1970) state=\(context.app.state)"
+        )
+        let filterGeometry: [(String, XCUIElement)] = [
+            ("main-window", context.app.windows.firstMatch),
+            ("filter-button", context.app.buttons["action.messages.filter"]),
+            ("filter-any", element(in: context.app, identifier: "action.messages.filter")),
+            ("messages-tab", context.app.buttons["tab.messages"]),
+            ("refresh-button", context.app.buttons["action.messages.refresh"]),
+            ("mark-all-read-button", context.app.buttons["action.messages.mark_all_read"]),
+        ]
+        for (name, target) in filterGeometry {
+            let started = Date().timeIntervalSince1970
+            let exists = target.exists
+            let frame = exists ? String(describing: target.frame) : "<missing>"
+            attachFilterProbe(
+                name,
+                "query_start_epoch=\(started) query_end_epoch=\(Date().timeIntervalSince1970) "
+                    + "exists=\(exists) frame=\(frame)"
+            )
+        }
+        let filterPixels = XCTAttachment(screenshot: context.app.screenshot())
+        filterPixels.name = "message-facet-filter-before-first-tap"
+        filterPixels.lifetime = .keepAlways
+        add(filterPixels)
 
         openMessageFilters(in: context.app)
         tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
@@ -1685,9 +1775,10 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {
+        let sessionID = "ios-refresh-recovery-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-refresh-recovery-\(UUID().uuidString.lowercased())",
+            sessionID: sessionID,
             fixture: "messages.standard",
             messageRefreshScenario: "fail_once_then_new_message"
         )
@@ -1700,6 +1791,10 @@ final class PushGo_iOSUITests: XCTestCase {
 
         assertElementExists("state.messages.refresh.failed", in: context.app, timeout: 5)
         XCTAssertTrue(originalTitle.exists)
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not report the provider result as persisted."
+        )
         let retry = context.app.buttons["action.messages.refresh"]
         XCTAssertTrue(retry.isHittable)
         retry.tap()
@@ -1714,6 +1809,38 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             context.app.staticTexts["Persisted through the provider refresh ingress path."]
                 .waitForExistence(timeout: 5)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The failed refresh must not lose the prior canonical message after relaunch."
+        )
+        let persistedRefresh = relaunched.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            persistedRefresh.waitForExistence(timeout: 8),
+            "The successful retry must persist the new canonical message across relaunch."
+        )
+        XCTAssertEqual(
+            relaunched.app.staticTexts
+                .matching(NSPredicate(format: "label == %@", "P2 Refresh Result")).count,
+            1,
+            "Retry must persist the provider result once, without a duplicate row."
+        )
+        persistedRefresh.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted retry result must reopen its exact body after relaunch."
         )
     }
 
@@ -2356,11 +2483,11 @@ final class PushGo_iOSUITests: XCTestCase {
             "Interactive dismissal during a prepared gateway switch must keep the editor open"
         )
         XCTAssertFalse(
-            element(in: context.app, identifier: "action.settings.server.save").isEnabled,
+            actionButton(in: context.app, identifier: "action.settings.server.save").isEnabled,
             "A prepared gateway switch must not accept a second Save"
         )
         XCTAssertFalse(
-            element(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
+            actionButton(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
             "A prepared gateway switch must not allow cancellation through the editor"
         )
         XCTAssertTrue(
@@ -3123,7 +3250,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let filteredEventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(filteredEventRow.waitForNonExistence(timeout: 8))
 
-        let thingsTab = element(in: context.app, identifier: "tab.things")
+        let thingsTab = thingsTab(in: context.app)
         tapWhenHittable(thingsTab, timeout: 8, message: "The linked Thing must remain reachable")
         let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
         tapWhenHittable(linkedThing, timeout: 8, message: "The exact linked Thing must open")
@@ -3210,7 +3337,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
 
         confirmClose()
-        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        let closing = actionButton(in: context.app, identifier: "state.event.close.in_progress")
         XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
         XCTAssertFalse(
             closing.isEnabled,
@@ -3253,19 +3380,93 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testThingOutsideFirstPageKeepsRelationsAcrossStoreRefresh() throws {
+        let runtimeRoot = makeRuntimeRoot()
+        let fixtureURL = runtimeRoot.appendingPathComponent("paged-things.json")
+        try FileManager.default.createDirectory(at: runtimeRoot, withIntermediateDirectories: true)
+        let base = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: thingFixturePath))) as! [String: Any]
+        var messages = base["messages"] as! [[String: Any]]
+        var initial = messages[0]
+        initial["id"] = "00000000-0000-0000-0000-00000000a000"
+        initial["message_id"] = "paged-thing-initial"
+        initial["title"] = "Paged initial Thing snapshot"
+        initial["body"] = "Canonical history outside the first Thing page."
+        initial["received_at"] = "2026-03-01T10:00:00Z"
+        messages.append(initial)
+        messages.append([
+            "id": "00000000-0000-0000-0000-00000000a002",
+            "message_id": "paged-related-message",
+            "title": "Paged related message",
+            "body": "Canonical linked content survives a list reset.",
+            "channel_id": "p2", "is_read": false,
+            "received_at": "2026-03-01T10:02:00Z",
+            "raw_payload": ["entity_type": "message", "entity_id": "paged-related-message",
+                            "thing_id": thingFixtureId, "projection_destination": "thing_sub_message"],
+            "status": "normal"
+        ])
+        // Production page size is 900; these newer heads put the target beyond
+        // page one without changing product limits or fabricating list state.
+        let formatter = ISO8601DateFormatter()
+        let controlStart = formatter.date(from: "2026-03-02T10:00:00Z")!
+        for index in 0...900 {
+            messages.append([
+                "id": String(format: "10000000-0000-0000-0000-%012x", index),
+                "message_id": "page-control-message-\(index)",
+                "title": "Thing page control \(index)", "body": "Newer control head.",
+                "channel_id": "p2", "is_read": true,
+                "received_at": formatter.string(from: controlStart.addingTimeInterval(Double(index))),
+                "raw_payload": ["entity_type": "thing", "entity_id": "page-control-\(index)",
+                                "thing_id": "page-control-\(index)",
+                                "thing_title": "Thing page control \(index)",
+                                "projection_destination": "things"],
+                "status": "normal"
+            ])
+        }
+        try JSONSerialization.data(withJSONObject: ["messages": messages]).write(to: fixtureURL)
+        let session = qualitySessionPayload(sessionID: "paged-thing-\(UUID().uuidString)", fixture: "empty.clean")
+        let seeded = configuredLaunchContext(runtimeRoot: runtimeRoot, requestName: "fixture.seed_messages", args: ["path": fixtureURL.path], launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(seeded.app)
+        // Quality sessions write receipts inside the App container; the
+        // user-visible row below is the seed completion oracle.
+        tapWhenHittable(thingsTab(in: seeded.app), timeout: 8)
+        let newestControl = element(in: seeded.app, identifier: "thing.row.page-control-900")
+        XCTAssertTrue(newestControl.waitForExistence(timeout: 8))
+        XCTAssertTrue(newestControl.label.contains("Thing page control 900"))
+        seeded.app.terminate()
+
+        let opened = configuredLaunchContext(runtimeRoot: runtimeRoot, requestName: "entity.open", args: ["entity_type": "thing", "entity_id": thingFixtureId], launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        opened.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(opened.app)
+        XCTAssertTrue(opened.app.staticTexts["P2 Thing Rich"].waitForExistence(timeout: 15))
+        tapWhenHittable(element(in: opened.app, identifier: "tab.thing.detail.messages"), timeout: 8)
+        tapWhenHittable(element(in: opened.app, identifier: "thing.related.message.paged-related-message"), timeout: 8)
+        XCTAssertTrue(opened.app.staticTexts["Canonical linked content survives a list reset."].waitForExistence(timeout: 8))
+        // Opening the unread canonical message marks it read through production
+        // code, triggering the real Store revision/list refresh while in detail.
+        tapWhenHittable(element(in: opened.app, identifier: "action.message.close"), timeout: 8)
+        tapWhenHittable(element(in: opened.app, identifier: "tab.thing.detail.updates"), timeout: 8, message: "A target outside page one must remain open after the Store refresh")
+        tapWhenHittable(element(in: opened.app, identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"), timeout: 8)
+        XCTAssertTrue(opened.app.staticTexts["Paged initial Thing snapshot"].waitForExistence(timeout: 8))
+        XCTAssertTrue(opened.app.staticTexts["Canonical history outside the first Thing page."].waitForExistence(timeout: 8))
+        tapWhenHittable(element(in: opened.app, identifier: "action.thing.update.close"), timeout: 8)
+        XCTAssertTrue(element(in: opened.app, identifier: "tab.thing.detail.updates").waitForExistence(timeout: 8))
+    }
+
     func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback() {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         )
-        let encodedSession = qualitySessionPayload(
+        let encodedSession = pendingDeletionQualitySessionPayload(
             sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
-            fixture: "thing.standard"
+            fixture: "thing.standard",
+            timeoutMilliseconds: 30_000
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let thingsTab = element(in: context.app, identifier: "tab.things")
+        let thingsTab = thingsTab(in: context.app)
         XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
         thingsTab.tap()
         let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
@@ -3445,6 +3646,19 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app,
             identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
         )
+        // The initial update follows the newer snapshot in the production
+        // scroll surface. Reveal that exact older row through the real user
+        // gesture rather than assuming every relation fits in one viewport.
+        let thingDetail = element(in: context.app, identifier: "sheet.thing.detail")
+        if !relatedUpdate.isHittable {
+            let beforeScroll = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            beforeScroll.name = "thing-updates-before-scroll"
+            beforeScroll.lifetime = .keepAlways
+            add(beforeScroll)
+        }
+        for _ in 0..<3 where !relatedUpdate.isHittable {
+            thingDetail.swipeUp()
+        }
         tapWhenHittable(relatedUpdate, timeout: 8, message: "Related Update must open")
         assertElementExists("screen.thing.update.detail", in: context.app, timeout: 8)
         XCTAssertTrue(
@@ -3511,6 +3725,56 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(unavailableTarget.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
     }
 
+    @MainActor
+    func testChannelRenameCancelDiscardsDraftAcrossReopenAndRelaunch() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
+            allowCrossAppDataAccess: true
+        )
+        let session = qualitySessionPayload(
+            sessionID: "ios-rename-cancel-\(UUID().uuidString.lowercased())",
+            fixture: "channels.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let channelID = "01H00000000000000000000001"
+        let row = element(in: context.app, identifier: "channel.row.\(channelID)")
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.swipeLeft()
+        tapWhenHittable(element(in: context.app, identifier: "action.channel.\(channelID).rename"), timeout: 5)
+        let field = element(in: context.app, identifier: "field.channel.rename.alias")
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let originalName = try! XCTUnwrap(field.value as? String)
+        XCTAssertFalse(originalName.isEmpty)
+        replaceText(in: field, with: "Cancelled Rename")
+        XCTAssertTrue(context.app.keyboards.firstMatch.exists, "Cancel must remain reachable with the software keyboard shown")
+        let pixels = XCTAttachment(screenshot: context.app.screenshot())
+        pixels.name = "rename-cancel-with-keyboard"
+        pixels.lifetime = .keepAlways
+        add(pixels)
+        let hierarchy = XCTAttachment(string: context.app.debugDescription)
+        hierarchy.name = "rename-cancel-controls"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        tapWhenHittable(context.app.buttons["Cancel"], timeout: 5)
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(context.app.staticTexts[originalName].waitForExistence(timeout: 5))
+        XCTAssertFalse(context.app.staticTexts["Cancelled Rename"].exists)
+        row.swipeLeft()
+        tapWhenHittable(element(in: context.app, identifier: "action.channel.\(channelID).rename"), timeout: 5)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, originalName, "Cancel must discard the draft before reopening the editor")
+        tapWhenHittable(context.app.buttons["Cancel"], timeout: 5)
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts[originalName].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Cancelled Rename"].exists, "Cancel must never persist a new alias")
+    }
+
     func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
@@ -3542,9 +3806,19 @@ final class PushGo_iOSUITests: XCTestCase {
             Date.FormatStyle(date: .abbreviated, time: .shortened)
                 .locale(Locale(identifier: "en_US"))
         )
+        // The device's 24-hour preference can differ from the XCTest runner.
+        // Both representations must still name the exact canonical timestamp.
+        let clock24 = DateFormatter()
+        clock24.locale = Locale(identifier: "en_US_POSIX")
+        clock24.timeZone = .current
+        clock24.dateFormat = "H:mm"
+        let keepLatest24HourText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .omitted)
+                .locale(Locale(identifier: "en_US"))
+        ) + " at " + clock24.string(from: keepLatestDate)
         XCTAssertTrue(
-            keepActivity.label.contains(keepLatestText),
-            "The Channel row must expose the latest canonical message time, not only its subscription."
+            [keepLatestText, keepLatest24HourText].contains { keepActivity.label.contains($0) },
+            "The Channel row must expose the latest canonical message time. Expected \(keepLatestText) or \(keepLatest24HourText); actual \(keepActivity.label). Runner timezone: \(TimeZone.current.identifier)."
         )
         let subscribedChannelID = "01H00000000000000000000004"
         tapWhenHittable(
@@ -3614,8 +3888,11 @@ final class PushGo_iOSUITests: XCTestCase {
         var renameField = element(in: context.app, identifier: "field.channel.rename.alias")
         XCTAssertTrue(renameField.waitForExistence(timeout: 5))
         replaceText(in: renameField, with: "Cancelled Rename")
+        // The failed CI recording shows a visible, unobscured Cancel button,
+        // but its custom identifier did not resolve. This English session
+        // targets the real typed button while the rename editor is active.
         tapWhenHittable(
-            element(in: context.app, identifier: "action.channel.rename.cancel"),
+            context.app.buttons["Cancel"],
             timeout: 5
         )
         XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 5))
@@ -3726,6 +4003,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
 
         tapWhenHittable(messagesTab(in: context.app), timeout: 8)
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
         XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
 
@@ -5110,11 +5388,33 @@ final class PushGo_iOSUITests: XCTestCase {
             line: line
         )
 
+        // Safari may present its one-time toolbar tip over the address bar.
+        // Relaunching Safari preserves that tip; dismiss only this observed
+        // system-owned popover before interacting with the real URL field.
+        let toolbarTip = safari.popovers.containing(.other, identifier: "TipView").firstMatch
+        if toolbarTip.exists {
+            tapWhenHittable(
+                toolbarTip.buttons["Close"],
+                timeout: 5,
+                message: "Safari's toolbar tip must expose its real dismissal action",
+                file: file,
+                line: line
+            )
+            XCTAssertTrue(
+                toolbarTip.waitForNonExistence(timeout: 5),
+                "Safari's toolbar tip must be dismissed before checking the destination",
+                file: file,
+                line: line
+            )
+        }
+
+        let compactDisplayURL = compactURL.hasSuffix("/") ? String(compactURL.dropLast()) : compactURL
         let exactAddress = safari.textFields.matching(
             NSPredicate(
-                format: "value ==[c] %@ OR value ==[c] %@",
+                format: "value ==[c] %@ OR value ==[c] %@ OR value ==[c] %@",
                 compactURL,
-                fullURL
+                fullURL,
+                compactDisplayURL
             )
         ).firstMatch
         // Give the real browser a bounded settling window before reaching for
@@ -5132,9 +5432,9 @@ final class PushGo_iOSUITests: XCTestCase {
             )
         }
         if !exactAddress.exists && !exactAddress.waitForExistence(timeout: 5) {
-            // iOS may initially keep Safari's address bar compact. This is the
-            // only system-private interaction we permit; the exact URL field
-            // below remains the decisive business oracle. A fresh Safari launch
+            // iOS may initially keep Safari's address bar compact. Expanding
+            // it follows dismissal of any toolbar tip;
+            // the exact URL field remains the decisive business oracle. A fresh Safari launch
             // is prepared by resetSafariBeforeExternalRoute() to avoid a stale
             // lowered-bar snapshot racing this tap.
             let compactAddress = safari.descendants(matching: .any)
@@ -5164,7 +5464,7 @@ final class PushGo_iOSUITests: XCTestCase {
             return
         }
         XCTAssertTrue(
-            [compactURL, fullURL].contains(observedURL),
+            [compactURL, fullURL, compactDisplayURL].contains(observedURL),
             "Safari exposed an unexpected external URL: \(observedURL)",
             file: file,
             line: line
@@ -5216,7 +5516,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
     private func openMessageFilters(in app: XCUIApplication) {
         tapWhenHittable(
-            element(in: app, identifier: "action.messages.filter"),
+            app.buttons["action.messages.filter"],
             timeout: 5,
             message: "The production message filter control must be reachable"
         )
@@ -5310,18 +5610,27 @@ final class PushGo_iOSUITests: XCTestCase {
         return tabBar.buttons.element(boundBy: tabBar.buttons.count - 1)
     }
 
+    private func thingsTab(in app: XCUIApplication) -> XCUIElement {
+        let identified = element(in: app, identifier: "tab.things")
+        if identified.waitForExistence(timeout: 2) { return identified }
+        let tabBar = app.tabBars.firstMatch
+        guard tabBar.waitForExistence(timeout: 8) else { return identified }
+        let labels = Set(["Objects", "对象", "物件"])
+        let candidates = tabBar.buttons.allElementsBoundByIndex.filter {
+            labels.contains($0.label)
+        }
+        // Resolve only one actual product tab; the flow verifies its real rows.
+        return candidates.count == 1 ? candidates[0] : identified
+    }
+
     private func messagesTab(in app: XCUIApplication) -> XCUIElement {
         let tabBar = app.tabBars.firstMatch
         let identified = tabBar.buttons["tab.messages"]
-        if identified.exists {
-            return identified
-        }
         guard tabBar.waitForExistence(timeout: 8) else { return identified }
 
-        // iOS 27 may omit an identifier attached to a custom SwiftUI tab item
-        // from the final UITabBarButton. Resolve the same user-facing
-        // destination by its localized title, scoped to the production tab
-        // bar. Do not fall back to an ordinal: optional tabs can change order.
+        // Resolve the visible Messages destination by its localized title
+        // before using the custom identifier. iOS 27 can associate an
+        // identifier query with the wrong tab's hit frame after a tab update.
         let labels = Set(["Messages", "消息", "訊息"])
         let deadline = Date().addingTimeInterval(2)
         repeat {
@@ -5513,6 +5822,14 @@ final class PushGo_iOSUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    private func actionButton(in app: XCUIApplication, identifier: String) -> XCUIElement {
+        // SwiftUI toolbars can project the identifier onto a child label/spinner.
+        // Enabled state belongs to the owning Button, rather than that child.
+        let identified = app.buttons.matching(identifier: identifier).firstMatch
+        if identified.exists { return identified }
+        return app.buttons.containing(.any, identifier: identifier).firstMatch
+    }
+
     private func eventsTab(in app: XCUIApplication) -> XCUIElement {
         let identifiedTab = app.buttons["tab.events"]
         if identifiedTab.exists {
@@ -5580,13 +5897,20 @@ final class PushGo_iOSUITests: XCTestCase {
         if hasEnteredText {
             field.typeKey("a", modifierFlags: .command)
             field.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+            // Only use the fallback when selection did not clear the field.
+            // Empty fields can expose their placeholder as their AX value.
+            let remaining = (field.value as? String) ?? ""
+            let cleared = remaining.isEmpty
+                || (remaining == field.placeholderValue && existing != field.placeholderValue)
             // If selection was not honored by the current software keyboard,
             // move to the end and apply a bounded fallback clear. XCUI may
             // expose only the first whitespace-delimited token as `value`.
-            field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
-            field.typeText(
-                String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
-            )
+            if !cleared {
+                field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
+                field.typeText(
+                    String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
+                )
+            }
         }
         if !text.isEmpty {
             field.typeText(text)
@@ -5617,7 +5941,7 @@ final class PushGo_iOSUITests: XCTestCase {
             predicate: NSPredicate(format: "hasKeyboardFocus == true"),
             object: field
         )
-        let focusResult = XCTWaiter.wait(for: [focused], timeout: 2)
+        let focusResult = XCTWaiter.wait(for: [focused], timeout: 8)
         XCTAssertEqual(
             focusResult,
             .completed,

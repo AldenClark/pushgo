@@ -69,6 +69,11 @@ def legacy_test_warning_messages(result: dict[str, object]) -> list[str]:
         warnings = issues.get("testWarningSummaries")
         if warnings is None:
             continue
+        # Xcode 27 serializes an explicitly empty typed Array without _values.
+        # Accept only that exact native representation, never an untyped or
+        # malformed object which could conceal warning records.
+        if warnings == {"_type": {"_name": "Array"}}:
+            continue
         if not isinstance(warnings, dict) or not isinstance(warnings.get("_values"), list):
             raise ValueError("xcresult test warning summaries are malformed")
         for issue in warnings["_values"]:

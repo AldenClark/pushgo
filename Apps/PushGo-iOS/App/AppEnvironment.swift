@@ -2112,6 +2112,12 @@ final class AppEnvironment {
         await watchSyncController.handleWatchStandaloneProvisioningAck(ack)
     }
 
+    #if DEBUG
+    func watchProvisioningAutomationStatus() -> WatchProvisioningAutomationStatus {
+        watchSyncController.standaloneProvisioningAutomationStatus
+    }
+    #endif
+
     func handleWatchMirrorSnapshotAck(_ ack: WatchMirrorSnapshotAck) async {
         await watchSyncController.handleWatchMirrorSnapshotAck(ack)
     }

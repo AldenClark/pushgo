@@ -43,7 +43,18 @@ if ((has_output == 0)); then
 fi
 python3 "$repo_root/scripts/quality_impact.py" "${impact_args[@]}" --check
 
-lane="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["recommended_lane"])' "$impact_file")"
+# Local working-tree diagnostics can use exact native test consumers; an
+# explicit base/head remains a cumulative delivery plan unless called via CI.
+lane="$(python3 - "$repo_root/scripts" "$impact_file" <<'PY_LANE'
+import json
+import sys
+sys.path.insert(0, sys.argv[1])
+from quality_ci_plan import select_execution_lane
+plan = json.load(open(sys.argv[2]))
+purpose = "draft-patch-diagnostic" if plan["change_source"] == "working-tree" else "cumulative-acceptance"
+print(select_execution_lane(plan, purpose))
+PY_LANE
+)"
 if [[ "${QUALITY_IMPACT_PLAN_ONLY:-0}" == "1" ]]; then
   echo "status=NOT_RUN"
   echo "reason=impact_plan_only"

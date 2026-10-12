@@ -17,12 +17,16 @@ struct ThingListScreen: View {
     var unavailableTargetFeedback: String? = nil
     var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
-    @State private var selectedThing: ThingProjection?
+    private struct DetailTarget: Identifiable {
+        let id: String
+        let channelId: String?
+    }
+
+    @State private var selectedThing: DetailTarget?
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
-    @State private var hydrationRequestedThingIDs: Set<String> = []
 
     var body: some View {
         let filteredThingsSnapshot = filteredThings
@@ -46,7 +50,6 @@ struct ThingListScreen: View {
 #endif
         }
         .onChange(of: viewModel.things) { _, _ in
-            syncSelectedThingSnapshot()
             openThingIfNeeded()
 #if DEBUG
             publishAutomationState()
@@ -64,13 +67,20 @@ struct ThingListScreen: View {
 #endif
         }
         .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            if let selectedThing, isPendingLocalDeletion(selectedThing) {
+            if let selectedThing, pendingLocalDeletionController.suppressesThing(
+                id: selectedThing.id, channelId: selectedThing.channelId
+            ) {
                 self.selectedThing = nil
             }
         }
         .sheet(item: $selectedThing) { thing in
-            ThingDetailScreen(
-                thing: thing,
+            ThingStoreDetailScreen(
+                thingId: thing.id,
+                viewModel: viewModel,
+                onUnavailable: {
+                    selectedThing = nil
+                    handleUnavailableThingTarget()
+                },
                 onCommitDelete: {
                     try await viewModel.deleteThing(thingId: thing.id)
                 },
@@ -78,6 +88,7 @@ struct ThingListScreen: View {
                     selectedThing = nil
                 }
             )
+            .id(thing.id)
             .toastOverlay(environment: environment, showsPendingDeletionBar: false)
             .accessibilityIdentifier("sheet.thing.detail")
         }
@@ -340,7 +351,6 @@ struct ThingListScreen: View {
     private func handlePullToRefresh() async {
         _ = await environment.syncProviderIngress(reason: "things_pull_to_refresh")
         await viewModel.reload()
-        syncSelectedThingSnapshot()
         openThingIfNeeded()
     }
 
@@ -397,18 +407,7 @@ struct ThingListScreen: View {
             return
         }
 
-        guard !hydrationRequestedThingIDs.contains(target) else { return }
-        hydrationRequestedThingIDs.insert(target)
-        Task { @MainActor in
-            let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
-            hydrationRequestedThingIDs.remove(target)
-            guard let hydrated else {
-                guard viewModel.error == nil else { return }
-                handleUnavailableThingTarget()
-                return
-            }
-            openThing(hydrated, target: target)
-        }
+        openThing(id: target, channelId: nil)
     }
 
     private func handleUnavailableThingTarget() {
@@ -419,42 +418,23 @@ struct ThingListScreen: View {
     }
 
     private func openThing(_ thing: ThingProjection, target: String) {
-        if let channelId = normalizedChannel(thing.channelId) {
+        openThing(id: target, channelId: thing.channelId)
+    }
+
+    private func openThing(id: String, channelId: String?) {
+        if let channelId = normalizedChannel(channelId) {
             selectedChannelIDs = [channelId]
         }
-        if !selectedTags.isEmpty {
-            selectedTags.removeAll()
-        }
-        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            searchQuery = ""
-        }
-        selectThing(thing)
-#if DEBUG
-        publishAutomationState()
-#endif
-        hydrationRequestedThingIDs.remove(target)
+        selectedTags.removeAll()
+        searchQuery = ""
+        onUnavailableTargetFeedbackChanged?(nil)
+        selectedThing = DetailTarget(id: id, channelId: channelId)
         onOpenThingHandled?()
     }
 
     private func selectThing(_ thing: ThingProjection) {
         onUnavailableTargetFeedbackChanged?(nil)
-        selectedThing = thing
-        Task { @MainActor in
-            if let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: thing.id, forceRefresh: true) {
-                selectedThing = hydrated
-            } else if selectedThing?.id == thing.id {
-                selectedThing = nil
-            }
-        }
-    }
-
-    private func syncSelectedThingSnapshot() {
-        guard let selectedId = selectedThing?.id else { return }
-        if let refreshed = viewModel.things.first(where: { $0.id == selectedId }) {
-            selectedThing = refreshed
-        } else {
-            selectedThing = nil
-        }
+        selectedThing = DetailTarget(id: thing.id, channelId: thing.channelId)
     }
 
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {

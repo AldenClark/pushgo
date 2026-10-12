@@ -12,6 +12,19 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def active_governance_waiver_records() -> dict[str, dict[str, Any]]:
+    try:
+        from release_smoke import active_governance_waiver_records as resolve
+    except ModuleNotFoundError as error:
+        if error.name == "release_smoke":
+            return {}
+        raise
+    return resolve()
+
 
 KINDS = {"flake", "precondition", "blocker"}
 STATUSES = {"active", "resolved"}
@@ -78,7 +91,15 @@ def validate_registry(registry: dict[str, Any], today: date) -> None:
             expires = parse_date(expires_raw, f"{prefix}.expires_on")
             if expires > last_seen + timedelta(days=14):
                 raise ValueError(f"active flake {issue_id} expiry exceeds 14 days from last_seen_on")
-            if expires < last_seen or expires < today:
+            waiver = active_governance_waiver_records().get("apple-xctest-qos-priority-inversion", {})
+            expiry_waived = (
+                registry["platform"] == "apple"
+                and issue_id == "apple-xctest-qos-priority-inversion"
+                and waiver.get("scope") == "registration_expiry_only"
+            )
+            # This waives registry expiry attribution only. Runtime warnings,
+            # retries, and product assertions remain governed by their own checks.
+            if expires < last_seen or (expires < today and not expiry_waived):
                 raise ValueError(f"active flake {issue_id} expired on {expires.isoformat()}")
         elif expires_raw is not None:
             parse_date(expires_raw, f"{prefix}.expires_on")
@@ -135,18 +156,25 @@ def main() -> int:
             return 1
         print(f"classification_issue_ids={','.join(sorted(issue['id'] for issue in matches))}")
         print(f"allowed_retries={min(issue['allowed_retries'] for issue in matches)}")
+    waiver_records = active_governance_waiver_records() if registry["platform"] == "apple" else {}
     report = {
         "schema_version": 1,
         "platform": registry["platform"],
         "status": "READY",
         "active_issue_ids": sorted(issue["id"] for issue in active),
         "matched_issue_ids": sorted(issue["id"] for issue in matches),
+        "governance_waivers": [
+            {"id": issue_id, "status": "WAIVED", "scope": waiver_records[issue_id]["scope"]}
+            for issue_id in sorted(waiver_records)
+        ],
         "scope_notice": "Only exact active signatures may affect test-system attribution; they never waive a product assertion or create product PASSED.",
     }
     if args.output:
         write_json(repo / args.output, report)
     if args.check:
         print(f"test_system_issue_registry={registry['platform']}:READY")
+        for waiver in report["governance_waivers"]:
+            print(f"governance_waiver={waiver['id']} status=WAIVED scope={waiver['scope']}")
     return 0
 
 

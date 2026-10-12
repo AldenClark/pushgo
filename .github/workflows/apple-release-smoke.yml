@@ -1,0 +1,87 @@
+name: Apple Release Smoke
+on:
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Native smoke profile (signed distribution and provider delivery remain separate)
+        type: choice
+        required: true
+        default: ios
+        options: [core, gateway-integration, ios, ios-notification, macos, watchos]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PUSHGO_RELEASE_SMOKE_VERSION: '1.3.3'
+      MAX_RETRIES: '0'
+    steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Select release Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+      - name: Verify smoke selection and negative controls
+        run: |
+          python3 -m unittest scripts.tests.test_release_smoke
+          python3 scripts/quality_ai_history.py --check
+          python3 scripts/release_smoke.py '${{ inputs.platform }}' --check
+      - name: Run native smoke
+        if: inputs.platform != 'gateway-integration'
+        run: python3 scripts/release_smoke.py '${{ inputs.platform }}'
+      - name: Read paired Gateway revision
+        if: inputs.platform == 'gateway-integration'
+        id: gateway
+        run: |
+          python3 - <<'PY'
+          import json, os
+          profile = json.load(open('config/release-smoke.json'))['profiles']['gateway-integration']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('repository=' + profile['gateway_repository'] + '\n')
+              output.write('revision=' + profile['gateway_revision'] + '\n')
+          PY
+      - name: Checkout exact paired Gateway
+        if: inputs.platform == 'gateway-integration'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.gateway.outputs.repository }}
+          ref: ${{ steps.gateway.outputs.revision }}
+          path: build/gateway-candidate
+          persist-credentials: false
+      - name: Read Gateway Rust contract
+        if: inputs.platform == 'gateway-integration'
+        id: rust
+        working-directory: build/gateway-candidate
+        run: echo "channel=$(.github/scripts/release_toolchain.sh)" >> "$GITHUB_OUTPUT"
+      - name: Install exact Gateway Rust toolchain
+        if: inputs.platform == 'gateway-integration'
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+      - name: Build paired Gateway and run client integration
+        if: inputs.platform == 'gateway-integration'
+        run: |
+          cargo build --locked --manifest-path build/gateway-candidate/Cargo.toml --bin pushgo-gateway
+          python3 scripts/release_smoke.py gateway-integration --gateway-binary build/gateway-candidate/target/debug/pushgo-gateway
+      - name: Retain first native result and receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-release-smoke-${{ inputs.platform }}-${{ github.sha }}
+          path: build/quality-results/
+          retention-days: 14

@@ -86,6 +86,16 @@ class VerifyAppleTestExecutionTests(unittest.TestCase):
         ):
             self.assertEqual(1, verify_apple_test_execution.main())
 
+    def test_xcode27_typed_empty_array_is_empty_but_untyped_data_fails_closed(self) -> None:
+        def result(warnings):
+            return {"actions": {"_values": [{"actionResult": {"issues": {
+                "testWarningSummaries": warnings
+            }}}]}}
+        self.assertEqual([], legacy_test_warning_messages(result({"_type": {"_name": "Array"}})))
+        for warnings in ({}, {"_type": {"_name": "String"}}, {"_type": {"_name": "Array"}, "_values": None}):
+            with self.assertRaises(ValueError):
+                legacy_test_warning_messages(result(warnings))
+
     def test_malformed_legacy_warning_fails_closed(self) -> None:
         legacy = {"actions": {"_values": [{"actionResult": {"issues": {
             "testWarningSummaries": {"_values": [{"message": {"_value": 4}}]}

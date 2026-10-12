@@ -24,6 +24,7 @@ Policy:
 - Opening an unavailable object on Mac no longer shows an unrelated object's detail.
 - Rich message images no longer keep stale attachments or stop a newly restarted animation.
 - Message history recovers more reliably if an app upgrade stops while moving its database.
+- On smaller Mac displays, Undo remains reachable while a message deletion is pending.
 - Apple Watch now retries old push-route cleanup after gateway or receiver-mode changes, and waits for a complete iPhone sync before using updated receiver settings.
 
 ## [v1.3.0]

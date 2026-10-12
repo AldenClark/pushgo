@@ -8,7 +8,13 @@ on:
     # apple-ios-ui-diagnostic selects a separate three-journey Simulator run;
     # apple-ios-message-workflow-diagnostic selects its repaired first method;
     # apple-macos-message-delete-diagnostic selects one deletion-route journey.
-    types: [opened, synchronize, reopened, labeled]
+    # apple-ios-message-list-diagnostic and apple-macos-message-list-diagnostic
+    # select the existing filter/read and history-cleanup methods on each OS;
+    # apple-ios-message-history-diagnostic and apple-ios-message-facets-diagnostic
+    # select those iOS methods separately after the mixed run failed.
+    # apple-macos-thing-ax-qos-sample-diagnostic captures stacks around the
+    # original Thing query; sampled execution never closes the QoS issue.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
     branches: [ main ]
     tags: [ "v*" ]
@@ -37,10 +43,17 @@ on:
         options:
           - 'off'
           - macos-adhoc-thing
+          - macos-adhoc-thing-host-sample
           - macos-adhoc-message-deletion
+          - macos-adhoc-message-list
+          - macos-adhoc-message-refresh-failure
           - apple-release-sdk
           - apple-ios-ui
           - apple-ios-message-workflow
+          - apple-ios-message-list
+          - apple-ios-message-history
+          - apple-ios-message-facets
+          - apple-ios-message-refresh-failure
       diagnostic_sha:
         description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
         required: false
@@ -66,6 +79,11 @@ concurrency:
   cancel-in-progress: ${{ (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 jobs:
+  gateway-integration:
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled'
+    uses: ./.github/workflows/apple-release-smoke.yml
+    with:
+      platform: gateway-integration
   quality:
     if: ${{ (github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.action != 'labeled')) || (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'off') }}
     runs-on: macos-26
@@ -73,6 +91,12 @@ jobs:
     env:
       QUALITY_LANE: ${{ github.event_name == 'schedule' && github.event.schedule == '29 19 * * 6' && 'performance' || github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && inputs.lane || startsWith(github.ref, 'refs/tags/') && 'release' || 'pr' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,13 +112,14 @@ jobs:
             --audit-product-tree \
             --output build/quality-results/apple-impact-tree-audit.json \
             --check
-          python3 scripts/quality_impact.py \
+          python3 scripts/quality_ci_plan.py \
             --base "$QUALITY_BASE_SHA" \
             --head "$GITHUB_SHA" \
+            --event "$GITHUB_EVENT_PATH" \
             --output build/quality-results/apple-impact-plan.json \
             --check
           echo "QUALITY_IMPACT_PLAN=build/quality-results/apple-impact-plan.json" >> "$GITHUB_ENV"
-          impact_lane="$(python3 -c 'import json; print(json.load(open("build/quality-results/apple-impact-plan.json"))["recommended_lane"])')"
+          impact_lane="$(python3 -c 'import json; print((lambda p: p.get("execution_lane", p["recommended_lane"]))(json.load(open("build/quality-results/apple-impact-plan.json"))))')"
           if [[ "$impact_lane" == "not-run" ]]; then
             echo "QUALITY_SKIP_PRODUCT=1" >> "$GITHUB_ENV"
           else
@@ -152,15 +177,21 @@ jobs:
 
   macos_adhoc_ui_diagnostic:
     name: Ad-hoc macOS App-owned UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-thing-host-sample' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion' || inputs.diagnostic_mode == 'macos-adhoc-message-list' || inputs.diagnostic_mode == 'macos-adhoc-message-refresh-failure')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic' || github.event.label.name == 'apple-macos-message-list-diagnostic' || github.event.label.name == 'apple-macos-thing-ax-qos-sample-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
       DIAGNOSTIC_TRIAL: ${{ github.event_name == 'pull_request' && '1' || inputs.diagnostic_trial }}
       DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
-      DIAGNOSTIC_MACOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
+      DIAGNOSTIC_MACOS_SCOPE: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-thing-host-sample') && 'thing-ax-qos-host-sample' || (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-refresh-failure') && 'message-refresh-failure' || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-thing-ax-qos-sample-diagnostic') && 'thing-ax-qos-sample' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:
@@ -213,6 +244,12 @@ jobs:
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:
@@ -257,13 +294,19 @@ jobs:
 
   ios_ui_diagnostic:
     name: iOS App-owned message UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'apple-ios-ui' || inputs.diagnostic_mode == 'apple-ios-message-workflow')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ios-ui-diagnostic' || github.event.label.name == 'apple-ios-message-workflow-diagnostic')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'apple-ios-ui' || inputs.diagnostic_mode == 'apple-ios-message-workflow' || inputs.diagnostic_mode == 'apple-ios-message-list' || inputs.diagnostic_mode == 'apple-ios-message-history' || inputs.diagnostic_mode == 'apple-ios-message-facets' || inputs.diagnostic_mode == 'apple-ios-message-refresh-failure')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ios-ui-diagnostic' || github.event.label.name == 'apple-ios-message-workflow-diagnostic' || github.event.label.name == 'apple-ios-message-list-diagnostic' || github.event.label.name == 'apple-ios-message-history-diagnostic' || github.event.label.name == 'apple-ios-message-facets-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
-      DIAGNOSTIC_IOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
+      DIAGNOSTIC_IOS_SCOPE: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-refresh-failure') && 'message-refresh-failure' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-history') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-history-diagnostic')) && 'message-history-cleanup' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-facets') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-facets-diagnostic')) && 'message-facets' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Verify selected ref and requested SHA
         shell: bash
         env:

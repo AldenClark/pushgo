@@ -940,6 +940,10 @@ private extension MessageListScreen {
                 .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
                 .accessibilityIdentifier("action.messages.mark_all_read")
             }
+        }
+        // Give the popover its own stable toolbar item: selecting a channel can
+        // remove the conditional mark-read action while the popover is open.
+        ToolbarItem(id: "message-filter", placement: .primaryAction) {
             Button {
                 isFilterPopoverPresented = true
             } label: {

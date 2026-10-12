@@ -12,6 +12,7 @@ results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/macos-ui}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
+quality_xctestrun_path="${QUALITY_XCTESTRUN_PATH:-}"
 allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
 problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
 test_app_executable="$derived_data_path/Build/Products/Debug/PushGo.app/Contents/MacOS/PushGo"
@@ -45,6 +46,11 @@ fi
 if [[ "$reuse_built_tests" != "0" && "$reuse_built_tests" != "1" ]]; then
   echo "status=BLOCKED"
   echo "reason=invalid_macos_reuse_built_tests:$reuse_built_tests"
+  exit 2
+fi
+if [[ -n "$quality_xctestrun_path" && ( "$reuse_built_tests" != "1" || ! -f "$quality_xctestrun_path" ) ]]; then
+  echo "status=BLOCKED"
+  echo "reason=explicit_xctestrun_requires_reusable_built_tests"
   exit 2
 fi
 if [[ "$allow_expected_failures" != "0" && "$allow_expected_failures" != "1" ]]; then
@@ -236,7 +242,23 @@ log_file="$(mktemp -t pushgo-macos-ui.XXXXXX.log)"
 "$problem_reporter_cleaner"
 echo "==> macOS App-owned UI journeys (zero retry)"
 set +e
-xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$log_file"
+if [[ -n "$quality_xctestrun_path" ]]; then
+  # A diagnostic-only modified test specification must be passed explicitly;
+  # project/scheme discovery is not proof that Xcode loaded its Runner env.
+  test_args=(
+    -xctestrun "$quality_xctestrun_path"
+    -destination "platform=macOS,arch=arm64"
+    -parallel-testing-enabled NO
+    -maximum-parallel-testing-workers 1
+    -collect-test-diagnostics never
+  )
+  for scope in "${scope_list[@]}"; do
+    [[ -n "$scope" ]] && test_args+=("-only-testing:${scope}")
+  done
+else
+  test_args=("${common_args[@]}")
+fi
+xcodebuild "${test_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
 set -e
 "$problem_reporter_cleaner"

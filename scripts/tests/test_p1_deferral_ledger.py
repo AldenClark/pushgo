@@ -4,6 +4,8 @@ import unittest
 from collections import Counter
 from pathlib import Path
 
+from scripts.release_smoke import active_governance_waiver_records
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESIGN = REPO_ROOT / "design/pushgo-app-quality-testing-final-design.md"
@@ -70,7 +72,7 @@ class P1DeferralLedgerTests(unittest.TestCase):
         for row in self.ledger_rows():
             self.assertTrue(self.expand_scope(row[1]), f"{row[0]} has no P1 capability")
 
-    def assert_closure_row(self, row, today):
+    def assert_closure_row(self, row, today, waiver=None):
         group, scope, state, evidence, owner, due, trigger, oracle = row
         self.assertIn(state, {"`DEFERRED`", "`IMPLEMENTED`", "`REMOVED/NA`"}, group)
         if state == "`IMPLEMENTED`":
@@ -81,7 +83,12 @@ class P1DeferralLedgerTests(unittest.TestCase):
         self.assertGreaterEqual(len(evidence), 40, group)
         self.assertTrue(owner.endswith("owner"), group)
         deadline = dt.date.fromisoformat(due)
-        if state == "`DEFERRED`":
+        waived_deadline = bool(
+            state == "`DEFERRED`"
+            and waiver
+            and waiver.get("scope") == "historical_ledger_expiry_only"
+        )
+        if state == "`DEFERRED`" and not waived_deadline:
             self.assertGreaterEqual(deadline, today, f"{group} is overdue")
         self.assertRegex(
             trigger,
@@ -94,8 +101,29 @@ class P1DeferralLedgerTests(unittest.TestCase):
         today = dt.date.today()
         rows = self.ledger_rows()
         self.assertEqual(23, len(rows), "Update the ledger summary after regrouping")
+        waiver = active_governance_waiver_records().get("p1-deferral-ledger-expiry")
+        if waiver:
+            print("governance_waiver=p1-deferral-ledger-expiry status=WAIVED scope=historical_ledger_expiry_only")
         for row in rows:
-            self.assert_closure_row(row, today)
+            deadline = dt.date.fromisoformat(row[5])
+            overdue = row[2] == "`DEFERRED`" and deadline < today
+            waived_deadline = bool(
+                waiver
+                and overdue
+            )
+            if waived_deadline:
+                print(f"governance_waiver=p1-deferral-ledger-expiry status=WAIVED scope={row[0]} due={deadline.isoformat()}")
+            self.assert_closure_row(row, today, waiver=waiver)
+
+    def test_p1_expiry_waiver_does_not_skip_other_closure_fields(self):
+        row = [
+            "P1-OTHER", "25.1:fixture..fixture", "`DEFERRED`",
+            "Insufficient evidence.",
+            "fixture quality owner", "2026-09-28", "Nightly",
+            "The exact canonical result remains usable after a real user action and ordinary reopen.",
+        ]
+        with self.assertRaises(AssertionError):
+            self.assert_closure_row(row, dt.date(2026, 10, 11), waiver={"scope": "historical_ledger_expiry_only"})
 
     def test_deadline_applies_to_deferred_scope_but_allows_evidenced_terminal_state(self):
         today = dt.date(2026, 9, 29)

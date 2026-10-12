@@ -480,7 +480,7 @@ final class PushGo_iOSUITests: XCTestCase {
                 (
                     "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
                 ),
-                34,
+                36,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",

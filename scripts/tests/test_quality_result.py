@@ -7,9 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts import quality_result
-
-
-REPO = Path(__file__).resolve().parents[2]
+from scripts.tests.quality_registry_fixture import copy_quality_scripts_with_nonexpiring_registry
 
 
 class QualityResultTests(unittest.TestCase):
@@ -23,11 +21,12 @@ class QualityResultTests(unittest.TestCase):
 
     def run_result(self, *extra, env=None):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "result.json"
+            root = copy_quality_scripts_with_nonexpiring_registry(Path(directory) / "fixture")
+            output = root / "result.json"
             process = subprocess.run(
                 [
                     "python3",
-                    str(REPO / "scripts/quality_result.py"),
+                    str(root / "scripts/quality_result.py"),
                     "--output",
                     str(output),
                     "--platform",
@@ -38,7 +37,7 @@ class QualityResultTests(unittest.TestCase):
                     "NOT_RUN",
                     *extra,
                 ],
-                cwd=REPO,
+                cwd=root,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -67,36 +66,13 @@ class QualityResultTests(unittest.TestCase):
         self.assertEqual("github:42:2:quality", receipt["run_identity"])
 
     def test_blocked_receipt_records_deduplicated_active_precondition_ids(self):
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "result.json"
-            subprocess.run(
-                [
-                    "python3",
-                    str(REPO / "scripts/quality_result.py"),
-                    "--output",
-                    str(output),
-                    "--platform",
-                    "apple",
-                    "--lane",
-                    "unit-test",
-                    "--product-status",
-                    "NOT_RUN",
-                    "--test-system-status",
-                    "BLOCKED",
-                    "--test-system-issue-id",
-                    "apple-quality-precondition",
-                    "--test-system-issue-id",
-                    "apple-quality-precondition",
-                ],
-                cwd=REPO,
-                check=True,
-            )
-
-            receipt = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(
-                ["apple-quality-precondition"],
-                receipt["test_system_issue_ids"],
-            )
+        process, receipt = self.run_result(
+            "--test-system-status", "BLOCKED",
+            "--test-system-issue-id", "apple-quality-precondition",
+            "--test-system-issue-id", "apple-quality-precondition",
+        )
+        self.assertEqual(0, process.returncode, process.stdout)
+        self.assertEqual(["apple-quality-precondition"], receipt["test_system_issue_ids"])
 
     def test_flaky_receipt_requires_registered_issue(self):
         process, receipt = self.run_result("--test-system-status", "FLAKY")

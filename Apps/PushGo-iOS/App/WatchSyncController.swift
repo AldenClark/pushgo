@@ -6,6 +6,20 @@ enum WatchModeSwitchRequestResult: Equatable {
     case timedOut
 }
 
+#if DEBUG
+struct WatchProvisioningAutomationStatus: Equatable, Sendable {
+    let generation: Int64
+    let digest: String?
+    let acknowledgedGeneration: Int64?
+    let acknowledgedDigest: String?
+
+    var isAcknowledged: Bool {
+        guard generation > 0, let digest, !digest.isEmpty else { return false }
+        return acknowledgedGeneration == generation && acknowledgedDigest == digest
+    }
+}
+#endif
+
 @MainActor
 @Observable
 final class WatchSyncController {
@@ -54,6 +68,17 @@ final class WatchSyncController {
     @ObservationIgnored private var lastWatchMirrorSnapshotNack: WatchMirrorSnapshotNack?
     @ObservationIgnored private var lastWatchStandaloneProvisioningAck: WatchStandaloneProvisioningAck?
     @ObservationIgnored private var lastWatchStandaloneProvisioningNack: WatchStandaloneProvisioningNack?
+
+    #if DEBUG
+    var standaloneProvisioningAutomationStatus: WatchProvisioningAutomationStatus {
+        WatchProvisioningAutomationStatus(
+            generation: watchStandaloneProvisioningGeneration,
+            digest: lastPublishedWatchStandaloneProvisioningDigest,
+            acknowledgedGeneration: lastWatchStandaloneProvisioningAck?.generation,
+            acknowledgedDigest: lastWatchStandaloneProvisioningAck?.contentDigest
+        )
+    }
+    #endif
 
     private(set) var watchMode: WatchMode = .standalone
     private(set) var effectiveWatchMode: WatchMode = .standalone

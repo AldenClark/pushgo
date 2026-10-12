@@ -4,6 +4,23 @@ import Testing
 
 @Suite("Quality runtime profile")
 struct QualityRuntimeProfileTests {
+    @Test("App-owned fixtures isolate Spotlight while explicit and system indexers retain ownership")
+    func spotlightOwnershipForQualitySessions() {
+        let session = PushGoQualitySessionDescriptor(sessionID: "spotlight-quality", fixture: .messagesStandard)
+        let live = CoreSpotlightPushGoIndexer()
+        #expect(spotlightIndexerForQualitySession(live, session: session) is RecordingPushGoSpotlightIndexer)
+        #expect(spotlightIndexerForQualitySession(live, session: nil) is CoreSpotlightPushGoIndexer)
+        let systemSession = PushGoQualitySessionDescriptor(
+            sessionID: "spotlight-system",
+            fixture: .messagesStandard,
+            allowsSystemColdLaunch: true
+        )
+        #expect(spotlightIndexerForQualitySession(live, session: systemSession) is CoreSpotlightPushGoIndexer)
+        let explicit = RecordingPushGoSpotlightIndexer()
+        #expect((spotlightIndexerForQualitySession(explicit, session: session) as? RecordingPushGoSpotlightIndexer) === explicit)
+        #expect(spotlightIndexerForQualitySession(nil, session: session) == nil)
+    }
+
     @Test("accepts the small typed session contract used by UI runners")
     func acceptsTypedSession() throws {
         let encoded = try encodedSession(

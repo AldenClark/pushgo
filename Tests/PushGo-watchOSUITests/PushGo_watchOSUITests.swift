@@ -9,6 +9,12 @@ final class PushGo_watchOSUITests: XCTestCase {
     @MainActor
     override func tearDown() async throws {
         let app = XCUIApplication()
+        if (testRun?.failureCount ?? 0) > 0 {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "watch-failure-hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
         if app.state != .notRunning {
             app.terminate()
         }
@@ -18,7 +24,7 @@ final class PushGo_watchOSUITests: XCTestCase {
         let app = XCUIApplication()
         let sessionID = UUID().uuidString
         configureHermeticLaunch(app, sessionID: sessionID)
-        app.launch()
+        launchPreparedApp(app)
 
         let gatewayMessage = app.buttons["row.message.quality-watch-message-001"]
         let databaseMessage = app.buttons["row.message.quality-watch-message-002"]
@@ -37,10 +43,11 @@ final class PushGo_watchOSUITests: XCTestCase {
         )
 
         gatewayMessage.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.message.detail"].waitForExistence(timeout: 5), startupFailureDescription(in: app))
         XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Critical"].exists)
         let messageImage = app.descendants(matching: .any)["image.message.quality-watch-message-001"]
-        XCTAssertTrue(scrollToExistingElement(messageImage, in: app, maximumSwipes: 2))
+        XCTAssertTrue(scrollToExistingElement(messageImage, in: app, maximumSwipes: 2), startupFailureDescription(in: app))
         XCTAssertEqual(messageImage.label, "Image")
         XCTAssertGreaterThan(messageImage.frame.width, 0)
         XCTAssertGreaterThan(messageImage.frame.height, 0)
@@ -78,7 +85,7 @@ final class PushGo_watchOSUITests: XCTestCase {
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID)
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(databaseMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
         XCTAssertFalse(gatewayMessage.exists)
         XCTAssertEqual(
@@ -167,19 +174,20 @@ final class PushGo_watchOSUITests: XCTestCase {
         let app = XCUIApplication()
         let sessionID = UUID().uuidString
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.migration")
-        app.launch()
+        launchPreparedApp(app)
 
         let legacyMessage = app.staticTexts["Legacy watch alert"]
         XCTAssertTrue(legacyMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
-        XCTAssertTrue(app.staticTexts["Gateway health warning"].exists)
+        XCTAssertTrue(scrollToElement(app.buttons["row.message.quality-watch-message-001"], in: app, maximumSwipes: 2), startupFailureDescription(in: app))
+        XCTAssertTrue(scrollBackToElement(legacyMessage, in: app, maximumSwipes: 2))
         legacyMessage.tap()
         XCTAssertTrue(app.staticTexts["Persisted before the upgrade."].waitForExistence(timeout: 5))
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.migration")
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(legacyMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
-        XCTAssertTrue(app.staticTexts["Gateway health warning"].exists)
+        XCTAssertTrue(scrollToElement(app.buttons["row.message.quality-watch-message-001"], in: app, maximumSwipes: 2))
     }
 
     func testInvalidHermeticScenarioFailsReadinessExplicitly() {
@@ -190,7 +198,7 @@ final class PushGo_watchOSUITests: XCTestCase {
             scenario: "watch.unsupported"
         )
 
-        app.launch()
+        launchPreparedApp(app)
 
         XCTAssertTrue(
             app.descendants(matching: .any)["state.startup.failure"].waitForExistence(timeout: 10)
@@ -210,7 +218,7 @@ final class PushGo_watchOSUITests: XCTestCase {
             scenario: "watch.message-load-failure"
         )
 
-        app.launch()
+        launchPreparedApp(app)
 
         XCTAssertTrue(
             app.descendants(matching: .any)["state.messages.error"].waitForExistence(timeout: 10),
@@ -242,7 +250,7 @@ final class PushGo_watchOSUITests: XCTestCase {
         let app = XCUIApplication()
         let sessionID = UUID().uuidString
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.gateway-cleanup-seed")
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(
             app.staticTexts["Gateway cleanup seed passed"].waitForExistence(timeout: 15),
             startupFailureDescription(in: app)
@@ -250,7 +258,7 @@ final class PushGo_watchOSUITests: XCTestCase {
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.gateway-cleanup-recover")
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(
             app.staticTexts["Gateway cleanup recovery passed"].waitForExistence(timeout: 15),
             startupFailureDescription(in: app)
@@ -261,7 +269,7 @@ final class PushGo_watchOSUITests: XCTestCase {
         let app = XCUIApplication()
         let sessionID = UUID().uuidString
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.provisioning-interrupted-seed")
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(
             app.staticTexts["Provisioning interruption seed passed"].waitForExistence(timeout: 15),
             startupFailureDescription(in: app)
@@ -269,11 +277,30 @@ final class PushGo_watchOSUITests: XCTestCase {
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.provisioning-interrupted-recover")
-        app.launch()
+        launchPreparedApp(app)
         XCTAssertTrue(
             app.staticTexts["Provisioning interruption recovery passed"].waitForExistence(timeout: 15),
             startupFailureDescription(in: app)
         )
+    }
+
+    private func launchPreparedApp(_ app: XCUIApplication) {
+        app.launch()
+        let alert = XCUIApplication(bundleIdentifier: "com.apple.Carousel").alerts.firstMatch
+        guard alert.waitForExistence(timeout: 2) else { return }
+        let text = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        guard text.contains("PushGo"),
+              text.lowercased().contains("notification") || text.contains("通知") else {
+            XCTFail("QUALITY_PRECONDITION: Unexpected Watch system alert: \(alert.debugDescription)")
+            return
+        }
+        let allow = ["Allow", "允许", "允許"].map { alert.buttons[$0] }.first { $0.exists }
+        guard let allow else {
+            XCTFail("QUALITY_PRECONDITION: Missing Watch notification authorization action: \(alert.debugDescription)")
+            return
+        }
+        allow.tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5), "Watch notification preparation must finish before product actions")
     }
 
     private func configureHermeticLaunch(
@@ -284,7 +311,13 @@ final class PushGo_watchOSUITests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchEnvironment["PUSHGO_QUALITY_PROFILE"] = "hermetic"
         app.launchEnvironment["PUSHGO_QUALITY_SCENARIO"] = scenario
-        app.launchEnvironment["PUSHGO_QUALITY_SESSION_ID"] = sessionID
+        // Reuse the existing Debug-only file-backed credential/storage sandbox.
+        // Keep the same root across relaunches without relying on Simulator
+        // access-group entitlements or data from another quality session.
+        app.launchEnvironment.merge([
+            "PUSHGO_QUALITY_SESSION_ID": sessionID,
+            "PUSHGO_AUTOMATION_STORAGE_ROOT": "sandbox-tmp:pushgo-watch-\(sessionID)"
+        ], uniquingKeysWith: { _, next in next })
     }
 
     private func pressBack(in app: XCUIApplication) {
@@ -315,7 +348,7 @@ final class PushGo_watchOSUITests: XCTestCase {
         let failure = app.descendants(matching: .any)["state.startup.failure"]
         return failure.exists
             ? "The App-owned watch quality session failed during preparation: \(failure.debugDescription)"
-            : "The expected watch content did not become visible."
+            : "The expected watch content did not become visible. \(app.debugDescription)"
     }
 
     private func waitUntil(timeout: TimeInterval, condition: @escaping () -> Bool) -> Bool {
@@ -350,6 +383,19 @@ final class PushGo_watchOSUITests: XCTestCase {
             if element.waitForExistence(timeout: 1) {
                 return true
             }
+        }
+        return false
+    }
+
+    private func scrollBackToElement(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        maximumSwipes: Int
+    ) -> Bool {
+        if element.exists, element.isHittable { return true }
+        for _ in 0..<maximumSwipes {
+            app.swipeDown()
+            if element.waitForExistence(timeout: 1), element.isHittable { return true }
         }
         return false
     }

@@ -23,6 +23,10 @@ result_bundle=''
 runner_exit=''
 verify_exit=''
 
+stage() {
+  printf '[%s] diagnostic_stage=%s status=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$1" "$2"
+}
+
 write_summary() {
   local command_status=$?
   trap - EXIT
@@ -83,6 +87,31 @@ case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
   message-workflow)
     test_scopes=(
       'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
+    )
+    expected_test_count=1
+    ;;
+  message-list)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist'
+      'PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch'
+    )
+    expected_test_count=2
+    ;;
+  message-history-cleanup)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch'
+    )
+    expected_test_count=1
+    ;;
+  message-facets)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist'
+    )
+    expected_test_count=1
+    ;;
+  message-refresh-failure)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult'
     )
     expected_test_count=1
     ;;
@@ -149,10 +178,12 @@ simulator_id="$(xcrun simctl create 'PushGo Quality iPhone' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime_identifier")"
 printf '%s\n' "$simulator_id" > "$results_root/simulator-udid.txt"
 reason=ios_simulator_boot_failed
+stage simulator_boot started
 if ! { xcrun simctl boot "$simulator_id" && xcrun simctl bootstatus "$simulator_id" -b; } \
   > "$results_root/simulator-boot.log" 2>&1; then
   exit 2
 fi
+stage simulator_boot completed
 xcrun simctl list devices > "$results_root/simulator-devices-after-boot.log"
 
 temporary_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pushgo-ios-ui.XXXXXX")"
@@ -177,11 +208,13 @@ done
 
 reason=ios_build_for_testing_failed
 test_system_status=FAILED_TEST_SYSTEM
+stage build_for_testing started
 if ! xcodebuild "${common_args[@]}" CODE_SIGNING_ALLOWED=NO \
   build-for-testing > "$results_root/build-for-testing.log" 2>&1; then
   tail -n 50 "$results_root/build-for-testing.log"
   exit 3
 fi
+stage build_for_testing completed
 app_bundle="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo.app"
 test_runner="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo-iOSUITests-Runner.app"
 if [[ ! -d "$app_bundle" || ! -d "$test_runner" ]]; then
@@ -190,20 +223,62 @@ if [[ ! -d "$app_bundle" || ! -d "$test_runner" ]]; then
 fi
 
 reason=ios_built_app_preinstall_failed
+stage app_install started
 if ! "$repo_root/scripts/prepare_ios_ui_test_app.sh" "$simulator_id" \
   "$app_bundle" io.ethan.pushgo > "$results_root/app-install.log" 2>&1; then
   exit 2
 fi
+stage app_install completed
 xcrun simctl terminate "$simulator_id" io.ethan.pushgo >/dev/null 2>&1 || true
 
 result_bundle="$results_root/message-journeys.xcresult"
 reason=native_ios_message_tests_not_clean
+stage test_without_building started
+touch "$results_root/test-start-stamp"
 if xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" \
   CODE_SIGNING_ALLOWED=NO test-without-building \
   > "$results_root/native-test.log" 2>&1; then
   runner_exit=0
 else
   runner_exit=$?
+fi
+stage test_without_building completed
+
+# Keep the app's own Simulator crash report when a user journey terminates it.
+# XCTest's assertion can otherwise appear to be only a missing UI element.
+if [[ "$runner_exit" != 0 ]]; then
+  app_executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app_bundle/Info.plist")"
+  printf 'bundle_executable=%s\n' "$app_executable" > "$results_root/app-crash-report-inventory.txt"
+  report_sources=(
+    "$HOME/Library/Logs/DiagnosticReports"
+    "$HOME/Library/Developer/CoreSimulator/Devices/$simulator_id/data/Library/Logs/DiagnosticReports"
+    "/Library/Logs/DiagnosticReports"
+  )
+  # A per-device diagnose can retain reports even when the usual host and
+  # device crash-report directories have not surfaced an .ips file yet.
+  diagnostic_root="$temporary_root/simulator-diagnose"
+  mkdir -p "$diagnostic_root"
+  if xcrun simctl diagnose -b --udid="$simulator_id" --no-archive \
+    --timeout=45 --output "$diagnostic_root" \
+    > "$results_root/simulator-diagnose.log" 2>&1; then
+    report_sources+=("$diagnostic_root")
+  fi
+  for report_index in "${!report_sources[@]}"; do
+    report_source="${report_sources[$report_index]}"
+    [[ -d "$report_source" ]] || continue
+    report_destination="$results_root/app-crash-reports/source-$report_index"
+    while IFS= read -r -d '' report; do
+      basename_report="$(basename "$report")"
+      printf 'source=%s name=%s\n' "$report_index" "$basename_report" \
+        >> "$results_root/app-crash-report-inventory.txt"
+      if [[ "$basename_report" == *"$app_executable"* ]]; then
+        mkdir -p "$report_destination"
+        cp -p "$report" "$report_destination/"
+      fi
+    done < <(find "$report_source" -type f \
+      \( -name '*.ips' -o -name '*.crash' \) \
+      -newer "$results_root/test-start-stamp" -print0)
+  done
 fi
 if [[ ! -d "$result_bundle" ]]; then
   reason=native_ios_xcresult_missing
@@ -225,10 +300,12 @@ capture_xcresult_json() {
 }
 
 reason=native_ios_xcresult_raw_receipts_unreadable
+stage native_receipt started
 if ! capture_xcresult_json "$results_root/native-summary-raw.json" test-results summary ||
    ! capture_xcresult_json "$results_root/native-legacy-object-raw.json" object --legacy; then
   exit 3
 fi
+stage native_receipt completed
 
 if python3 "$repo_root/scripts/verify_apple_test_execution.py" \
   --result-bundle "$result_bundle" --expected-test-count "$expected_test_count" \
@@ -240,7 +317,7 @@ fi
 
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
   "$results_root/native-legacy-object-raw.json" \
-  "$results_root/native-test.log" "$runner_exit" "$verify_exit" "$expected_test_count" \
+  "$runner_exit" "$verify_exit" "$expected_test_count" \
   "$classification_file" <<'PY'; then
 import json
 import sys
@@ -250,7 +327,7 @@ from scripts.verify_apple_test_execution import (
     combined_warning_messages,
 )
 
-summary_path, legacy_path, log_path, runner_exit, verify_exit, expected, output = sys.argv[1:]
+summary_path, legacy_path, runner_exit, verify_exit, expected, output = sys.argv[1:]
 classification = {
     "product_status": "NOT_RUN",
     "test_system_status": "FAILED_TEST_SYSTEM",
@@ -269,10 +346,51 @@ try:
     classification["native_counts"] = counts
     classification["runtime_warning_count"] = len(warnings)
     executed = counts["passedTests"] + counts["failedTests"] + counts["expectedFailures"]
-    log = Path(log_path).read_text(errors="replace")
+    failures = summary.get("testFailures", [])
+    if not isinstance(failures, list):
+        raise ValueError("invalid native test failures")
+    failure_details = []
+    for failure in failures:
+        if (not isinstance(failure, dict)
+                or not isinstance(failure.get("testName"), str)
+                or not isinstance(failure.get("failureText"), str)):
+            raise ValueError("malformed native test failure")
+        failure_text = failure["failureText"]
+        if "QUALITY_PRECONDITION:" in failure_text:
+            failure_kind = "quality_precondition"
+        elif ("Failed to determine hittability" in failure_text
+              and "Activation point invalid and no suggested hit points based on element frame" in failure_text):
+            # This exact XCTest AX error interrupted the visible-point query
+            # and left every attached element frame infinite/zero. It gives no
+            # completed product oracle, but the failure remains explicit.
+            failure_kind = "ax_actionability_unresolved"
+        else:
+            failure_kind = "non_precondition_failure"
+        failure_details.append({
+            "test_name": failure["testName"],
+            "failure_text": failure_text,
+            "failure_kind": failure_kind,
+        })
+    if counts["failedTests"] and len({item["test_name"] for item in failure_details}) != counts["failedTests"]:
+        raise ValueError("native failure details do not cover every failed test")
+    if not counts["failedTests"] and failure_details:
+        raise ValueError("native failure details contradict the test counts")
+    classification["native_failures"] = failure_details
+    failure_kinds = {item["failure_kind"] for item in failure_details}
     if executed != int(expected) or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_tests_not_exactly_executed"
-    elif "QUALITY_PRECONDITION:" in log:
+    elif "non_precondition_failure" in failure_kinds:
+        # A second method's precondition or AX error must not erase a real
+        # product assertion failure already recorded by another method.
+        classification["product_status"] = "FAILED"
+        if failure_kinds - {"non_precondition_failure"} or warnings:
+            classification["reason"] = "native_product_failure_with_test_system_failure"
+        else:
+            classification["test_system_status"] = "PASSED"
+            classification["reason"] = "native_message_product_oracle_failed"
+    elif "ax_actionability_unresolved" in failure_kinds:
+        classification["reason"] = "native_ax_actionability_unresolved"
+    elif "quality_precondition" in failure_kinds:
         classification["test_system_status"] = "BLOCKED"
         classification["reason"] = "app_owned_quality_precondition_failed"
     elif counts["passedTests"] == int(expected):
@@ -282,10 +400,6 @@ try:
             classification["reason"] = "selected_native_app_owned_message_journeys_clean"
         else:
             classification["reason"] = "product_oracles_passed_but_native_test_system_not_clean"
-    elif counts["failedTests"] > 0:
-        classification["product_status"] = "FAILED"
-        classification["test_system_status"] = "FAILED_TEST_SYSTEM" if warnings else "PASSED"
-        classification["reason"] = "native_message_product_oracle_failed"
 except Exception as error:
     classification["reason"] = f"native_result_unreadable:{type(error).__name__}"
 
