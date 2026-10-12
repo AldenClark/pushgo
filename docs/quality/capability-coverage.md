@@ -589,3 +589,5 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 ### 2026-10-12 整合验证边界
 
 Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言仍为单击准确未读、双击准确最新、读取状态及 relaunch；共用观察器需复验三个页面。搜索只移除新会话空字段的冗余清空动作。Safari 保留真实浏览器及准确 URL，补处理加载后才出现的 Tip。解密设置保留非法拒绝、精确合法 key、保存、重启、空保存保留及显式清除，使用正式 Show 编辑后 Hide，未覆盖非空遮罩字段直接替换的 AX 差异。首轮 CI 四项失败与本地4/4诊断分别保留；最终定点 CI 不代表全量 release、真机或正式发布证据。详情见同日 progress 记录。
+
+最终收敛补充：iOS26.2已通过Messages/Events/Things三页重选与search。Safari地址读取改为原生Command-L，删去私有工具栏/Tip和多层等待；密钥替换只对已确认short用对应长度普通删除+合法文本，不改公共helper。最终2条本地iOS27通过，原环境两条另行确认。额外删除/慢查询新失败由超出短暂期限的观测引起，保留失败与旧有效证据、不修无关实现/不重复全量；见同日progress。

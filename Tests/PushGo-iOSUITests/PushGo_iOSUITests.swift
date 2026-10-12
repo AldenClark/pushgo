@@ -483,7 +483,6 @@ final class PushGo_iOSUITests: XCTestCase {
             safari,
             compactURL: "pushgo.dev/quality-message",
             fullURL: "https://pushgo.dev/quality-message",
-            compactAddressMessage: "Safari must expose a bounded address-bar expansion interaction",
             destinationMessage: "Safari must expose the exact canonical message destination, not merely any web page."
         )
         seeded.app.activate()
@@ -2115,7 +2114,6 @@ final class PushGo_iOSUITests: XCTestCase {
             safari,
             compactURL: "pushgo.dev/guides/getting-started/",
             fullURL: "https://pushgo.dev/guides/getting-started/",
-            compactAddressMessage: "Safari must expose a bounded address-bar expansion interaction",
             destinationMessage: "Safari must expose the exact Getting Started destination, not merely any pushgo.dev page."
         )
         context.app.open(
@@ -2797,7 +2795,10 @@ final class PushGo_iOSUITests: XCTestCase {
         let replacementKeyField = context.app.textFields[keyField.identifier]
         XCTAssertTrue(replacementKeyField.waitForExistence(timeout: 8))
         XCTAssertEqual(replacementKeyField.value as? String, "short")
-        replaceText(in: replacementKeyField, with: validKey)
+        replacementKeyField.tap()
+        replacementKeyField.typeText(
+            String(repeating: XCUIKeyboardKey.delete.rawValue, count: "short".count) + validKey
+        )
         XCTAssertEqual(replacementKeyField.value as? String, validKey)
         tapWhenHittable(visibilityAction, timeout: 5)
         XCTAssertEqual(keyField.elementType, .secureTextField)
@@ -5392,7 +5393,6 @@ final class PushGo_iOSUITests: XCTestCase {
         _ safari: XCUIApplication,
         compactURL: String,
         fullURL: String,
-        compactAddressMessage: String,
         destinationMessage: String,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -5404,28 +5404,6 @@ final class PushGo_iOSUITests: XCTestCase {
             line: line
         )
 
-        // Safari may present its one-time toolbar tip over the address bar.
-        // Relaunching Safari preserves that tip; dismiss only this observed
-        // system-owned popover before interacting with the real URL field.
-        let toolbarTip = safari.popovers.containing(.other, identifier: "TipView").firstMatch
-        func dismissToolbarTipIfPresent() {
-            guard toolbarTip.exists else { return }
-            tapWhenHittable(
-                toolbarTip.buttons["Close"],
-                timeout: 5,
-                message: "Safari's toolbar tip must expose its real dismissal action",
-                file: file,
-                line: line
-            )
-            XCTAssertTrue(
-                toolbarTip.waitForNonExistence(timeout: 5),
-                "Safari's toolbar tip must be dismissed before checking the destination",
-                file: file,
-                line: line
-            )
-        }
-        dismissToolbarTipIfPresent()
-
         let compactDisplayURL = compactURL.hasSuffix("/") ? String(compactURL.dropLast()) : compactURL
         let exactAddress = safari.textFields.matching(
             NSPredicate(
@@ -5435,47 +5413,10 @@ final class PushGo_iOSUITests: XCTestCase {
                 compactDisplayURL
             )
         ).firstMatch
-        // Give the real browser a bounded settling window before reaching for
-        // any system-private accessibility node. In a multi-test batch Safari
-        // can report a foreground process while its web snapshot is still
-        // being rebuilt; refreshing the foreground snapshot is cheaper and
-        // more reliable than immediately relying on `TabBarItemTitle`.
-        if !exactAddress.waitForExistence(timeout: 5) {
-            safari.activate()
-            XCTAssertTrue(
-                safari.wait(for: .runningForeground, timeout: 3),
-                "Safari must remain foreground while its exact URL field settles",
-                file: file,
-                line: line
-            )
-        }
-        if !exactAddress.exists && !exactAddress.waitForExistence(timeout: 5) {
-            // iOS may initially keep Safari's address bar compact. Expanding
-            // it follows dismissal of any toolbar tip;
-            // the exact URL field remains the decisive business oracle. A fresh Safari launch
-            // is prepared by resetSafariBeforeExternalRoute() to avoid a stale
-            // lowered-bar snapshot racing this tap.
-            let compactAddress = safari.descendants(matching: .any)
-                .matching(identifier: "TabBarItemTitle")
-                .firstMatch
-            let addressOrTip = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in
-                    toolbarTip.exists || (compactAddress.exists && compactAddress.isHittable)
-                },
-                object: safari
-            )
-            XCTAssertEqual(
-                XCTWaiter.wait(for: [addressOrTip], timeout: 8), .completed,
-                compactAddressMessage, file: file, line: line
-            )
-            dismissToolbarTipIfPresent()
-            tapWhenHittable(
-                compactAddress,
-                timeout: 8,
-                message: compactAddressMessage,
-                file: file,
-                line: line
-            )
+        // Use Safari's native address-focus command instead of racing its
+        // compact toolbar and one-time tips. The full URL remains the oracle.
+        if !exactAddress.exists {
+            safari.typeKey("l", modifierFlags: .command)
         }
 
         XCTAssertTrue(

@@ -913,3 +913,11 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 另三项归于输入/系统 UI 验证边界：新会话空搜索直接聚焦输入；Safari 在页面加载后才出现的真实 Tip 也在地址操作前关闭，保留准确 URL；解密旅程用既有 Show 输入控件精确核对 short→完整32字符，再 Hide、保存、重启、空保存及显式清除。公共安全字段 helper 不改。原录像已证明旧安全字段清空，但未提供 AX 实值；iOS27 诊断见真实空字符串，不代表 iOS26.2 AX 缺陷已修复。本条改为显文编辑后隐藏，不再声称非空遮罩字段直接覆盖的 AX 验收。
 
 本地 iOS27 定点诊断 4/4、零重试、产品/测试系统 PASSED（含临时空值观察，source.patch 与 identity 保存在 build/quality-results/integration-20261012/local-diagnosis），用于归因；最终改动另以必要原生 CI 范围验收。275 脚本契约在已安装 Python3.14 下通过，workflow YAML／shell／Swift parse 通过。CI 仅透传脚本既有 focused lane 的精确方法和期望执行数，不改变 PR 自动选择、不放宽断言、不新建证据复用框架。原累计 release 仍为 FAILED；后续定点结果只关闭受影响义务，不冒充完整发布验收。
+
+### 2026-10-12 用户再次收敛后的最终定点边界
+
+八条原环境CI 38224096564（iPhone17Pro / iOS26.2）实际8项、4pass/4fail、零skip/零expected failure/零runtime warning。三页原生手势及搜索均通过，停止复验这些已关闭义务。补测的不撤销删除在38.52s发起、15秒期限，而重启自动化54.26s、ready64.10s才完成；超过期限后仍要求pending，观测前提失效。标准消息的3秒慢查询在134.31s完成输入，135.65s观察慢态，139.39s才读取提示；此时已过短暂窗口。两项原失败保留为测试观测问题，不修实现/不延长时间求绿，未变的数据/查询owner沿用首轮35项中的有效通过及当前Core证据，不宣称该轮测试通过。
+
+Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getting Started；撤回仅从hit-point日志推断失触的假说。删掉私有TabBarItemTitle、Tip检测、重新激活及多层等待，改用Safari原生Command-L；准确完整URL仍为决定性断言。密钥是设置32字符解密配置，录像没有密码自动填充弹窗；仅此调用以已精确确认的short长度做普通删除与合法文本单次输入，不用Command-A/Right及256删除。公共输入helper不动，Show/Hide、准确key、保存、重启、空保存及清除不弱化。
+
+最终两条本地iOS27执行2/2、产品/测试系统PASSED（focused-two-local收据）；它只证明本地环境。下一次只复验原iOS26.2两条，不再跑八项/全量。App、Core、各SDK/config/scripts/package输入与已通过的严格并发38223741966完全相同，最后变更仅UITest及这些记录；复用该严格门禁，不重复App全编译。原累计release与八项失败收据均保留，最终只声明实际完成的定点范围。
