@@ -1,5 +1,7 @@
 # Apple 能力覆盖索引
 
+2026-10-12 三项定点系统交互：macOS 窗口恢复改为测试点击 MenuBarAgent 实际按钮，完整窗口/退出方法 PASS 1/1；iOS 取消改名用原 CI 录像确认可见按钮与自定义 AX 查询不一致，英文会话点击真实 Cancel，新专用回归验证软件键盘、取消草稿、再次打开和重启原名，最终 PASS 1/1；Safari 原 CI 首次提示弹层挡住地址栏，helper 增加仅对此提示的真实关闭操作，完整消息/准确 URL/返回/重启方法本机 PASS。最终原生均零 skip/retry/runtime warning，生产代码不变。Safari 提示关闭分支在本机未触发，原 CI 工具链与文档交接另一调用者未复验，均 NOT_RUN；不外推远端质量全绿。详见 workstream progress “三项系统交互定点收口”及 `build/quality-results/three-core-20261012/`。未全量验收、提交、推送或发布。
+
 2026-10-03 当前源码 Release 产物复核：本地 `736ff6c`（相对已验证 `1e541eb3` 的产品/测试/构建/runner 输入无差异）完成未签名 iOS/watchOS 设备 SDK 与 macOS Release 构建，实际 12 个 App/扩展载荷版本/构建号一致，逐目标架构与 Mach-O 平台准确，20 项 Release 隔离 source guards PASS。本机工具链与原 CI 工具链分别记录；不替代 Simulator、物理设备、生产签名或正式质量门禁。详见 [统一证据](evidence/apple-release-refresh-20261003.json)。
 
 2026-10-03 核心搜索分页修复：待删除消息隐藏后，旧搜索补页将游标推进到未消费批次末尾；真实 Store 43 条匹配/隐藏 2 条时只返回 23 条，漏 18 条。现在游标停在最后实际消费的消息，定点 2/2 通过，41 条完整顺序/唯一性、重开续页和 43 条 canonical 内容均准确。最终产品源码 `1e541eb3`：Core 457 注册/453 执行 PASS，4 个规模 opt-in 明确跳过；iOS 原生分页已读、搜索恢复、删除 Undo 重开 3/3 PASS，零重试/警告；macOS/watchOS/iOS 严格并发编译、TSAN 3 项和 Core CI PASS。首次 NSE 类型作用域编译失败已通过共享游标修正，原失败保留；正式质量 CI 仍因过期 QoS 登记与 P1-STORE deadline 失败，产品 NOT_RUN，未关闭整个 P1-SEARCH 或改动门禁。详见 [统一证据](evidence/apple-search-paging-20261003.json)。
@@ -576,3 +578,10 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 原核心旅程本轮通过 1/1（116.507s）；新增 `testThingOutsideFirstPageKeepsRelationsAcrossStoreRefresh` 在最终相关字节通过 1/1（44.234s）：901 个更晚控制对象将目标置于生产首屏 900 条之外，普通重启按 ID 打开，查看未读关联 Message、返回后仍可打开旧 Update 的准确标题/正文并返回。两份 native 结果均 0 skip、runtimeWarnings=[]；runner MAX_RETRIES=0。Store 定点测试通过 1/1，验证分页外对象完整历史、删除其他对象不误伤、实际删除目标后确认为空。
 
 首次批次与新增用例的准备/定位失败保留，未更改原核心断言或升绿失败收据。最终分页外收据 `build/quality-results/thing-detail-boundary-ordered-20261012/apple-focused-summary.json` 双 PASSED，base `0f19f69`、source_dirty=true；完整失败分类和来源见 workstream progress 的同名节。275 项脚本检查 PASS，impact READY/nightly；按用户范围要求，PR/nightly/accessibility/跨平台/远端验收均 NOT_RUN，不代表正式发布通过。修复验证阶段未提交；随后按用户要求将本次修复及记录保存为本地提交，未重跑测试、不推送、不发布。
+
+
+## iPhone production APNs 物理设备证据（2026-10-12）
+
+本地 HEAD `f14a70bb` 的 1.3.3/build 91 Release/ad-hoc 候选已安装到 iPhone 16 / iOS 27.0.1；实际 App signature/profile 均 production APNs、get-task-allow=false，测试机被授权。真实测试 Gateway `sandbox.pushgo.dev` 向手动准备的任务频道成功发送一次；后台 SpringBoard 准确卡片→点击→准确标题/正文/频道→唯一消息已读→普通进程重开后唯一性/已读/准确详情全链 PASS。原生 1/1（33.421s）、0 failure/skip/runtime warning，strict verifier EXECUTED，无通知 fixture 注入。
+
+产物哈希、实际 Gateway 和失败边界见 `build/quality-results/iphone-production-apns-20261012/iphone-production-apns-summary.json`；原始结果 `tests-correct-gateway.xcresult`。只关闭实际安装候选的 iPhone production-APNs 子 claim，不外推 gateway.pushgo.cn、Watch、升级数据保留、整个正式发布或生产 SLA。自动频道准备的 secure 输入/剪贴板失败及 sender 首次误用网关的失败保持原记录；最终频道由用户手动创建，不宣称该准备步骤已自动验证。临时探针编译后恢复原测试源，无持久测试改动，不重跑全量、不推送或正式发布。

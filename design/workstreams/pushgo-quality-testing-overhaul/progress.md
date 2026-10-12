@@ -858,3 +858,50 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 用户范围要求优先于广泛车道默认要求：PR/nightly/accessibility/性能/跨平台/真实 Provider/生产签名及远端 CI 保持 NOT_RUN，未降低或改写正式发布门禁。完成此本地补丁和必要复验后停止，不提交、不推送、不发布。
 
 本地提交阶段（2026-10-12）：用户随后要求保存本次数据边界修复及相关记录。提交包括三个产品文件、iOS/Store 定点回归、UI 方法数量预检同步、能力索引和本进度记录；只执行 Git 范围/空白检查与提交状态确认，不重跑上述测试，不推送、不发布。验证结论仍来自修复阶段，提交本身不构成新验收。仓库外完整报告 `../docs/test-acceptance-remediation-2026-10-11.md` 另记录最终提交身份。
+
+
+## 2026-10-12 三项系统交互定点收口
+
+用户范围：依次处理 macOS 窗口恢复、iOS 取消重命名、Safari 链接交接；不扩展重构，不重复全量验收，不推送或正式发布。本轮最终产品源码仍为 `f14a70bbfb262acbd207c4d014f752c9c6260573`，只修改 UI 测试及方法数量预检，业务实现未改动。
+
+- **macOS 窗口恢复 — 测试系统定位问题。** 同一状态按钮在 App 内以投影 `StatusItem` 出现，在 macOS 27 `com.apple.MenuBarAgent` 中以实际 `Button` 出现。首轮诊断已通过最小化与两种关闭恢复，但在末尾右键 Quit 未呈现菜单，且保留原生 geometry warning；该失败不升绿。helper 改为优先点击实际承载的按钮，旧系统仍按 App/SystemUIServer 原 owner 定位。最终完整原方法 `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` PASS 1/1：最小化/关闭后恢复、单窗口、同 session、准确旧/刷新消息、键盘导航、真实 Quit 和无残留进程均通过，0 skip/runtime warning，MAX_RETRIES=0。结果 `build/quality-results/three-core-20261012/macos-final/native/run-20261012-005745.xcresult`。生产 presenter/delegate/lifecycle 均未改。
+- **iOS 取消重命名 — 可见控件与 AX 自定义标识查询不一致。** 原 CI `38110824185` 的末帧录像明确显示已输入 `Cancelled Rename`、软件键盘可见，Cancel 按钮完整可见且没有被覆盖；失败 query chain 却未匹配 `action.channel.rename.cancel`。这排除“按钮被键盘遮住”的假设，不推断具体 SwiftUI 内部原因。英文隔离会话改为点击真实 typed `Cancel` 按钮，不使用坐标、隐藏键盘、修改 detent 或放宽可达性断言。新增专用方法验证键盘可见→取消→原名→重新打开草稿为原名→再次取消→普通进程重启仍为原名且无取消草稿，覆盖旧串联方法无法单独证明的取消持久化边界。最终新定位 PASS 1/1、0 skip/runtime warning、MAX_RETRIES=0，结果 `build/quality-results/three-core-20261012/ios-cancel-final/native/run-1-20261012-010628.xcresult`。旧完整频道方法同步同一定位，未再次执行其余创建/退订/剪贴板分支；取消业务不改。
+- **Safari 链接交接 — 系统首次使用提示阻挡地址栏。** 原 CI Safari AX 快照包含 `PopoverDismissRegion`、带 `TipView` 的 Popover 及真实 `Close` 按钮，地址字段 `TabBarItemTitle` 已显示正确 host，但被提示层覆盖。终止/重开 Safari 不清除该提示。公共断言仅在这个已观察到的提示存在时关闭它，随后仍必须交接到真实 Safari 前台并读取严格完整目标 URL；没有把 hostname、页面标题、产品 marker 或启动状态当成功。消息标准完整方法在本机 PASS（双方法结果 2/2，其中另一条为键盘取消断言版），0 skip/runtime warning、MAX_RETRIES=0，结果 `build/quality-results/three-core-20261012/ios-final/native/run-1-20261012-010206.xcresult`。本机未出现该首次提示，因此其关闭分支及原 CI 环境仍 **NOT_RUN**；不把本机 URL 成功声明为原 CI 已绿或提示分支已原生验收。公共 helper 的另一个文档交接调用者仅做影响识别，不重跑整个主导航。
+
+原始 CI 取消录像、末帧、query chain、两项 CI activities 与 summary 已复制到 `build/quality-results/three-core-20261012/causal-evidence/`；本轮 macOS 首次失败位于 `macos-diagnostic/native/run-20261012-005511.xcresult`。先前的原 macOS 最小化失败和原 CI 两项失败均保留。iOS 初次专用探针 PASS 1/1；随后增加明确键盘断言的双方法 PASS 2/2；原 CI 录像归因后只复验改为真实按钮定位的取消方法，没有重跑已通过的 Safari 或 macOS。
+
+选择预检首轮 275 脚本 PASS，但新增方法与现有 helper 的混合增量匹配为 BLOCKED；通过把新方法放回频道测试段，并同步已过时的 Safari 注释，使既有 helper 的影响拥有旧/新源码归属，未修改 selector 或放宽规则。最终全 275 项脚本检查 PASS、计划 READY，列出 iOS 原频道、新取消、消息/文档交接及 macOS 窗口方法。保留首次 BLOCKED 日志。本次用户限定只执行上述最小核心流程，PR/nightly/accessibility、原远端 CI、其他平台、Provider/设备/生产签名均 NOT_RUN；方法数量预检由 35 同步为 36。测试输入 SHA-256 和 HEAD/dirty 身份见 `build/quality-results/three-core-20261012/source-evidence.json`，本轮不是正式发布验收。
+
+本轮未提交、推送或发布，所有定点 runner 结束后停止。工作区完整记录：`/Users/ethan/Repo/PushGo/docs/test-acceptance-remediation-2026-10-11.md`。
+
+
+## 2026-10-12 iPhone 16 真实生产 APNs 定点验收
+
+仅完成用户指定的 iPhone 生产 APNs 子项并解释 Gateway capability；未执行累计 PR、nightly、跨平台或全量验收，未提交、推送、发布或部署。产品源码 HEAD `f14a70bbfb262acbd207c4d014f752c9c6260573`，已有三项系统交互测试/文档修改仍 dirty，生产源码未改。本轮自包含 native 探针仅临时加入原干净的 `PushGo_iOSSystemNotificationTests.swift` 构建，随即恢复原文件，不作为持久 CI 方法或跳过规则。
+
+- **实际产物**：Release archive + release-testing/ad-hoc export，1.3.3/build 91，安装到 iPhone 16 / iOS 27.0.1。实际签名和嵌入 profile 均 `aps-environment=production`，`get-task-allow=false`，profile 包含测试机 UDID；没有上传 App Store/TestFlight。IPA SHA-256 `07d3d0d2946c211b639f01506b46f3191a9b279307e5d398f33a18c8ca39ab7f`，App executable SHA-256 `68dee3319395edb47e950bd0eebf4f7686ef329c881030e72d0a939ff7b41635`。Widgets 不要求 aps entitlement；不能将其缺少 aps 误判为主 App 签名失败。
+- **真实核心链 PASS**：用户按临时材料手动创建任务专属频道；本机 sender 从真实 App 持久化的该频道核对实际 Gateway/ID/密码匹配，只向 `https://sandbox.pushgo.dev/message` 成功发送一次，HTTP 200 / success=true。App 在后台时真实 SpringBoard 卡片的准确标题和正文出现；点击卡片前台打开准确详情/正文/频道；列表唯一消息已读；普通 terminate/launch 后唯一性、已读和再次打开的完整内容仍保持。无 quality fixture、本地 notification 注入或 startup 配置替代真实链路。测试网关名为 sandbox，接收包的 APNs 环境仍是 production；这不是 `gateway.pushgo.cn` 本身的端到端验收。
+- **原生结果**：`testPhysicalProductionAPNsOpensExactReadDetailAndPersists` PASS 1/1（33.421s），0 failure/skip，runtimeWarnings=[]；strict verifier `EXECUTED`。证据根 `build/quality-results/iphone-production-apns-20261012/`，`tests-correct-gateway.xcresult`、`native-correct-gateway-summary.json`、`remote-send-receipt.json` 和 `iphone-production-apns-summary.json` 绑定实际产物和执行范围。仅关闭这个安装包的 iPhone production-APNs 到达/点击/持久化子 claim，不覆盖正式安装升级数据保留、Watch、线上新版路由或整个发布验收。
+- **前置失败仍保留**：首次 native automation 授权超时后用户允许；Tab 自定义 ID 投影未匹配，改用实际 native Tabs；自动 secure 输入失败、后台剪贴板不可用和 Paste 查询失败均发生在准备层，未发送业务消息。secure 输入的产品/驱动归因尚未明确，未修改产品或宣称修复。多轮准备返工后停止该路径，由用户一次人工频道准备。随后首个 provider-only sender 错把网关固定为 `gateway.pushgo.cn`，收到 HTTPError，而只读 `/channel/exists` 明确该频道不存在；实际 Store 显示频道在 `sandbox.pushgo.dev` 且密码匹配，修正发送目标绑定后同一业务断言通过。首个 HTTPError 未保存 status/body，是本次临时驱动收据不足；修正 sender 已保存 HTTPError status/body，不能编造首个状态码。上述失败结果不升绿，不据此认定 APNs 产品故障。
+- **材料清理**：临时密码文件和复制的设备私有数据库/偏好已删除；原准备 AX 附件中出现的任务密码已原位脱敏并留下 `credential-redaction.json`，原失败结果不改变。不输出密码/Provider token，不删除用户设备频道或消息。签名候选保留在手机；临时源码完全恢复。后续若继续验收，需新的任务材料，不自动复用或重发。
+
+### Gateway route_transition_v2 的发布边界
+
+`394282d6a8e07df9865a3fb02a66f36382509a2b`（2026-09-29 09:17:57 +0800，Fix route transition concurrency and UTF-8 token handling）引入 capability 和 prepare/commit/abort 原子路由切换；`4a0c327de8e2d1c1ede31bc379901b416ed648b8`（同日 10:00:44 +0800）补全支持存储后端。它表示频道从当前投递路径切换到目标路径时可采用受控提交/回退协议，不是 APNs 到达本身的 feature。
+
+截至本次只读核对，GitHub 最新正式 Gateway Release 仍为 `v1.3.2`（2026-08-25）；没有包含上述引入提交的正式 tag。代码已合并不代表正式 release 或线上部署。`https://gateway.pushgo.cn/gateway/profile` 实际 HTTP 200，但响应没有 `route_transition_v2`；新 handler 应显式返回此字段，所以当前有效线上接口尚未提供新 capability。较旧部署符合该观察，但响应不含版本号，不能将线上精确版本断言为 v1.3.2，也不能把缺字段当作新实现失败。本轮未部署 Gateway；该项保留为正式发布时的服务端升级/兼容顺序依赖，不阻断已证明的既有 Provider 链。
+
+
+## 2026-10-12 通知方式按 Gateway 当前路由收敛
+
+用户确认以服务端实际路由为准，接受短暂不一致后的正常同步收敛；不承诺任何网络异常都回滚旧方式或严格最后意图胜出。Gateway 注册/频道同步新增可选 route 快照（当前方式、已有 revision、Provider token 是否存在）；Android 同一入口应用远端快照，并在普通注册响应后重新检查方式，阻止旧 FCM/Private 写入覆盖远端选择。显式切换只发一次既有 /channel/device；未知结果通过普通注册确认，不反向写远端；本地保存失败只补写一次，之后依靠启动/前台/正常业务同步。普通写入 gate 仅保留串行和当前方式检查，未增加每次写入前的重复全局查询。
+
+移除 V2 四阶段、操作 ID、Room transport_transitions/DAO/Entity、pending operation token、无限恢复 dispatcher 和对应 UI 状态。Room 32 的 31→32 仅删除废弃表，历史升级链和独立 Gateway 地址切换恢复保留；Gateway 同样只删除废弃操作表，保留当前路由、订阅、原子消息队列迁移和容量拒绝。Private 模式清除普通 FCM token 的原行为保留，不将意外保留 token 作为新的功能定义。
+
+必要复验：JVM 40 项目的级/HTTP/独立 Gateway 日志检查通过；API37 专用 AVD（实际1080×1920）8 个独立方法通过，最终受影响运行批次 4/4。覆盖双向选择拒绝→重试→重开、本地补写→重开、首次设备签发、两种旧方式写入阻断及 Room 保持、v30/v31→32 数据保留/重开和 Android Keystore 清理保留其他凭据。8 项来自独立批次的相应证据，不是一次全量或最终平台矩阵；首次 6 项中的 5 个成功目的保留，失败不升绿，后续只复验受影响流和新发现的首次身份路径。原编译缺少 fixture exception、首次 native Private token 断言失败和首次身份比较问题均保留并准确归因；测试断言未放宽。
+
+证据 ../pushgo-android/build/quality-results/route-authority-20261012/summary.json、source-identity.json、native-first-raw、native-final-raw、native-ordinary-final-raw。脚本合同246项和本地化检查通过；最初 --base HEAD 的静态计划没有包含 dirty 字节，另以明确 working-tree 文件列表生成 READY/release 的真实影响计划，未执行其累计 Release 车道，用户限定定点范围优先。全量 PR/nightly/accessibility/performance、真机 Provider、远端 CI 和发布均 NOT_RUN。
+
+兼容性：正式 Android v1.3.0 的数据库正是 v30，历史 schema 文件逐字节未改，已有 v30→32 设备测试验证真实消息/设置/频道/待处理投递/ACK 数据保留。新 App 对旧 Gateway 缺少 route 元数据保持原路径兼容，不把缺字段当新服务端能力已验收。Android/Apple 正式 v1.3.0 源码均不使用 V2；移除未发布的 V2 协议不改变这些正式版本使用的接口、请求体和既有响应字段。旧客户端完整二进制安装运行本轮 NOT_RUN，Gateway 旧请求/升级证据另见 sibling gateway 的 summary。所有源码及记录保留本地未提交，不推送、不部署、不正式发布；设备测试租约释放、任务 AVD关闭、任务 DB 容器清理、OrbStack恢复停止，实体手机不动。
+
+兼容性最终收口：Gateway 定点原生验证累计 23 项通过、0 忽略，包含旧 Android FCM/iOS APNs 请求与旧字段解码下的真实消息提交→准确拉取→ACK→队列清空，以及历史 SQLite DDL 升级、旧数据保留、新写入和再次打开。正式 Gateway v1.3.2 的 SQLite/PostgreSQL/MySQL 表与索引定义保持一致、schema 仍为 v12；仅增加废弃操作台账清理。另两项真实 PostgreSQL/MySQL 原子切换合同均通过。证据 gateway/build/quality-results/route-authority-20261012/summary.json 和 released-compatibility-source-proof.json；旧 App 完整二进制及生产数据库升级本轮 NOT_RUN，不据此宣称全量发布验收完成。

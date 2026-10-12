@@ -5549,6 +5549,15 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     private func pushGoStatusItem(in app: XCUIApplication) -> XCUIElement {
+        // macOS 27 renders third-party status buttons in MenuBarAgent. The
+        // app-owned StatusItem is only a projection and can retain stale
+        // geometry after activation/window transitions. Click the rendered
+        // button when available; older macOS versions retain the App owner.
+        let renderedButton = XCUIApplication(bundleIdentifier: "com.apple.MenuBarAgent")
+            .buttons["status-item.pushgo"]
+        if renderedButton.exists {
+            return renderedButton
+        }
         let appOwnedItem = app.descendants(matching: .any)["status-item.pushgo"]
         if appOwnedItem.exists {
             return appOwnedItem

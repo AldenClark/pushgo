@@ -3725,6 +3725,56 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(unavailableTarget.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
     }
 
+    @MainActor
+    func testChannelRenameCancelDiscardsDraftAcrossReopenAndRelaunch() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
+            allowCrossAppDataAccess: true
+        )
+        let session = qualitySessionPayload(
+            sessionID: "ios-rename-cancel-\(UUID().uuidString.lowercased())",
+            fixture: "channels.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let channelID = "01H00000000000000000000001"
+        let row = element(in: context.app, identifier: "channel.row.\(channelID)")
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.swipeLeft()
+        tapWhenHittable(element(in: context.app, identifier: "action.channel.\(channelID).rename"), timeout: 5)
+        let field = element(in: context.app, identifier: "field.channel.rename.alias")
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let originalName = try! XCTUnwrap(field.value as? String)
+        XCTAssertFalse(originalName.isEmpty)
+        replaceText(in: field, with: "Cancelled Rename")
+        XCTAssertTrue(context.app.keyboards.firstMatch.exists, "Cancel must remain reachable with the software keyboard shown")
+        let pixels = XCTAttachment(screenshot: context.app.screenshot())
+        pixels.name = "rename-cancel-with-keyboard"
+        pixels.lifetime = .keepAlways
+        add(pixels)
+        let hierarchy = XCTAttachment(string: context.app.debugDescription)
+        hierarchy.name = "rename-cancel-controls"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        tapWhenHittable(context.app.buttons["Cancel"], timeout: 5)
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(context.app.staticTexts[originalName].waitForExistence(timeout: 5))
+        XCTAssertFalse(context.app.staticTexts["Cancelled Rename"].exists)
+        row.swipeLeft()
+        tapWhenHittable(element(in: context.app, identifier: "action.channel.\(channelID).rename"), timeout: 5)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, originalName, "Cancel must discard the draft before reopening the editor")
+        tapWhenHittable(context.app.buttons["Cancel"], timeout: 5)
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts[originalName].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Cancelled Rename"].exists, "Cancel must never persist a new alias")
+    }
+
     func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
@@ -3838,8 +3888,11 @@ final class PushGo_iOSUITests: XCTestCase {
         var renameField = element(in: context.app, identifier: "field.channel.rename.alias")
         XCTAssertTrue(renameField.waitForExistence(timeout: 5))
         replaceText(in: renameField, with: "Cancelled Rename")
+        // The failed CI recording shows a visible, unobscured Cancel button,
+        // but its custom identifier did not resolve. This English session
+        // targets the real typed button while the rename editor is active.
         tapWhenHittable(
-            element(in: context.app, identifier: "action.channel.rename.cancel"),
+            context.app.buttons["Cancel"],
             timeout: 5
         )
         XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 5))
@@ -5335,6 +5388,26 @@ final class PushGo_iOSUITests: XCTestCase {
             line: line
         )
 
+        // Safari may present its one-time toolbar tip over the address bar.
+        // Relaunching Safari preserves that tip; dismiss only this observed
+        // system-owned popover before interacting with the real URL field.
+        let toolbarTip = safari.popovers.containing(.other, identifier: "TipView").firstMatch
+        if toolbarTip.exists {
+            tapWhenHittable(
+                toolbarTip.buttons["Close"],
+                timeout: 5,
+                message: "Safari's toolbar tip must expose its real dismissal action",
+                file: file,
+                line: line
+            )
+            XCTAssertTrue(
+                toolbarTip.waitForNonExistence(timeout: 5),
+                "Safari's toolbar tip must be dismissed before checking the destination",
+                file: file,
+                line: line
+            )
+        }
+
         let compactDisplayURL = compactURL.hasSuffix("/") ? String(compactURL.dropLast()) : compactURL
         let exactAddress = safari.textFields.matching(
             NSPredicate(
@@ -5359,9 +5432,9 @@ final class PushGo_iOSUITests: XCTestCase {
             )
         }
         if !exactAddress.exists && !exactAddress.waitForExistence(timeout: 5) {
-            // iOS may initially keep Safari's address bar compact. This is the
-            // only system-private interaction we permit; the exact URL field
-            // below remains the decisive business oracle. A fresh Safari launch
+            // iOS may initially keep Safari's address bar compact. Expanding
+            // it follows dismissal of any toolbar tip;
+            // the exact URL field remains the decisive business oracle. A fresh Safari launch
             // is prepared by resetSafariBeforeExternalRoute() to avoid a stale
             // lowered-bar snapshot racing this tap.
             let compactAddress = safari.descendants(matching: .any)
