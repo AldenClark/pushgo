@@ -921,3 +921,11 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getting Started；撤回仅从hit-point日志推断失触的假说。删掉私有TabBarItemTitle、Tip检测、重新激活及多层等待，改用Safari原生Command-L；准确完整URL仍为决定性断言。密钥是设置32字符解密配置，录像没有密码自动填充弹窗；仅此调用以已精确确认的short长度做普通删除与合法文本单次输入，不用Command-A/Right及256删除。公共输入helper不动，Show/Hide、准确key、保存、重启、空保存及清除不弱化。
 
 最终两条本地iOS27执行2/2、产品/测试系统PASSED（focused-two-local收据）；它只证明本地环境。下一次只复验原iOS26.2两条，不再跑八项/全量。App、Core、各SDK/config/scripts/package输入与已通过的严格并发38223741966完全相同，最后变更仅UITest及这些记录；复用该严格门禁，不重复App全编译。原累计release与八项失败收据均保留，最终只声明实际完成的定点范围。
+
+### 2026-10-12 外链边界由用户确认后收口
+
+用户明确要求：只核对代码传出地址正确、系统浏览器能打开，不检查浏览器最终显示地址，不继续 Safari 验收。对应移除 iOS/macOS 消息与文档旅程中的地址栏查询、Command-L，以及 iOS 的 Safari 终止前置步骤；保留真实生产入口、浏览器前台和返回原准确详情/设置，其他完整业务断言不变。文档 URL 使用 AppConstants.documentationURL（Getting Started 的英文路径 /guides/getting-started/，中文加 /zh），全 page×locale 的准确地址合同未改；两端消息 Link 直接使用 URLSanitizer 放行后的原 message.url，未改业务分发。URL 来源已静态核对，已有原生打开浏览器及正确页面的证据继续复用。此前严格浏览器地址栏要求和“下一次复验”计划由本条 supersede，不以历史要求扩展本次验收。
+
+最终 CI 38231537478 / 8e839f6 / iPhone17Pro iOS26.2：解密完整方法原生 PASSED 178.174s，非法拒绝、准确32字符、Show/Hide、保存、普通重启、空保存保留、明确清除均保留。主导航在 session missing 的 QUALITY_PRECONDITION 失败122.604s，尚未进入产品/Safari流程；原生失败与整体 BLOCKED 收据保留。原始材料在 build/quality-results/integration-20261012/final-two-ci-native 和 final-two-ci-receipts，不能因单项通过将整体收据改绿。
+
+本条只修改测试与记录，App/Core/package/config/scripts 输入与严格 SUCCESS 38223741966 一致；解密方法与刚通过的8e839f6完全相同。仅做两份 UITest Swift parse、diff检查，不重新运行 UI、真机、SDK全编译或全量验收。保留首败、BLOCKED、无关短暂状态观测失败及既有有效证据。按已授权范围完成 PR 整合；没有正式发布动作，不宣称完整 release gate 通过。

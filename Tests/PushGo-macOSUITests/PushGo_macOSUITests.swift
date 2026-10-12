@@ -1047,31 +1047,6 @@ final class PushGo_macOSUITests: XCTestCase {
             browser.wait(for: .runningForeground, timeout: 10),
             "Opening the canonical message URL must hand off to the default system browser."
         )
-        browser.typeKey("l", modifierFlags: .command)
-        let browserAddress = browser.descendants(matching: .any).matching(
-            NSPredicate(
-                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
-                "pushgo.dev/quality-message",
-                "pushgo.dev/quality-message"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            browserAddress.waitForExistence(timeout: 8),
-            "The browser must expose the exact canonical message host and path."
-        )
-        let displayedMessageAddress = ((browserAddress.value as? String) ?? browserAddress.label)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedMessageAddress = displayedMessageAddress.contains("://")
-            ? displayedMessageAddress
-            : "https://\(displayedMessageAddress)"
-        let consumedMessageURL = URL(string: normalizedMessageAddress)
-        XCTAssertEqual(consumedMessageURL?.scheme, "https")
-        XCTAssertEqual(consumedMessageURL?.host, "pushgo.dev")
-        XCTAssertEqual(
-            consumedMessageURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-            "quality-message",
-            "A different pushgo.dev page must not satisfy the message URL handoff."
-        )
         context.app.activate()
         XCTAssertTrue(
             context.app.wait(for: .runningForeground, timeout: 8),
@@ -4083,31 +4058,6 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             browser.wait(for: .runningForeground, timeout: 10),
             "The production documentation action must hand off to the default system browser."
-        )
-        browser.typeKey("l", modifierFlags: .command)
-        let browserAddress = browser.descendants(matching: .any).matching(
-            NSPredicate(
-                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
-                "pushgo.dev/guides/getting-started",
-                "pushgo.dev/guides/getting-started"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            browserAddress.waitForExistence(timeout: 8),
-            "The browser must expose the exact official documentation host and path."
-        )
-        let displayedAddress = ((browserAddress.value as? String) ?? browserAddress.label)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedAddress = displayedAddress.contains("://")
-            ? displayedAddress
-            : "https://\(displayedAddress)"
-        let consumedURL = URL(string: normalizedAddress)
-        XCTAssertEqual(consumedURL?.scheme, "https")
-        XCTAssertEqual(consumedURL?.host, "pushgo.dev")
-        XCTAssertEqual(
-            consumedURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-            "guides/getting-started",
-            "A different pushgo.dev page must not satisfy the documentation handoff."
         )
         persistedOn.app.activate()
         XCTAssertTrue(
