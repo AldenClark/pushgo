@@ -585,3 +585,7 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 本地 HEAD `f14a70bb` 的 1.3.3/build 91 Release/ad-hoc 候选已安装到 iPhone 16 / iOS 27.0.1；实际 App signature/profile 均 production APNs、get-task-allow=false，测试机被授权。真实测试 Gateway `sandbox.pushgo.dev` 向手动准备的任务频道成功发送一次；后台 SpringBoard 准确卡片→点击→准确标题/正文/频道→唯一消息已读→普通进程重开后唯一性/已读/准确详情全链 PASS。原生 1/1（33.421s）、0 failure/skip/runtime warning，strict verifier EXECUTED，无通知 fixture 注入。
 
 产物哈希、实际 Gateway 和失败边界见 `build/quality-results/iphone-production-apns-20261012/iphone-production-apns-summary.json`；原始结果 `tests-correct-gateway.xcresult`。只关闭实际安装候选的 iPhone production-APNs 子 claim，不外推 gateway.pushgo.cn、Watch、升级数据保留、整个正式发布或生产 SLA。自动频道准备的 secure 输入/剪贴板失败及 sender 首次误用网关的失败保持原记录；最终频道由用户手动创建，不宣称该准备步骤已自动验证。临时探针编译后恢复原测试源，无持久测试改动，不重跑全量、不推送或正式发布。
+
+### 2026-10-12 整合验证边界
+
+Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言仍为单击准确未读、双击准确最新、读取状态及 relaunch；共用观察器需复验三个页面。搜索只移除新会话空字段的冗余清空动作。Safari 保留真实浏览器及准确 URL，补处理加载后才出现的 Tip。解密设置保留非法拒绝、精确合法 key、保存、重启、空保存保留及显式清除，使用正式 Show 编辑后 Hide，未覆盖非空遮罩字段直接替换的 AX 差异。首轮 CI 四项失败与本地4/4诊断分别保留；最终定点 CI 不代表全量 release、真机或正式发布证据。详情见同日 progress 记录。

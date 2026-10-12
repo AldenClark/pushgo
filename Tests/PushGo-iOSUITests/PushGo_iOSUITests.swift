@@ -1432,7 +1432,14 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         let searchField = runtimeQualitySearchField(in: context.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
-        replaceText(in: searchField, with: "P2 Split")
+        // This fresh-session query is empty; no replacement/clear is needed.
+        tapWhenHittable(searchField, timeout: 8)
+        let searchFocused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: searchField
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [searchFocused], timeout: 8), .completed)
+        searchField.typeText("P2 Split")
         XCTAssertEqual(searchField.value as? String, "P2 Split")
         let target = context.app.staticTexts["P2 Split Seed Message"]
         assertElementExists("state.messages.search.failed", in: context.app, timeout: 8)
@@ -2784,7 +2791,16 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(keyField.exists, "Invalid key input must not leave the decryption editor")
 
         let validKey = String(repeating: "k", count: 32)
-        enterSecureText(in: keyField, with: validKey)
+        // Use the product's visible editor to prove the exact replacement;
+        // masked SecureField AX empty values vary between Simulator releases.
+        tapWhenHittable(visibilityAction, timeout: 5)
+        let replacementKeyField = context.app.textFields[keyField.identifier]
+        XCTAssertTrue(replacementKeyField.waitForExistence(timeout: 8))
+        XCTAssertEqual(replacementKeyField.value as? String, "short")
+        replaceText(in: replacementKeyField, with: validKey)
+        XCTAssertEqual(replacementKeyField.value as? String, validKey)
+        tapWhenHittable(visibilityAction, timeout: 5)
+        XCTAssertEqual(keyField.elementType, .secureTextField)
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.decryption.save"),
             timeout: 8
@@ -5392,7 +5408,8 @@ final class PushGo_iOSUITests: XCTestCase {
         // Relaunching Safari preserves that tip; dismiss only this observed
         // system-owned popover before interacting with the real URL field.
         let toolbarTip = safari.popovers.containing(.other, identifier: "TipView").firstMatch
-        if toolbarTip.exists {
+        func dismissToolbarTipIfPresent() {
+            guard toolbarTip.exists else { return }
             tapWhenHittable(
                 toolbarTip.buttons["Close"],
                 timeout: 5,
@@ -5407,6 +5424,7 @@ final class PushGo_iOSUITests: XCTestCase {
                 line: line
             )
         }
+        dismissToolbarTipIfPresent()
 
         let compactDisplayURL = compactURL.hasSuffix("/") ? String(compactURL.dropLast()) : compactURL
         let exactAddress = safari.textFields.matching(
@@ -5440,6 +5458,17 @@ final class PushGo_iOSUITests: XCTestCase {
             let compactAddress = safari.descendants(matching: .any)
                 .matching(identifier: "TabBarItemTitle")
                 .firstMatch
+            let addressOrTip = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    toolbarTip.exists || (compactAddress.exists && compactAddress.isHittable)
+                },
+                object: safari
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [addressOrTip], timeout: 8), .completed,
+                compactAddressMessage, file: file, line: line
+            )
+            dismissToolbarTipIfPresent()
             tapWhenHittable(
                 compactAddress,
                 timeout: 8,

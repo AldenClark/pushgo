@@ -20,14 +20,9 @@ struct MainTabContainerView: View {
     @State private var thingScrollToTopToken: Int = 0
     @State private var unavailableEventTargetFeedback: String?
     @State private var unavailableThingTargetFeedback: String?
-    @State private var pendingMessageReselectTask: Task<Void, Never>?
-    @State private var lastReselectedTab: MainTab?
-    @State private var lastReselectAt: TimeInterval = 0
     @State private var dataRefreshTask: Task<Void, Never>?
     @State private var isDataRefreshRequested = false
     private let tabReselectLogger = Logger(subsystem: "io.ethan.pushgo", category: "TabReselection")
-    private let tabDoubleTapWindow: TimeInterval = 0.32
-    private let tabSingleTapCommitDelay = Duration.milliseconds(340)
 
     var body: some View {
         tabLayout
@@ -47,8 +42,8 @@ struct MainTabContainerView: View {
             }
             .pushgoTabBarMinimizeOnScroll()
             .background(
-                WindowTabReselectionObserver(visibleTabs: visibleTabs) { tab in
-                    handleObservedTabReselection(tab)
+                WindowTabReselectionObserver(visibleTabs: visibleTabs, selectedTab: selection) { tab, isDoubleTap in
+                    handleObservedTabReselection(tab, isDoubleTap: isDoubleTap)
                 }
             )
             .environment(searchViewModel)
@@ -126,10 +121,6 @@ struct MainTabContainerView: View {
                 ensureSelectionIsVisible()
             }
             .onChange(of: selection) { _, newValue in
-                pendingMessageReselectTask?.cancel()
-                pendingMessageReselectTask = nil
-                lastReselectedTab = nil
-                lastReselectAt = 0
                 environment.updateActiveTab(newValue)
             }
             .onChange(of: environment.messageStoreRevision) { _, _ in
@@ -325,12 +316,8 @@ struct MainTabContainerView: View {
         return tabs
     }
 
-    private func handleObservedTabReselection(_ tab: MainTab) {
+    private func handleObservedTabReselection(_ tab: MainTab, isDoubleTap: Bool) {
         guard isInitialSelectionResolved, tab == selection else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        let isDoubleTap = lastReselectedTab == tab && now - lastReselectAt <= tabDoubleTapWindow
-        lastReselectedTab = isDoubleTap ? nil : tab
-        lastReselectAt = isDoubleTap ? 0 : now
         if isDoubleTap {
             handleTabBarDoubleTap(for: tab)
         } else {
@@ -347,22 +334,11 @@ struct MainTabContainerView: View {
     private func handleTabBarTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
         tabReselectLogger.info("Observed single tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
-        pendingMessageReselectTask?.cancel()
-
         switch tappedTab {
         case .messages:
-            let currentToken = messageScrollToUnreadToken
-            pendingMessageReselectTask = Task { @MainActor in
-                // Commit only after the entire double-tap window has elapsed;
-                // otherwise a late valid second tap can cause an unread→top bounce.
-                try? await Task.sleep(for: tabSingleTapCommitDelay)
-                guard !Task.isCancelled, messageScrollToUnreadToken == currentToken else { return }
-                messageScrollToUnreadToken += 1
-                pendingMessageReselectTask = nil
-                lastReselectedTab = nil
-                lastReselectAt = 0
-                tabReselectLogger.info("Committed Messages unread scroll token")
-            }
+            // UIKit has already ruled out a double tap before this callback.
+            messageScrollToUnreadToken += 1
+            tabReselectLogger.info("Committed Messages unread scroll token")
         case .events, .things, .channels:
             break
         }
@@ -371,8 +347,6 @@ struct MainTabContainerView: View {
     private func handleTabBarDoubleTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
         tabReselectLogger.info("Observed double tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
-        pendingMessageReselectTask?.cancel()
-        pendingMessageReselectTask = nil
 
         switch tappedTab {
         case .messages:
@@ -390,10 +364,11 @@ struct MainTabContainerView: View {
 #if os(iOS)
 private struct WindowTabReselectionObserver: UIViewRepresentable {
     let visibleTabs: [MainTab]
-    let onTap: (MainTab) -> Void
+    let selectedTab: MainTab
+    let onTap: (MainTab, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(visibleTabs: visibleTabs, onTap: onTap)
+        Coordinator(visibleTabs: visibleTabs, selectedTab: selectedTab, onTap: onTap)
     }
 
     func makeUIView(context: Context) -> ObserverView {
@@ -403,7 +378,7 @@ private struct WindowTabReselectionObserver: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ObserverView, context: Context) {
-        context.coordinator.visibleTabs = visibleTabs
+        context.coordinator.update(visibleTabs: visibleTabs, selectedTab: selectedTab)
         context.coordinator.onTap = onTap
         uiView.coordinator = context.coordinator
         uiView.bindIfNeeded()
@@ -415,56 +390,89 @@ private struct WindowTabReselectionObserver: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var visibleTabs: [MainTab]
-        var onTap: (MainTab) -> Void
+        private var visibleTabs: [MainTab]
+        private var selectedTab: MainTab
+        var onTap: (MainTab, Bool) -> Void
         private weak var window: UIWindow?
-        private weak var tapRecognizer: UITapGestureRecognizer?
+        private weak var singleTapRecognizer: UITapGestureRecognizer?
+        private weak var doubleTapRecognizer: UITapGestureRecognizer?
 
-        init(visibleTabs: [MainTab], onTap: @escaping (MainTab) -> Void) {
+        init(visibleTabs: [MainTab], selectedTab: MainTab, onTap: @escaping (MainTab, Bool) -> Void) {
             self.visibleTabs = visibleTabs
+            self.selectedTab = selectedTab
             self.onTap = onTap
+        }
+
+        func update(visibleTabs: [MainTab], selectedTab: MainTab) {
+            guard self.visibleTabs != visibleTabs || self.selectedTab != selectedTab else { return }
+            self.visibleTabs = visibleTabs
+            self.selectedTab = selectedTab
+            // A pending gesture belongs to the selection at touch-down.
+            for recognizer in [singleTapRecognizer, doubleTapRecognizer] {
+                recognizer?.isEnabled = false
+                recognizer?.isEnabled = true
+            }
         }
 
         func bind(to resolvedWindow: UIWindow) {
             guard window !== resolvedWindow else { return }
-            if let window, let tapRecognizer {
-                window.removeGestureRecognizer(tapRecognizer)
+            unbind()
+            let single = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            let double = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            double.numberOfTapsRequired = 2
+            single.require(toFail: double)
+            for recognizer in [single, double] {
+                recognizer.cancelsTouchesInView = false
+                recognizer.delaysTouchesBegan = false
+                recognizer.delaysTouchesEnded = false
+                recognizer.delegate = self
+                resolvedWindow.addGestureRecognizer(recognizer)
             }
-            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-            recognizer.cancelsTouchesInView = false
-            recognizer.delegate = self
-            resolvedWindow.addGestureRecognizer(recognizer)
             window = resolvedWindow
-            tapRecognizer = recognizer
+            singleTapRecognizer = single
+            doubleTapRecognizer = double
         }
 
         func unbind() {
-            if let window, let tapRecognizer {
-                window.removeGestureRecognizer(tapRecognizer)
+            if let window {
+                for recognizer in [singleTapRecognizer, doubleTapRecognizer] {
+                    if let recognizer { window.removeGestureRecognizer(recognizer) }
+                }
             }
             window = nil
-            tapRecognizer = nil
+            singleTapRecognizer = nil
+            doubleTapRecognizer = nil
+        }
+
+        private func tab(at location: CGPoint, in window: UIWindow) -> MainTab? {
+            guard window.rootViewController?.presentedViewController == nil, !visibleTabs.isEmpty else { return nil }
+            let tabBarTop = window.bounds.maxY - window.safeAreaInsets.bottom - 56
+            guard location.y >= tabBarTop else { return nil }
+            let segmentWidth = window.bounds.width / CGFloat(visibleTabs.count)
+            let index = min(visibleTabs.count - 1, max(0, Int(location.x / segmentWidth)))
+            return visibleTabs[index]
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let window else { return false }
+            // Observe only reselection; normal controls and first tab selection
+            // continue to be delivered directly to the system TabView.
+            return tab(at: touch.location(in: window), in: window) == selectedTab
         }
 
         @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
-            guard recognizer.state == .ended,
-                  let window,
-                  window.rootViewController?.presentedViewController == nil,
-                  !visibleTabs.isEmpty
+            guard recognizer.state == .ended, let window,
+                  let tappedTab = tab(at: recognizer.location(in: window), in: window),
+                  tappedTab == selectedTab
             else { return }
-            let location = recognizer.location(in: window)
-            let tabBarTop = window.bounds.maxY - window.safeAreaInsets.bottom - 56
-            guard location.y >= tabBarTop else { return }
-            let segmentWidth = window.bounds.width / CGFloat(visibleTabs.count)
-            let index = min(visibleTabs.count - 1, max(0, Int(location.x / segmentWidth)))
-            onTap(visibleTabs[index])
+            onTap(tappedTab, recognizer.numberOfTapsRequired == 2)
         }
 
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            true
+            !([singleTapRecognizer, doubleTapRecognizer].contains { $0 === otherGestureRecognizer })
         }
     }
 

@@ -905,3 +905,11 @@ Controlled Developer ID signing `38107537041` produced a notarized DMG whose run
 兼容性：正式 Android v1.3.0 的数据库正是 v30，历史 schema 文件逐字节未改，已有 v30→32 设备测试验证真实消息/设置/频道/待处理投递/ACK 数据保留。新 App 对旧 Gateway 缺少 route 元数据保持原路径兼容，不把缺字段当新服务端能力已验收。Android/Apple 正式 v1.3.0 源码均不使用 V2；移除未发布的 V2 协议不改变这些正式版本使用的接口、请求体和既有响应字段。旧客户端完整二进制安装运行本轮 NOT_RUN，Gateway 旧请求/升级证据另见 sibling gateway 的 summary。所有源码及记录保留本地未提交，不推送、不部署、不正式发布；设备测试租约释放、任务 AVD关闭、任务 DB 容器清理、OrbStack恢复停止，实体手机不动。
 
 兼容性最终收口：Gateway 定点原生验证累计 23 项通过、0 忽略，包含旧 Android FCM/iOS APNs 请求与旧字段解码下的真实消息提交→准确拉取→ACK→队列清空，以及历史 SQLite DDL 升级、旧数据保留、新写入和再次打开。正式 Gateway v1.3.2 的 SQLite/PostgreSQL/MySQL 表与索引定义保持一致、schema 仍为 v12；仅增加废弃操作台账清理。另两项真实 PostgreSQL/MySQL 原子切换合同均通过。证据 gateway/build/quality-results/route-authority-20261012/summary.json 和 released-compatibility-source-proof.json；旧 App 完整二进制及生产数据库升级本轮 NOT_RUN，不据此宣称全量发布验收完成。
+
+### 2026-10-12 主分支整合：首败定点收口
+
+最终累计 Apple CI 38212920953 的 iOS 普通批次执行 35 项，31 通过、4 失败；原始 xcresult/收据完整保留，未改写为通过。Thing 数据边界与取消改名在该批次已通过。新产品故障仅为标签重选：原生双击触摸间隔 250ms，而主线程回调间隔 420.265ms，手工 340ms 单击任务提前提交，双击被当成两次单击。改用 UIKit single.require(toFail: double) 仲裁，保留单击未读／双击最新语义，删除回调时钟与竞争任务；仅观察当前标签，切页或标签集合改变时取消待定识别。
+
+另三项归于输入/系统 UI 验证边界：新会话空搜索直接聚焦输入；Safari 在页面加载后才出现的真实 Tip 也在地址操作前关闭，保留准确 URL；解密旅程用既有 Show 输入控件精确核对 short→完整32字符，再 Hide、保存、重启、空保存及显式清除。公共安全字段 helper 不改。原录像已证明旧安全字段清空，但未提供 AX 实值；iOS27 诊断见真实空字符串，不代表 iOS26.2 AX 缺陷已修复。本条改为显文编辑后隐藏，不再声称非空遮罩字段直接覆盖的 AX 验收。
+
+本地 iOS27 定点诊断 4/4、零重试、产品/测试系统 PASSED（含临时空值观察，source.patch 与 identity 保存在 build/quality-results/integration-20261012/local-diagnosis），用于归因；最终改动另以必要原生 CI 范围验收。275 脚本契约在已安装 Python3.14 下通过，workflow YAML／shell／Swift parse 通过。CI 仅透传脚本既有 focused lane 的精确方法和期望执行数，不改变 PR 自动选择、不放宽断言、不新建证据复用框架。原累计 release 仍为 FAILED；后续定点结果只关闭受影响义务，不冒充完整发布验收。

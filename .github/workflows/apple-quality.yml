@@ -35,6 +35,11 @@ on:
           - performance
           - release-isolation
           - release
+          - focused
+      test_scopes:
+        description: Comma-separated exact UI test methods for focused only; this run proves only the selected flows
+        required: false
+        type: string
       diagnostic_mode:
         description: Separate native diagnostic; does not run or pass the product quality gate
         required: true
@@ -134,7 +139,25 @@ jobs:
 
       - name: Run value-based Apple quality lane
         if: env.QUALITY_SKIP_PRODUCT != '1'
-        run: ./scripts/quality_test.sh "$QUALITY_LANE"
+        env:
+          REQUESTED_TEST_SCOPES: ${{ inputs.test_scopes }}
+        run: |
+          if [[ "$QUALITY_LANE" == focused ]]; then
+            [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && -n "$REQUESTED_TEST_SCOPES" ]] || {
+              echo 'Focused execution requires explicitly selected native methods.'
+              exit 2
+            }
+            export TEST_SCOPES="$REQUESTED_TEST_SCOPES"
+            IFS=',' read -r -a requested_scopes <<< "$TEST_SCOPES"
+            for scope in "${requested_scopes[@]}"; do
+              [[ "$scope" == PushGo-iOSUITests/*/* || "$scope" == PushGo-macOSUITests/*/* ]] || {
+                echo 'Focused scopes must be exact iOS or macOS UI methods.'
+                exit 2
+              }
+            done
+            export QUALITY_EXPECTED_TEST_COUNT="${#requested_scopes[@]}"
+          fi
+          ./scripts/quality_test.sh "$QUALITY_LANE"
 
       - name: Record intentional no-product run
         if: env.QUALITY_SKIP_PRODUCT == '1'
