@@ -17,7 +17,9 @@ struct SettingsView: View {
                 .navigationTitle(localizationManager.localized("settings"))
         }
         .accessibilityIdentifier("screen.settings")
-        .sheet(item: $macOverlay) { overlay in
+        .sheet(item: $macOverlay, onDismiss: {
+            viewModel.cancelServerSaveIfNeeded()
+        }) { overlay in
             macOverlaySheet(for: overlay)
         }
         .task {
@@ -78,6 +80,7 @@ struct SettingsView: View {
                 .frame(width: 520)
                 .toastOverlay(environment: environment)
                 .transientPresentationRoot()
+                .interactiveDismissDisabled(viewModel.isSavingServerConfig)
         case .notificationSounds:
             NotificationSoundSettingsContentView(
                 viewModel: viewModel,
@@ -112,6 +115,17 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         return ScrollView {
             VStack(spacing: 16) {
+            if macOverlay == nil, let feedback = viewModel.serverSaveFeedbackMessage {
+                AppInlineFeedbackBanner(
+                    message: feedback,
+                    tone: .warning,
+                    accessibilityID: "feedback.settings.gateway.result",
+                    dismissAction: {
+                        viewModel.clearServerSaveFeedback()
+                    }
+                )
+            }
+
             if let errorMessage = viewModel.errorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
@@ -154,6 +168,7 @@ struct SettingsView: View {
                     SettingsRowDivider()
                     Button {
                         viewModel.clearError()
+                        viewModel.clearServerSaveFeedback()
                         viewModel.prepareServerEditor()
                         macOverlay = .serverManagement
                     } label: {
@@ -180,7 +195,6 @@ struct SettingsView: View {
                         eventIsOn: $bindableEnvironment.eventPageEnabled,
                         thingIsOn: $bindableEnvironment.thingPageEnabled
                     )
-                    .accessibilityIdentifier("group.settings.page_visibility")
                     SettingsRowDivider()
                     Button {
                         viewModel.clearError()
@@ -409,6 +423,7 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.notification.open_system_settings")
         }
     }
 
@@ -448,13 +463,13 @@ private struct ServerManagementContentView: View {
                     .font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = viewModel.serverErrorMessage {
                     AppInlineFeedbackBanner(
                         message: errorMessage,
                         tone: .danger,
                         accessibilityID: "feedback.settings.server"
                     ) {
-                        viewModel.clearError()
+                        viewModel.clearServerError()
                     }
                 }
 
@@ -523,6 +538,7 @@ private struct ServerManagementContentView: View {
                                 .foregroundStyle(Color.appTextSecondary)
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.server.token.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.gatewayInput.isTokenVisible ? "hide_key" : "show_key")
                         )
@@ -542,9 +558,11 @@ private struct ServerManagementContentView: View {
                         variant: .secondary,
                         fullWidth: false
                     ) {
+                        viewModel.cancelServerSaveIfNeeded()
                         closeSheet()
                     }
                     .disabled(viewModel.isSavingServerConfig)
+                    .accessibilityIdentifier("action.settings.server.cancel")
 
                     AppActionButton(
                         text: Text(localizationManager.localized("save_configuration"))
@@ -554,7 +572,7 @@ private struct ServerManagementContentView: View {
                         fullWidth: false
                     ) {
                         focusedField = nil
-                        Task { await viewModel.saveServerConfig() }
+                        viewModel.startServerSave()
                     }
                     .disabled(viewModel.isSavingServerConfig)
                     .accessibilityIdentifier("action.settings.server.save")
@@ -576,6 +594,7 @@ private struct ServerManagementContentView: View {
             }
         }
         .onDisappear {
+            viewModel.cancelServerSaveIfNeeded()
             viewModel.clearError()
         }
     }
@@ -607,13 +626,13 @@ private struct ManualKeySettingsContentView: View {
                 Text(localizationManager.localized("message_decryption"))
                     .font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = viewModel.manualKeyErrorMessage {
                     AppInlineFeedbackBanner(
                         message: errorMessage,
                         tone: .danger,
                         accessibilityID: "feedback.settings.decryption"
                     ) {
-                        viewModel.clearError()
+                        viewModel.clearManualKeyError()
                     }
                 }
                 keyEncodingPicker
@@ -638,6 +657,19 @@ private struct ManualKeySettingsContentView: View {
                         dismiss()
                     }
                     .disabled(viewModel.isSaving)
+
+                    if viewModel.manualKeyInput.hasConfiguredKey {
+                        AppActionButton(
+                            title: localizationManager.localized("delete"),
+                            variant: .plain,
+                            role: .destructive,
+                            fullWidth: false
+                        ) {
+                            Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                        }
+                        .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
+                        .accessibilityIdentifier("action.settings.decryption.clear")
+                    }
 
                     AppActionButton(
                         text: Text(localizationManager.localized("save_configuration"))
@@ -720,6 +752,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )
@@ -760,6 +793,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )

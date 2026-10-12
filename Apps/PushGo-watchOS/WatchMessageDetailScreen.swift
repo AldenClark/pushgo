@@ -36,13 +36,20 @@ struct WatchMessageDetailScreen: View {
 
                 if let imageURL = message.imageURL {
                     Section(localizationManager.localized("image")) {
-                        AsyncImage(url: imageURL) { phase in
+                        WatchCachedImage(
+                            url: imageURL,
+                            accessibilityLabel: localizationManager.localized("image")
+                        ) { phase in
                             switch phase {
                             case let .success(image):
                                 image
                                     .resizable()
                                     .scaledToFit()
-                            default:
+                                    .frame(height: 90)
+                                    .accessibilityElement()
+                                    .accessibilityLabel(localizationManager.localized("image"))
+                                    .accessibilityIdentifier("image.message.\(message.messageId)")
+                            case .empty, .failure:
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(Color.appSurfaceSunken)
                                     .frame(height: 90)
@@ -54,6 +61,7 @@ struct WatchMessageDetailScreen: View {
                 if let url = message.url {
                     Section {
                         Link(localizationManager.localized("open_link"), destination: url)
+                            .accessibilityIdentifier("action.message.open_link")
                     }
                 }
 
@@ -85,6 +93,7 @@ struct WatchMessageDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.message.detail")
         .navigationTitle(localizationManager.localized("messages"))
         .alert(isPresented: $showDeleteConfirmation) {
             Alert(

@@ -240,6 +240,13 @@ final class EntityProjectionViewModel {
         return nil
     }
 
+    // Detail reads do not hydrate or mutate the paged list. The caller owns
+    // the selected detail snapshot and distinguishes missing data from errors.
+    func loadThingDetail(thingId: String) async throws -> ThingProjection? {
+        let detail = try await dataStore.loadThingProjectionDetail(thingId: thingId)
+        return buildThingProjection(from: detail, thingId: thingId)
+    }
+
     @discardableResult
     func ensureThingDetailsLoaded(thingId: String, forceRefresh: Bool = false) async -> ThingProjection? {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -425,14 +432,17 @@ final class EntityProjectionViewModel {
             }
             guard let eventId = normalizedID(message.eventId) else { return nil }
             let profile = profileSnapshot(fromPayload: message.rawPayload, kind: .event)
+            let displayTitle = payloadString(key: "event_title", payload: message.rawPayload)
+            let displaySummary = payloadString(key: "event_description", payload: message.rawPayload)
             let title = profile?.title
+                ?? displayTitle
                 ?? nonEmpty(message.title)
                 ?? eventId
-            let displayTitle = payloadString(key: "event_title", payload: message.rawPayload)
             let summary = profile?.description
-            let displaySummary = payloadString(key: "event_description", payload: message.rawPayload)
+                ?? displaySummary
+                ?? nonEmpty(message.body)
             let status = profile?.status
-            let statusMessage = profile?.message
+            let statusMessage = profile?.message ?? nonEmpty(message.body)
 
             let point = EventTimelinePoint(
                 id: message.id,
@@ -1229,7 +1239,7 @@ final class EntityProjectionViewModel {
             channelId: channelId,
             severity: normalizedID(event.severity)
         )
-        await reload()
+        await reloadEvents()
     }
 
     func deleteThing(thingId: String) async throws {

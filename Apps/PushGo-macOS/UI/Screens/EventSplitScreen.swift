@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
@@ -11,18 +12,23 @@ struct EventSplitScreen: View {
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
+    @State private var showOnlyOngoingEvents = false
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var hydratedSelectedEvent: EventProjection?
     @State private var showCloseConfirmation = false
+    @State private var isClosingEvent = false
+    @State private var closeEventErrorMessage: String?
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             eventListPane
+            Divider()
             eventDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .alert(
             "\(localizationManager.localized("close")) \(localizationManager.localized("push_type_event"))?",
             isPresented: $showCloseConfirmation
@@ -30,7 +36,9 @@ struct EventSplitScreen: View {
             Button(localizationManager.localized("confirm")) {
                 closeSelectedEvent()
             }
+            .accessibilityIdentifier("action.event.close.confirm")
             Button(localizationManager.localized("cancel"), role: .cancel) {}
+                .accessibilityIdentifier("action.event.close.cancel")
         }
 #if DEBUG
         .task(id: automationStateSignature) {
@@ -56,10 +64,15 @@ struct EventSplitScreen: View {
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
         }
+        .onChange(of: showOnlyOngoingEvents) { _, _ in
+            syncSelection()
+        }
         .onChange(of: openEventId) { _, _ in
             syncSelection()
         }
         .onChange(of: selection) { _, id in
+            isClosingEvent = false
+            closeEventErrorMessage = nil
             guard let id else {
                 hydratedSelectedEvent = nil
                 return
@@ -67,7 +80,7 @@ struct EventSplitScreen: View {
             hydratedSelectedEvent = nil
             requestSelectedEventHydration(id)
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -113,7 +126,20 @@ struct EventSplitScreen: View {
 
     private var eventDetailPane: some View {
         navigationContainer {
-            EventDetailScreen(event: selectedEvent)
+            VStack(spacing: 0) {
+                if let closeEventErrorMessage, selectedEvent != nil {
+                    AppInlineFeedbackBanner(
+                        message: closeEventErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.event.close"
+                    ) {
+                        self.closeEventErrorMessage = nil
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                EventDetailScreen(event: selectedEvent)
+            }
         }
         .toolbar { detailToolbarContent }
     }
@@ -142,6 +168,10 @@ struct EventSplitScreen: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return viewModel.events.filter { event in
             guard !isPendingLocalDeletion(event) else { return false }
+            if showOnlyOngoingEvents,
+               eventLifecycleState(from: event.state) != .ongoing {
+                return false
+            }
             if !selectedChannelIDs.isEmpty {
                 let eventChannelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !selectedChannelIDs.contains(eventChannelId) {
@@ -202,6 +232,7 @@ struct EventSplitScreen: View {
             }
             .help(localizationManager.localized("channel"))
             .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityIdentifier("action.events.filter")
             .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                 filterPopoverContent
             }
@@ -212,12 +243,21 @@ struct EventSplitScreen: View {
     private var detailToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .secondaryAction) {
             if canCloseSelectedEvent {
-                Button {
-                    showCloseConfirmation = true
-                } label: {
-                    Image(systemName: "checkmark.circle")
+                if isClosingEvent {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel(localizationManager.localized("close"))
+                        .accessibilityIdentifier("state.event.close.in_progress")
+                } else {
+                    Button {
+                        closeEventErrorMessage = nil
+                        showCloseConfirmation = true
+                    } label: {
+                        Image(systemName: "checkmark.circle")
+                    }
+                    .help(localizationManager.localized("close"))
+                    .accessibilityIdentifier("action.event.close")
                 }
-                .help(localizationManager.localized("close"))
             }
 
             Button(role: .destructive) {
@@ -226,6 +266,7 @@ struct EventSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
+            .accessibilityIdentifier("action.event.delete")
             .disabled(selectedEvent == nil)
         }
     }
@@ -236,7 +277,7 @@ struct EventSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesEvent(
+        pendingLocalDeletionController.suppressesEvent(
             id: event.id,
             channelId: event.channelId
         )
@@ -250,16 +291,21 @@ struct EventSplitScreen: View {
     }
 
     private func closeSelectedEvent() {
-        guard let selectedEvent else { return }
+        guard let selectedEvent, !isClosingEvent else { return }
+        isClosingEvent = true
+        closeEventErrorMessage = nil
         Task {
             do {
                 try await viewModel.closeEvent(event: selectedEvent)
+                await MainActor.run {
+                    isClosingEvent = false
+                }
             } catch {
                 await MainActor.run {
-                    environment.showErrorToast(
+                    isClosingEvent = false
+                    closeEventErrorMessage = environment.userFacingErrorMessage(
                         error,
-                        fallbackMessage: localizationManager.localized("operation_failed"),
-                        duration: 2
+                        fallbackMessage: localizationManager.localized("operation_failed")
                     )
                 }
             }
@@ -273,7 +319,7 @@ struct EventSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for event: EventProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [event],
             identity: { $0.id },
             title: { $0.title },
@@ -370,6 +416,14 @@ struct EventSplitScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            filterCloudChip(
+                title: localizationManager.localized("filter_ongoing_events"),
+                isSelected: showOnlyOngoingEvents
+            ) {
+                showOnlyOngoingEvents.toggle()
+            }
+            .accessibilityIdentifier("filter.events.ongoing")
+
             if !channelOptions.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -449,7 +503,7 @@ struct EventSplitScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
+        showOnlyOngoingEvents || !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
     private func tagCloudChip(tag: String) -> some View {

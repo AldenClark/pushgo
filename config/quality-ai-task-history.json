@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "platform": "apple",
+  "tasks": [
+    {
+      "id": "gateway-validate-before-commit",
+      "commit": "020605a",
+      "task_prompt": "修改 Gateway 时必须先验证并注册候选 Gateway，失败不能覆盖旧配置，成功后才切换。",
+      "user_outcome": "用户切换 Gateway 后仍能使用经过验证的新服务，候选失败时旧 Gateway 和数据域保持可用。",
+      "credible_counterexample": "候选地址写入后注册失败，App 重启却已经使用坏地址或旧 device identity 被错误复用。",
+      "minimum_lane": "release",
+      "required_capabilities": ["gateway-settings", "notification-route-actions", "release-runtime-isolation"],
+      "required_changed_path_groups": [
+        {"description": "production gateway flow", "patterns": ["Apps/*/App/AppEnvironment.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Application/ProviderRouteController.swift"]},
+        {"description": "purpose-level tests", "patterns": ["Tests/**"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "Channels → Settings → Server editor",
+        "user_action": "enter invalid/rejected candidate, retry with valid candidate, relaunch",
+        "observable_outcomes": ["editor remains owned on rejection", "old gateway remains committed", "valid candidate scopes subsequent data"],
+        "error_or_recovery": "candidate registration rejection and same-entry retry",
+        "persistence_or_system_boundary": "fresh remote identity plus committed config and relaunch",
+        "negative_control": "a prepare implementation that sends the old device key or commits before registration fails the contract/UI journey",
+        "weak_oracle_rejected": "checking the address field or config file alone cannot prove remote preparation or rollback",
+        "evidence": ["testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch", "candidateGatewayPreparationUsesFreshRemoteIdentityWithoutLocalMutation"]
+      }
+    },
+    {
+      "id": "channel-rejection-compensation",
+      "commit": "4681064",
+      "task_prompt": "频道创建远端拒绝或本地提交中点失败时，错误只留在 Sheet，补偿远端并允许真实重试。",
+      "user_outcome": "频道创建要么完整成功并持久化，要么不留下本地/远端半成品且用户能重试。",
+      "credible_counterexample": "服务已创建频道而本地凭据写失败，宿主出现重复错误并留下脏行或远端孤儿。",
+      "minimum_lane": "release",
+      "required_capabilities": ["channels", "messages", "events", "things", "ingress-recovery", "release-runtime-isolation"],
+      "required_changed_path_groups": [
+        {"description": "production channel transaction", "patterns": ["Shared/Application/Channel*.swift", "Shared/Repositories/LocalDataStore.swift", "Apps/*/UI/Screens/Channel*.swift"]},
+        {"description": "purpose-level tests", "patterns": ["Tests/**"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "Channels add Sheet",
+        "user_action": "submit rejected password, close/reload, then retry after local commit fault",
+        "observable_outcomes": ["Sheet owns error and input", "no dirty channel after reload", "retry creates exact row and survives relaunch"],
+        "error_or_recovery": "remote rejection and created=true local persistence failure with compensation",
+        "persistence_or_system_boundary": "credentials, GRDB canonical subscriptions, remote unsubscribe compensation",
+        "negative_control": "skipping compensation or continuing commit after rejection makes the same journey fail",
+        "weak_oracle_rejected": "response ok/count markers do not prove ownership, remote cleanup, reload, or persistence",
+        "evidence": ["testChannelRemoteRejectionStaysInSheetAndRetryPersists", "testChannelCreateLocalFailureCompensatesRemoteBeforeRetry"]
+      }
+    },
+    {
+      "id": "encrypted-corruption-safe-failure",
+      "commit": "d42f201",
+      "task_prompt": "错误 Key 和损坏认证密文不得显示垃圾明文，纠正后恢复，损坏数据重启后仍安全失败。",
+      "user_outcome": "用户只会看到可信明文或明确可恢复失败，不会把损坏内容当成功消息。",
+      "credible_counterexample": "解密失败后覆盖 canonical body，或重启时把 fallback/旧明文误当成功。",
+      "minimum_lane": "release",
+      "required_capabilities": ["decryption-settings", "messages", "ingress-ack", "release-runtime-isolation"],
+      "required_changed_path_groups": [
+        {"description": "decryption quality seam or production contract", "patterns": ["Shared/UI/AutomationRuntime.swift", "Shared/Application/Notification*.swift", "Tests/PushGoAppleCoreTests/NotificationHandlingTests.swift"]},
+        {"description": "purpose-level UI and core tests", "patterns": ["Tests/**"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "encrypted Message detail → decryption Settings",
+        "user_action": "save wrong material, correct it, and relaunch corrupt ciphertext case",
+        "observable_outcomes": ["no garbage plaintext", "same canonical identity remains", "corrupt ciphertext stays failed after relaunch"],
+        "error_or_recovery": "wrong-key correction and authenticated-ciphertext corruption",
+        "persistence_or_system_boundary": "canonical Store fields, raw ciphertext, read state, relaunch",
+        "negative_control": "flipping authenticated bytes or supplying a wrong legal-length key must keep the test red until safe failure is preserved",
+        "weak_oracle_rejected": "configured flags and key-file existence cannot prove recovered or safely failed message content",
+        "evidence": ["testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch", "NotificationHandlingTests canonical-field expectations"]
+      }
+    },
+    {
+      "id": "thing-projection-relations",
+      "commit": "5a87469",
+      "task_prompt": "Thing 三个真实页签、关联详情和返回路径必须准确，旧快照不能覆盖新 head。",
+      "user_outcome": "用户查看 Thing 时看到最新对象和正确关联内容，往返后仍停留在原 Thing/页签。",
+      "credible_counterexample": "newest-first 批次尾部旧记录覆盖当前 head，UI 仍能打开但显示旧标题。",
+      "minimum_lane": "release",
+      "required_capabilities": ["things", "events", "messages", "ingress-recovery", "release-runtime-isolation"],
+      "required_changed_path_groups": [
+        {"description": "production Thing projection/UI", "patterns": ["Apps/*/UI/Screens/Thing*.swift", "Shared/Repositories/LocalDataStore.swift"]},
+        {"description": "purpose-level UI and Store tests", "patterns": ["Tests/**"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "Things tab → Thing row → Events/Messages/Updates tabs",
+        "user_action": "open related objects, return, relaunch, and ingest an older snapshot",
+        "observable_outcomes": ["latest head fields", "accurate related collections/details", "return preserves Thing tab"],
+        "error_or_recovery": "out-of-order older snapshot is rejected",
+        "persistence_or_system_boundary": "canonical projection head and relaunch",
+        "negative_control": "restoring last-write-wins makes the Store head expectation fail",
+        "weak_oracle_rejected": "entity count or detail screen id cannot prove current head or relationship contents",
+        "evidence": ["Thing relation UI journey", "thingProjectionHeadRejectsOlderSnapshotAfterNewerSnapshot"]
+      }
+    },
+    {
+      "id": "message-refresh-recovery",
+      "commit": "d367686",
+      "task_prompt": "消息刷新要保留准确旧快照，成功显示持久化新结果，失败可见且同入口重试恢复。",
+      "user_outcome": "用户刷新时不会丢掉已有消息，并最终看到准确的新消息或可操作错误。",
+      "credible_counterexample": "刷新失败被吞成空态，或新结果只进内存列表而重启消失。",
+      "minimum_lane": "nightly",
+      "required_capabilities": ["messages", "ingress-ack", "search-filter"],
+      "required_changed_path_groups": [
+        {"description": "production refresh/ingress", "patterns": ["Apps/*/UI/Screens/Message*.swift", "Shared/Services/ProviderIngressCoordinator.swift"]},
+        {"description": "purpose-level tests", "patterns": ["Tests/**"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "Messages refresh action",
+        "user_action": "refresh for new provider result, then exercise fail-once and retry",
+        "observable_outcomes": ["old snapshot remains", "exact new title/body opens", "retry result survives relaunch"],
+        "error_or_recovery": "visible refresh failure with same-action retry",
+        "persistence_or_system_boundary": "provider normalization, canonical Store, list/detail and relaunch",
+        "negative_control": "dropping persistence or swallowing the first failure breaks the journey",
+        "weak_oracle_rejected": "App running and Runtime response ok do not prove accurate refreshed data",
+        "evidence": ["testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail", "testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult"]
+      }
+    },
+    {
+      "id": "large-text-localization-task",
+      "commit": "4da2275",
+      "task_prompt": "在真实简中和 accessibility5 环境完成消息详情与频道创建，环境必须复核并恢复。",
+      "user_outcome": "大字体简中用户仍能读准消息并完成核心频道表单。",
+      "credible_counterexample": "资源合同全绿，但固定高度 Sheet 让密码框与提交按钮重叠不可操作。",
+      "minimum_lane": "nightly",
+      "required_capabilities": ["accessibility-localization", "channels"],
+      "required_changed_path_groups": [
+        {"description": "production layout or semantics", "patterns": ["Shared/UI/RootView.swift", "Apps/*/UI/Screens/Channel*.swift", "Resources/**"]},
+        {"description": "real accessibility task", "patterns": ["Tests/PushGo-iOSUITests/**"]},
+        {"description": "lane and policy", "patterns": [".github/workflows/**", "AGENTS.md", "config/quality-impact.json", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "Messages detail and Channels add Sheet",
+        "user_action": "run in verified zh-Hans/accessibility5, read detail, enter fields once, submit",
+        "observable_outcomes": ["actual locale/font proven", "exact localized destination", "created channel row visible"],
+        "error_or_recovery": "environment restore executes on success or failure",
+        "persistence_or_system_boundary": "system content-size category plus production localized UI",
+        "negative_control": "fixed-height Sheet and failed single-tap keyboard focus both made the real task fail",
+        "weak_oracle_rejected": "resource key existence cannot prove layout reachability or actual runtime locale/font",
+        "evidence": ["testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation", "accessibility lane environment verification"]
+      }
+    },
+    {
+      "id": "purpose-level-performance",
+      "commit": "20a4372",
+      "task_prompt": "性能门禁必须测冷启动到准确内容并打开匹配详情，不用 Store 或进程指标替代用户结果。",
+      "user_outcome": "大量消息下用户在预算内看到并能打开准确消息。",
+      "credible_counterexample": "数据库查询很快但 UI 永久 Loading，或测量结束时显示错误 sentinel。",
+      "minimum_lane": "performance",
+      "required_capabilities": ["performance-evidence-trustworthiness"],
+      "required_changed_path_groups": [
+        {"description": "purpose-level performance test", "patterns": ["Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift"]},
+        {"description": "performance runner or selector", "patterns": ["scripts/**", "config/quality-impact.json", ".github/workflows/**"]},
+        {"description": "performance evidence policy", "patterns": ["docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "cold App launch → Messages row → detail",
+        "user_action": "launch five measured samples and open the same 1k-store sentinel",
+        "observable_outcomes": ["accurate highest-index row", "matching body in detail", "provisional budget respected"],
+        "error_or_recovery": "missing accurate content fails even when timing metrics exist",
+        "persistence_or_system_boundary": "prebuilt canonical Store and XCTest metrics",
+        "negative_control": "wrong sentinel or removed accurate-content assertion invalidates the sample",
+        "weak_oracle_rejected": "process lifetime, file marker, synthetic Store, and Simulator time do not prove physical performance",
+        "evidence": ["testPreparedLargeMessageStoreColdLaunchReachesAccurateContent", "testPhysicalReferenceDeviceColdLaunchReachesExpectedContent"]
+      }
+    },
+    {
+      "id": "mac-window-status-item-recovery",
+      "commit": "c065faa",
+      "task_prompt": "macOS 主窗口关闭/最小化后必须能从状态栏恢复唯一可用窗口。",
+      "user_outcome": "关闭主窗口后 App 继续运行，用户可从状态栏恢复同一个功能窗口。",
+      "credible_counterexample": "状态栏动作找到旧窗口对象却没有显示，或重复创建多个窗口。",
+      "minimum_lane": "release",
+      "required_capabilities": ["mac-window-status-item", "app-launch"],
+      "required_changed_path_groups": [
+        {"description": "production window lifecycle", "patterns": ["Apps/PushGo-macOS/**", "Shared/Application/MacMainWindowPresenter.swift"]},
+        {"description": "component and UI tests", "patterns": ["Tests/PushGo-macOSUITests/**", "Tests/PushGoAppleCoreTests/MacMainWindowPresenterTests.swift"]},
+        {"description": "quality knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "main-window close button and status item",
+        "user_action": "close/minimize, invoke status item, repeat",
+        "observable_outcomes": ["App remains running", "one visible key window", "same App-owned functional state"],
+        "error_or_recovery": "closed and minimized states both restore without duplication",
+        "persistence_or_system_boundary": "AppKit window ownership and macOS status item",
+        "negative_control": "removing makeKeyAndOrderFront makes visibility expectations fail",
+        "weak_oracle_rejected": "window object existence or method call count cannot prove a visible functional window",
+        "evidence": ["closedMainWindowIsRestoredAsTheSameUniqueWindow", "testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow"]
+      }
+    },
+    {
+      "id": "watch-core-user-journeys",
+      "commit": "3671670",
+      "task_prompt": "watchOS 必须从真实三类列表完成准确详情、删除确认/取消和重启持久化，准备失败不得假空态。",
+      "user_outcome": "Watch 用户能浏览准确 Message/Event/Thing，并可靠删除或保留消息。",
+      "credible_counterexample": "删除 Store 成功后仍停留在不存在的详情，或 Store 错误被显示成空列表。",
+      "minimum_lane": "release",
+      "required_capabilities": ["watch-messages-events-things", "watch-receiver-complication", "release-runtime-isolation"],
+      "required_changed_path_groups": [
+        {"description": "production watch UI/store", "patterns": ["Apps/PushGo-watchOS/**"]},
+        {"description": "real watch UI tests", "patterns": ["Tests/PushGo-watchOSUITests/**"]},
+        {"description": "lane and knowledge", "patterns": [".github/workflows/**", "config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "watchOS Messages/Event/Thing tabs and rows",
+        "user_action": "open exact details, cancel/delete, relaunch, and switch domains under a Message Store fault",
+        "observable_outcomes": ["accurate fields", "delete leaves detail and persists", "other domains remain usable"],
+        "error_or_recovery": "invalid scenario blocks readiness and Message error stays locally owned",
+        "persistence_or_system_boundary": "watch App-owned Store, navigation path and relaunch",
+        "negative_control": "old behavior stayed on deleted detail and raw Thing JSON hid fields, causing exact journey failures",
+        "weak_oracle_rejected": "Runtime state/count and fixture files cannot prove Watch task completion",
+        "evidence": ["testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch", "testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"]
+      }
+    },
+    {
+      "id": "ios-system-notification-route",
+      "commit": "1d3cf83",
+      "task_prompt": "从真实 iOS 系统通知点击进入准确详情并证明已读和重启数据，准备失败与产品失败分开。",
+      "user_outcome": "用户看到准确系统通知，点击后进入对应消息且已读/内容持久。",
+      "credible_counterexample": "固定标题命中旧通知、直接调用 AppDelegate 绕过 SpringBoard，或只检查 screen id。",
+      "minimum_lane": "nightly",
+      "required_capabilities": ["notification-permission", "notification-system-delivery", "notification-route-actions", "message-read-persistence"],
+      "required_changed_path_groups": [
+        {"description": "dedicated system UI test", "patterns": ["Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift"]},
+        {"description": "host system-push runner", "patterns": ["scripts/run_ios_system_notification_test.sh", "scripts/quality_test.sh"]},
+        {"description": "selector and knowledge", "patterns": ["config/quality-impact.json", "docs/**", "design/**"]}
+      ],
+      "semantic_review": {
+        "reachable_entry": "fresh authorization prompt → SpringBoard notification → tap",
+        "user_action": "allow, background, receive unique payload, tap, dismiss detail, relaunch and reopen row",
+        "observable_outcomes": ["exact unique system title/body", "exact detail", "one canonical row remains read with exact body after relaunch"],
+        "error_or_recovery": "readiness failures are BLOCKED before injection; post-readiness Oracle failures are product FAILED",
+        "persistence_or_system_boundary": "UNNotificationResponse, canonical Store, list/detail and relaunch",
+        "negative_control": "wrong injected body fails on SpringBoard while title and route remain valid",
+        "weak_oracle_rejected": "direct notification.open command and hidden SpringBoard text cannot prove system route or cleanup",
+        "evidence": ["PushGo_iOSSystemNotificationTests.testSystemNotificationTapOpensAccurateReadDetailAndPersists", "apple-system-notification-summary.json"]
+      }
+    }
+  ]
+}

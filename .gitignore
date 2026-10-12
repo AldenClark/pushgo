@@ -6,7 +6,10 @@ xcuserdata/
 .swiftpm/
 .deriveddata-*/
 artifacts/
-docs/
+docs/*
+!docs/quality/
+docs/quality/*
+!docs/quality/release-smoke.md
 
 *.xcuserstate
 *.xccheckout
@@ -21,3 +24,5 @@ docs/
 *.dSYM
 *.xcresult
 *.profraw
+__pycache__/
+*.py[cod]

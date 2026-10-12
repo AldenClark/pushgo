@@ -2,18 +2,23 @@ import SwiftUI
 
 struct ThingSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
     @Binding var selection: String?
     var openThingId: String? = nil
+    var unavailableTargetFeedback: String? = nil
+    var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var searchQuery: String = ""
+    @State private var searchFieldText: String = ""
+    @State private var lastPublishedSearchResultsSignature: String?
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
-    @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
+    @State private var keepsDetailEmptyAfterUnavailableTarget = false
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -33,19 +38,17 @@ struct ThingSplitScreen: View {
     }
 
     private var splitView: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             thingListPane
+            Divider()
             thingDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .onAppear {
             if searchFieldText != searchQuery {
                 searchFieldText = searchQuery
             }
             syncSelection()
-        }
-        .onChange(of: searchFieldText) { _, newValue in
-            guard searchQuery != newValue else { return }
-            searchQuery = newValue
         }
         .onChange(of: viewModel.things) { _, _ in
             syncSelection()
@@ -53,11 +56,16 @@ struct ThingSplitScreen: View {
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
         }
+        .onChange(of: searchFieldText) { _, newValue in
+            guard searchQuery != newValue else { return }
+            searchQuery = newValue
+        }
         .onChange(of: openThingId) { _, _ in
             syncSelection()
         }
         .onChange(of: selection) { _, id in
             guard let id else { return }
+            keepsDetailEmptyAfterUnavailableTarget = false
             Task { @MainActor in
                 let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: id, forceRefresh: true)
                 if hydrated == nil, selection == id {
@@ -66,7 +74,7 @@ struct ThingSplitScreen: View {
                 }
             }
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -74,32 +82,50 @@ struct ThingSplitScreen: View {
     @ViewBuilder
     private var thingListPane: some View {
         navigationContainer {
-            ThingListScreen(
-                things: filteredThings,
-                selection: $selection,
-                isLoadingMore: viewModel.isLoadingMoreThings,
-                onReachEnd: {
-                    Task { await viewModel.loadMoreThings() }
-                },
-                onOpenThing: { thing in
-                    selection = thing.id
-                },
-                onCopyThingIdentifier: { thing in
-                    PushGoSystemInteraction.copyTextToPasteboard(thing.id)
-                    environment.showToast(
-                        message: localizationManager.localized("copied"),
-                        style: .success,
-                        duration: 1.6
+            VStack(spacing: 0) {
+                if let unavailableTargetFeedback {
+                    AppInlineFeedbackBanner(
+                        message: unavailableTargetFeedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.entity.target_unavailable",
+                        dismissAction: {
+                            keepsDetailEmptyAfterUnavailableTarget = false
+                            onUnavailableTargetFeedbackChanged?(nil)
+                        }
                     )
-                },
-                onDeleteThing: { thing in
-                    Task { await scheduleDeletion(for: thing) }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                 }
-            )
-            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            .refreshable {
-                await handleProviderIngressPullRefresh()
+
+                ThingListScreen(
+                    things: filteredThings,
+                    selection: $selection,
+                    isLoadingMore: viewModel.isLoadingMoreThings,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreThings() }
+                    },
+                    onOpenThing: { thing in
+                        keepsDetailEmptyAfterUnavailableTarget = false
+                        onUnavailableTargetFeedbackChanged?(nil)
+                        selection = thing.id
+                    },
+                    onCopyThingIdentifier: { thing in
+                        PushGoSystemInteraction.copyTextToPasteboard(thing.id)
+                        environment.showToast(
+                            message: localizationManager.localized("copied"),
+                            style: .success,
+                            duration: 1.6
+                        )
+                    },
+                    onDeleteThing: { thing in
+                        Task { await scheduleDeletion(for: thing) }
+                    }
+                )
+                .refreshable {
+                    await handleProviderIngressPullRefresh()
+                }
             }
+            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .searchable(
                 text: $searchFieldText,
                 placement: .toolbar,
@@ -122,7 +148,8 @@ struct ThingSplitScreen: View {
         [
             selection ?? "",
             openThingId ?? "",
-            "\(filteredThings.count)",
+            searchQuery,
+            filteredThings.map(\.id).joined(separator: ","),
         ].joined(separator: "|")
     }
 
@@ -134,11 +161,20 @@ struct ThingSplitScreen: View {
             openedEntityType: selectedThing == nil ? nil : "thing",
             openedEntityId: selectedThing?.id
         )
+        let results = filteredThings
+        let resultsSignature = [searchQuery, results.map(\.id).joined(separator: ",")].joined(separator: "|")
+        guard lastPublishedSearchResultsSignature != resultsSignature else { return }
+        lastPublishedSearchResultsSignature = resultsSignature
+        PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+            query: searchQuery,
+            resultCount: results.count,
+            domain: "things",
+            resultIDs: results.map(\.id)
+        )
     }
 #endif
 
     private var filteredThings: [ThingProjection] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
             if !selectedChannelIDs.isEmpty {
@@ -153,28 +189,10 @@ struct ThingSplitScreen: View {
                     return false
                 }
             }
-            guard !query.isEmpty else { return true }
-            let externalValues = thing.externalIDs
-                .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
-                .map { "\($0.key) \($0.value)" }
-                .joined(separator: " ")
-            return [
-                thing.title,
-                thing.summary ?? "",
-                thing.tags.joined(separator: " "),
-                thing.id,
-                normalizedThingState(thing.state),
-                thing.channelId ?? "",
-                thing.locationType ?? "",
-                thing.locationValue ?? "",
-                externalValues,
-                thing.attrsJSON ?? "",
-                thing.relatedMessages.map(\.title).joined(separator: " "),
-                thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
-            ]
-            .joined(separator: " ")
-            .lowercased()
-            .contains(query)
+            return SearchQuerySemantics.matchesEntityFields(
+                searchableFields(for: thing),
+                rawQuery: searchQuery
+            )
         }
         return filtered.sorted { lhs, rhs in
             let lhsRank = stateSortPriority(lhs.state)
@@ -199,6 +217,32 @@ struct ThingSplitScreen: View {
             }
     }
 
+    private func searchableFields(for thing: ThingProjection) -> [String] {
+        let externalValues = thing.externalIDs
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        let metadataValues = thing.metadata
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        return [
+            thing.title,
+            thing.summary ?? "",
+            thing.tags.joined(separator: " "),
+            thing.id,
+            normalizedThingState(thing.state),
+            thing.channelId ?? "",
+            thing.locationType ?? "",
+            thing.locationValue ?? "",
+            externalValues,
+            thing.attrsJSON ?? "",
+            metadataValues,
+            thing.relatedMessages.map(\.title).joined(separator: " "),
+            thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
+        ]
+    }
+
     private func stateSortPriority(_ state: String?) -> Int {
         switch normalizedThingState(state) {
         case "ACTIVE":
@@ -218,7 +262,7 @@ struct ThingSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesThing(
+        pendingLocalDeletionController.suppressesThing(
             id: thing.id,
             channelId: thing.channelId
         )
@@ -255,6 +299,7 @@ struct ThingSplitScreen: View {
             } label: {
                 Image(systemName: "trash")
             }
+            .accessibilityIdentifier("action.thing.delete")
             .help(localizationManager.localized("delete"))
             .disabled(selectedThing == nil)
         }
@@ -267,7 +312,7 @@ struct ThingSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [thing],
             identity: { $0.id },
             title: { $0.title },
@@ -290,7 +335,6 @@ struct ThingSplitScreen: View {
         {
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
-                searchFieldText = ""
                 return
             }
             if !selectedChannelIDs.isEmpty {
@@ -302,20 +346,41 @@ struct ThingSplitScreen: View {
                 return
             }
             if filteredThings.contains(where: { $0.id == target }) {
+                keepsDetailEmptyAfterUnavailableTarget = false
                 selection = target
                 hydrationRequestedThingIDs.remove(target)
+                onUnavailableTargetFeedbackChanged?(nil)
                 onOpenThingHandled?()
                 return
             }
-            if !hydrationRequestedThingIDs.contains(target) {
-                hydrationRequestedThingIDs.insert(target)
-                Task { @MainActor in
-                    await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
-                    hydrationRequestedThingIDs.remove(target)
-                    syncSelection()
-                }
+            if hydrationRequestedThingIDs.contains(target) {
                 return
             }
+            hydrationRequestedThingIDs.insert(target)
+            Task { @MainActor in
+                let hydrated = await viewModel.ensureThingDetailsLoaded(
+                    thingId: target,
+                    forceRefresh: true
+                )
+                hydrationRequestedThingIDs.remove(target)
+                guard hydrated != nil else {
+                    guard viewModel.error == nil else { return }
+                    keepsDetailEmptyAfterUnavailableTarget = true
+                    selection = nil
+                    onUnavailableTargetFeedbackChanged?(
+                        localizationManager.localized("gateway_resource_not_found")
+                    )
+                    onOpenThingHandled?()
+                    return
+                }
+                syncSelection()
+            }
+            return
+        }
+
+        if keepsDetailEmptyAfterUnavailableTarget {
+            selection = nil
+            return
         }
 
         if selection != nil,

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import pathlib
+import plistlib
 import re
 
 
@@ -15,6 +16,17 @@ def require(errors: list[str], condition: bool, message: str) -> None:
         errors.append(message)
 
 
+def registered_url_schemes(path: pathlib.Path) -> set[str]:
+    with path.open("rb") as stream:
+        metadata = plistlib.load(stream)
+    return {
+        scheme
+        for entry in metadata.get("CFBundleURLTypes", [])
+        for scheme in entry.get("CFBundleURLSchemes", [])
+        if isinstance(scheme, str)
+    }
+
+
 def main() -> int:
     errors: list[str] = []
     project = (ROOT / "pushgo.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
@@ -23,6 +35,16 @@ def main() -> int:
     profile_helper = (ROOT / "scripts/ensure_macos_widget_app_store_profile.sh").read_text(
         encoding="utf-8"
     )
+
+    for relative_path in (
+        "config/PushGo-macOS-Info.plist",
+        "Apps/PushGo-macOS/PushGo-macOS-DMG-Info.plist",
+    ):
+        require(
+            errors,
+            "pushgo" in registered_url_schemes(ROOT / relative_path),
+            f"{relative_path} must register pushgo so system routes can reach the App",
+        )
 
     require(
         errors,

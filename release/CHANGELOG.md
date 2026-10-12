@@ -12,6 +12,29 @@ PushGo policy:
 
 ## [Unreleased]
 
+## [v1.3.3] - TBD
+
+### Changed
+- Prepared Apple app, extension, widget, and direct-distribution targets at `MARKETING_VERSION = 1.3.3`, `PUSHGO_DISPLAY_VERSION = v1.3.3`, and `CURRENT_PROJECT_VERSION = 91`; UI-test target versions remain separate.
+- Added the versioned release note source `release/update-notes/v1.3.3.json`.
+- Pinned the Xcode Textual dependency and resolved package graph to published revision `0039bfbf016c9cb6e54da7c8af0b8f6a8ad7d12e`.
+- Aligned SwiftPM Core's GRDB 7.11.0 pin with the production Xcode package revision for release verification.
+
+### Improved
+- Added accurate slow-search and message-pagination feedback on iOS and macOS, with representative user-journey coverage.
+- Restored the macOS main window from its status item and strengthened pending-deletion, navigation, receiver, and storage recovery journeys.
+
+### Fixed
+- Kept locally owned read state when ordinary ingress refreshes an existing message, including the bulk-upsert path.
+- Reclaimed expired durable ACK leases so an interrupted worker can resume gateway acknowledgement while unexpired leases remain fenced.
+- Scoped persisted-notification and canonical-request duplicate checks to the source gateway, preserving both messages when different gateways reuse a delivery identifier.
+- Validated replacement gateways before local commit and kept cancellation, dismissal, and error feedback aligned with the save lifecycle.
+- Preserved an empty macOS Thing detail for unavailable routes instead of selecting an unrelated surviving object.
+- Cleared stale Thing projection fields after updates and kept channel rename errors in the owning form.
+- Included Textual's stale attributed-image attachment cleanup, playback-restart timer fencing, and async image-view reuse guard.
+- Resumed interrupted same-directory and App Group-to-app-local SQLite file-family migrations from a persisted source marker; published copied files only after a complete staged copy so the matching WAL remains recoverable.
+- Journaled Apple Watch old gateway/device routes before configuration changes, fenced stale writers and retired keys, and retried idempotent cleanup on foreground or launch; incomplete Keychain provisioning now blocks remote sync until a full iPhone snapshot is committed.
+
 ## [v1.3.0] - 2026-08-23
 
 ### Changed

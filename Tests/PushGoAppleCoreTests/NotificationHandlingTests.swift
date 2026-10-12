@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 import UserNotifications
@@ -46,6 +47,93 @@ private func makeTestProviderPullContext(
 }
 
 struct NotificationHandlingTests {
+    @Test
+    func validKeyRecoveryReparsesCanonicalMessageAndPreservesIdentity() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let keyData = Data("QualityKey123456".utf8)
+            let nonceData = Data((0..<12).map(UInt8.init))
+            let plaintext = try JSONSerialization.data(withJSONObject: [
+                "title": "Recovered Quality Message",
+                "body": "Recovered from the original encrypted payload.",
+            ])
+            let sealedBox = try AES.GCM.seal(
+                plaintext,
+                using: SymmetricKey(data: keyData),
+                nonce: AES.GCM.Nonce(data: nonceData)
+            )
+            var envelope = sealedBox.ciphertext
+            envelope.append(sealedBox.tag)
+            envelope.append(nonceData)
+            let originalID = UUID()
+            let originalDate = Date(timeIntervalSince1970: 1_768_464_000)
+            let original = PushMessage(
+                id: originalID,
+                messageId: "quality-encrypted-message",
+                title: "Encrypted Quality Message",
+                body: "Configure decryption to read this message.",
+                isRead: true,
+                receivedAt: originalDate,
+                rawPayload: [
+                    "entity_type": AnyCodable("message"),
+                    "message_id": AnyCodable("quality-encrypted-message"),
+                    "delivery_id": AnyCodable("quality-encrypted-delivery"),
+                    "title": AnyCodable("Encrypted Quality Message"),
+                    "body": AnyCodable("Configure decryption to read this message."),
+                    "ciphertext": AnyCodable(envelope.base64EncodedString()),
+                    "decryption_state": AnyCodable("notConfigured"),
+                ],
+                status: .normal,
+                decryptionState: .notConfigured
+            )
+            try await store.saveMessage(original)
+            let before = try await store.loadMessage(id: originalID)
+            #expect(before?.body == "Configure decryption to read this message.")
+            #expect(before?.decryptionState == .notConfigured)
+
+            let failedReport = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+                using: ServerConfig.NotificationKeyMaterial(
+                    algorithm: .aesGcm,
+                    keyData: Data(repeating: 0xA5, count: 16),
+                    ivBase64: nil,
+                    updatedAt: Date()
+                ),
+                dataStore: store
+            )
+            let failed = try await store.loadMessage(id: originalID)
+
+            #expect(failedReport == .init(examinedCount: 1, updatedCount: 1, decryptedCount: 0))
+            #expect(failed?.id == originalID)
+            #expect(failed?.messageId == original.messageId)
+            #expect(failed?.isRead == true)
+            #expect(failed?.receivedAt == originalDate)
+            #expect(failed?.title == original.title)
+            #expect(failed?.body == original.body)
+            #expect(failed?.decryptionState == .decryptFailed)
+            #expect(failed?.rawPayload["ciphertext"]?.value as? String == envelope.base64EncodedString())
+
+            let report = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+                using: ServerConfig.NotificationKeyMaterial(
+                    algorithm: .aesGcm,
+                    keyData: keyData,
+                    ivBase64: nil,
+                    updatedAt: Date()
+                ),
+                dataStore: store
+            )
+            let recovered = try await store.loadMessage(id: originalID)
+
+            #expect(report == .init(examinedCount: 1, updatedCount: 1, decryptedCount: 1))
+            #expect(recovered?.id == originalID)
+            #expect(recovered?.messageId == original.messageId)
+            #expect(recovered?.isRead == true)
+            #expect(recovered?.receivedAt == originalDate)
+            #expect(recovered?.title == "Recovered Quality Message")
+            #expect(recovered?.body == "Recovered from the original encrypted payload.")
+            #expect(recovered?.decryptionState == .decryptOk)
+            #expect(recovered?.rawPayload["ciphertext"]?.value as? String == envelope.base64EncodedString())
+        }
+    }
+
     @Test
     func skipPersistenceRecognizesTruthyFlagVariants() {
         #expect(NotificationHandling.shouldSkipPersistence(for: ["_skip_persist": "true"]))
@@ -683,6 +771,45 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func remotePayloadSnapshotsMutableFoundationValuesBeforePersistence() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let title = NSMutableString(string: "Original ingress title")
+            let nestedValue = NSMutableString(string: "original nested value")
+            let attributes = NSMutableDictionary(dictionary: ["source": nestedValue])
+            let input = NotificationPersistenceCoordinator.RemotePayload(
+                payload: [
+                    "message_id": "mutable-alias-message-001",
+                    "delivery_id": "mutable-alias-delivery-001",
+                    "entity_type": "message",
+                    "title": title,
+                    "body": "Original ingress body",
+                    "attrs": attributes,
+                ],
+                requestIdentifier: "mutable-alias-delivery-001"
+            )
+
+            title.setString("Mutated ingress title")
+            nestedValue.setString("mutated nested value")
+            attributes["late"] = "mutation after construction"
+
+            let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                [input],
+                dataStore: store
+            )
+            guard outcomes.count == 1, case .persistedMain = outcomes[0] else {
+                Issue.record("The production persistence path must accept the snapshotted payload.")
+                return
+            }
+            let stored = try #require(try await store.loadMessages().first)
+            #expect(stored.title == "Original ingress title")
+            #expect(stored.body == "Original ingress body")
+            let storedAttributes = try #require(stored.rawPayload["attrs"]?.value as? [String: Any])
+            #expect(storedAttributes["source"] as? String == "original nested value")
+            #expect(storedAttributes["late"] == nil)
+        }
+    }
+
+    @Test
     func persistRemotePayloadIfNeededPersistsEventWithoutMessageIdUsingDeliveryIdentity() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let payload: [AnyHashable: Any] = [
@@ -708,6 +835,63 @@ struct NotificationHandlingTests {
             #expect(events.count == 1)
             #expect(events.first?.eventId == "evt-pull-001")
             #expect(events.first?.notificationRequestId == "delivery-event-001")
+        }
+    }
+
+    @Test
+    func qualityEventCloseDeliveryUpdatesCanonicalProjectionWithoutLosingEventIdentity() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let seededEvent = makeEntityRecord(
+                messageId: "quality-event-active-message",
+                notificationRequestId: "quality-event-active-delivery",
+                title: "P2 Event Active",
+                body: "Event fixture for app-owned UI validation.",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "quality-event-active",
+                    "event_id": "quality-event-active",
+                    "event_state": "active",
+                    "projection_destination": "event_head",
+                    "channel_id": "quality-channel",
+                    "severity": "warning",
+                ]
+            )
+            try await store.saveEntityRecords([seededEvent])
+
+            let delivery = try #require(
+                PushGoQualityEventCloseDelivery.make(
+                    boundaryPayload: [
+                        "channel_id": "quality-channel",
+                        "event_id": "quality-event-active",
+                        "op_id": "quality-close-operation",
+                        "status": "closed",
+                        "message": "closed by the user",
+                        "severity": "warning",
+                    ],
+                    endpointPath: "/event/close",
+                    scenario: .acceptedAndDelivered
+                )
+            )
+
+            let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                delivery.payload,
+                requestIdentifier: delivery.requestIdentifier,
+                dataStore: store
+            )
+            guard case .persistedMain = outcome else {
+                Issue.record("The accepted close response must reach the production persistence path.")
+                return
+            }
+
+            let detail = try await store.loadEventProjectionDetail(eventId: "quality-event-active")
+            #expect(detail.head?.eventState == "closed")
+            #expect(detail.head?.title == "P2 Event Active")
+            #expect(detail.head?.eventId == "quality-event-active")
+            #expect(detail.head?.channel == "quality-channel")
+            #expect(detail.messages.contains { message in
+                message.notificationRequestId == delivery.requestIdentifier
+                    && message.eventState == "closed"
+            })
         }
     }
 

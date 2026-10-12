@@ -4,12 +4,43 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Signing acceptance target (artifacts are retained without publication)
+        type: choice
+        required: true
+        default: app-store
+        options: [app-store, dmg]
+      candidate_version:
+        description: Product MARKETING_VERSION to sign and retain
+        type: string
+        required: true
+        default: "1.3.3"
 
 jobs:
+  smoke:
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [core, gateway-integration, ios, ios-notification, macos, watchos]
+    uses: ./.github/workflows/apple-release-smoke.yml
+    with:
+      platform: ${{ matrix.platform }}
   release_gate:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 90
+    outputs:
+      verified_tag_push: ${{ steps.release_context.outputs.verified_tag_push }}
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode
@@ -17,31 +48,59 @@ jobs:
         with:
           xcode-version: "26.4"
       - name: Validate tag metadata and release notes
+        id: release_context
         shell: bash
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-beta\.[1-9][0-9]*)?$ ]]; then
-            semver="${BASH_REMATCH[1]}"
+          verified_tag_push=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-beta\.[1-9][0-9]*)?$ ]]; then
+              semver="${BASH_REMATCH[1]}"
+            else
+              echo "Unsupported release tag: $tag" >&2
+              exit 1
+            fi
+            verified_tag_push=true
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            semver="$CANDIDATE_VERSION"
+            if ! [[ "$semver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "candidate_version must be a stable X.Y.Z version" >&2
+              exit 1
+            fi
           else
-            echo "Unsupported release tag: $tag" >&2
+            echo "Unsupported Apple release event: $GITHUB_EVENT_NAME" >&2
             exit 1
           fi
-          settings="$(xcodebuild -project pushgo.xcodeproj -scheme PushGo-iOS -configuration Release -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipPackageUpdates -showBuildSettings)"
-          marketing="$(printf '%s\n' "$settings" | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*(.+)$/\1/p' | sort -u)"
-          test "$marketing" = "$semver"
-          if [[ "$tag" != *-beta.* ]]; then
-            grep -Fq "## [$tag]" release/RELEASE_NOTES.md
+          for scheme in PushGo-iOS PushGo-macOS PushGo-watchOS; do
+            settings="$(xcodebuild -project pushgo.xcodeproj -scheme "$scheme" -configuration Release -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipPackageUpdates -showBuildSettings)"
+            marketing="$(printf '%s\n' "$settings" | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*(.+)$/\1/p' | sort -u)"
+            if [[ "$marketing" != "$semver" ]]; then
+              echo "$scheme MARKETING_VERSION mismatch: expected $semver, got ${marketing:-<empty>}" >&2
+              exit 1
+            fi
+          done
+          if [[ "$verified_tag_push" == "true" ]]; then
+            if [[ "$GITHUB_REF_NAME" != *-beta.* ]]; then
+              grep -Fq "## [$GITHUB_REF_NAME]" release/RELEASE_NOTES.md
+            fi
+            test -f "release/update-notes/${GITHUB_REF_NAME}.json"
+            jq -e 'type == "object" and length > 0 and all(.[]; type == "string" and length > 0)' "release/update-notes/${GITHUB_REF_NAME}.json" >/dev/null
           fi
-          test -f "release/update-notes/${tag}.json"
-          jq -e 'type == "object" and length > 0 and all(.[]; type == "string" and length > 0)' "release/update-notes/${tag}.json" >/dev/null
+          echo "verified_tag_push=$verified_tag_push" >> "$GITHUB_OUTPUT"
       - name: Build all Apple targets and run package tests
         env:
           CI: "true"
         run: bash scripts/apple_concurrency_gate.sh
 
   app_store_release:
-    needs: release_gate
+    needs: [release_gate, smoke]
+    if: >-
+      always() && needs.release_gate.result == 'success' &&
+      ((github.event_name == 'push' && needs.smoke.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'app-store'))
     runs-on: macos-26
     timeout-minutes: 120
     permissions:
@@ -68,6 +127,12 @@ jobs:
       LC_ALL: en_US.UTF-8
       LANG: en_US.UTF-8
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,6 +162,8 @@ jobs:
       - name: Resolve SemVer release context
         id: resolve
         shell: bash
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
         run: |
           set -euo pipefail
 
@@ -105,7 +172,15 @@ jobs:
           semver_version=""
           semver_full_version=""
 
-          if [[ "$tag_name" =~ ^v(([0-9]+\.[0-9]+\.[0-9]+)-beta\.[0-9]+)$ ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if ! [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "candidate_version must be a stable X.Y.Z version" >&2
+              exit 1
+            fi
+            release_kind="acceptance"
+            semver_full_version="$CANDIDATE_VERSION"
+            semver_version="$CANDIDATE_VERSION"
+          elif [[ "$tag_name" =~ ^v(([0-9]+\.[0-9]+\.[0-9]+)-beta\.[0-9]+)$ ]]; then
             release_kind="beta"
             semver_full_version="${BASH_REMATCH[1]}"
             semver_version="${BASH_REMATCH[2]}"
@@ -272,6 +347,7 @@ jobs:
           bash ./scripts/verify_locked_packages.sh
 
       - name: Extract release notes from release/update-notes
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -335,6 +411,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Generate App Store metadata from release/appstore
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -749,7 +826,30 @@ jobs:
             --subject-pattern 'artifacts/release/*.ipa' \
             --subject-pattern 'artifacts/release/*.pkg'
 
+      - name: Record manual store signing acceptance
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          python3 scripts/record_apple_signing_acceptance.py app-store
+          --version "$APP_STORE_VERSION"
+          --artifact artifacts/release/PushGo-iOS.ipa
+          --artifact artifacts/release/PushGo-macOS.pkg
+          --validation profile-entitlements
+          --validation fastlane-archive-export
+          --output artifacts/release/evidence/app-store/signing-acceptance.json
+
+      - name: Retain manual signed store candidates
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pushgo-store-signing-acceptance-${{ github.run_id }}
+          path: |
+            artifacts/release/*.ipa
+            artifacts/release/*.pkg
+            artifacts/release/evidence/app-store/**
+          if-no-files-found: error
+
       - name: Attest store artifacts
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
@@ -764,6 +864,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload attested store artifacts
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -786,7 +887,11 @@ jobs:
           if-no-files-found: warn
 
   dmg_release:
-    needs: release_gate
+    needs: [release_gate, smoke]
+    if: >-
+      always() && needs.release_gate.result == 'success' &&
+      ((github.event_name == 'push' && needs.smoke.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'dmg'))
     runs-on: macos-26
     timeout-minutes: 120
     permissions:
@@ -811,6 +916,12 @@ jobs:
       LC_ALL: en_US.UTF-8
       LANG: en_US.UTF-8
     steps:
+      - name: Ensure native quality shell tools
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          fi
+          command -v rg
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -840,6 +951,8 @@ jobs:
       - name: Resolve SemVer release context
         id: resolve
         shell: bash
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
         run: |
           set -euo pipefail
 
@@ -849,7 +962,15 @@ jobs:
           semver_full_version=""
           dmg_output_name=""
 
-          if [[ "$tag_name" =~ ^v(([0-9]+\.[0-9]+\.[0-9]+)-beta\.[0-9]+)$ ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if ! [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "candidate_version must be a stable X.Y.Z version" >&2
+              exit 1
+            fi
+            release_kind="acceptance"
+            semver_full_version="$CANDIDATE_VERSION"
+            semver_version="$CANDIDATE_VERSION"
+          elif [[ "$tag_name" =~ ^v(([0-9]+\.[0-9]+\.[0-9]+)-beta\.[0-9]+)$ ]]; then
             release_kind="beta"
             semver_full_version="${BASH_REMATCH[1]}"
             semver_version="${BASH_REMATCH[2]}"
@@ -900,7 +1021,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
 
-      - name: Validate DMG signing and deploy assets
+      - name: Validate DMG signing assets
         shell: bash
         run: |
           set -euo pipefail
@@ -911,7 +1032,6 @@ jobs:
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_BASE64:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_BASE64")
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_PASSWORD:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_PASSWORD")
           [[ -z "${DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64:-}" ]] && missing+=("DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64")
-          [[ -z "${PUSHGO_SPARKLE_BASE_URL:-}" ]] && missing+=("PUSHGO_SPARKLE_BASE_URL")
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing required secrets/vars: %s\n' "${missing[*]}"
             exit 1
@@ -920,7 +1040,6 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
           DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
@@ -1069,6 +1188,7 @@ jobs:
           bash ./scripts/verify_locked_packages.sh
 
       - name: Extract release notes from release/RELEASE_NOTES
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1113,6 +1233,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Validate Sparkle/update host configuration
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1197,7 +1318,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
 
       - name: Run fastlane release dmg
-        if: steps.resolve.outputs.release_kind == 'release'
+        if: steps.resolve.outputs.release_kind != 'beta'
         run: bundle _2.5.23_ exec fastlane ios release_dmg
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -1240,7 +1361,19 @@ jobs:
             --output-dir artifacts/release/evidence/dmg \
             --subject-pattern 'artifacts/release/*.dmg'
 
+      - name: Record manual DMG signing acceptance
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          python3 scripts/record_apple_signing_acceptance.py dmg
+          --version "$SEMVER_VERSION"
+          --artifact "$RELEASE_DMG_PATH"
+          --validation direct-profile-entitlements
+          --validation developer-id-signing
+          --validation notarization-stapling
+          --output artifacts/release/evidence/dmg/signing-acceptance.json
+
       - name: Attest signed DMG
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ env.RELEASE_DMG_PATH }}
@@ -1253,6 +1386,7 @@ jobs:
           if-no-files-found: error
 
       - name: Prepare Sparkle Ed25519 signing key
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1269,6 +1403,7 @@ jobs:
           PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64: ${{ secrets.PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64 }}
 
       - name: Generate Sparkle appcast
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1300,6 +1435,7 @@ jobs:
           PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
 
       - name: Prepare update deploy SSH key
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1315,6 +1451,7 @@ jobs:
           PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64: ${{ secrets.PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64 }}
 
       - name: Install update deploy known_hosts
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1330,6 +1467,7 @@ jobs:
           PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS: ${{ secrets.PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS }}
 
       - name: Publish DMG update artifacts to update host
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1354,6 +1492,7 @@ jobs:
           PUSHGO_UPDATE_DEPLOY_PATH: ${{ secrets.PUSHGO_UPDATE_DEPLOY_PATH }}
 
       - name: Verify public Sparkle artifact after deployment
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1384,6 +1523,7 @@ jobs:
           cmp "$RELEASE_DMG_PATH" "$public_dmg"
 
       - name: Upload Sparkle feed artifacts
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-macos-sparkle-${{ github.run_id }}
@@ -1393,15 +1533,26 @@ jobs:
           if-no-files-found: error
 
       - name: Upload signed DMG artifact
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-macos-dmg-${{ github.run_id }}
           path: ${{ env.RELEASE_DMG_PATH }}
           if-no-files-found: error
 
+      - name: Retain manual signed DMG candidate
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pushgo-dmg-signing-acceptance-${{ github.run_id }}
+          path: |
+            ${{ env.RELEASE_DMG_PATH }}
+            artifacts/release/evidence/dmg/signing-acceptance.json
+          if-no-files-found: error
+
       - name: Publish DMG to GitHub Release
         id: github_release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
@@ -1475,7 +1626,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Upload DMG assets to GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -1520,7 +1671,7 @@ jobs:
 
       - name: Commit Sparkle appcast state
         id: commit_appcast
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: needs.release_gate.outputs.verified_tag_push == 'true'
         continue-on-error: true
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

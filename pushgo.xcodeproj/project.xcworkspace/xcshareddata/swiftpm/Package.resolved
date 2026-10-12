@@ -60,7 +60,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AldenClark/textual",
       "state" : {
-        "revision" : "46d1ffacb40518d824fa4c3bd6ee606ba25dcdfd"
+        "revision" : "0039bfbf016c9cb6e54da7c8af0b8f6a8ad7d12e"
       }
     }
   ],

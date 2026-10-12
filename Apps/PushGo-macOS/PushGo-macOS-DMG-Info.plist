@@ -43,6 +43,8 @@
 	<string>$(PUSHGO_DISPLAY_VERSION)</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>$(PUSHGO_SPARKLE_FEED_URL)</string>
 	<key>SUPublicEDKey</key>

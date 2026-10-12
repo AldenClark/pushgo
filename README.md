@@ -21,6 +21,7 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 
 ## Testing
 
+- Apple Core/Store tests: `./scripts/run_apple_core_tests.sh` (builds the test-only migration child before `swift test`). For a bare `swift test`, first run `swift build --product PushGoSQLiteMigrationChild`.
 - Concurrency + build gate: `./scripts/apple_concurrency_gate.sh`
 - iOS UI tests (stable runner flow with simulator preboot + retry):
   - Full suite: `./scripts/run_ios_ui_tests.sh`
@@ -50,6 +51,7 @@ PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，
 
 ## 测试
 
+- Apple Core/Store 测试：`./scripts/run_apple_core_tests.sh`（在 `swift test` 前构建仅供测试的迁移子进程程序）。直接运行裸 `swift test` 前，先执行 `swift build --product PushGoSQLiteMigrationChild`。
 - 并发/构建闸门：`./scripts/apple_concurrency_gate.sh`
 - iOS UI 测试（稳定执行：模拟器预热 + runner 启动重试）：
   - 全量：`./scripts/run_ios_ui_tests.sh`

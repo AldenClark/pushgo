@@ -1,6 +1,13 @@
 import Foundation
 
 actor NotificationIngressInbox {
+    struct QueueCounts: Sendable, Equatable {
+        let due: Int
+        let outstanding: Int
+
+        static let zero = QueueCounts(due: 0, outstanding: 0)
+    }
+
     typealias EnqueueResult = DurableIngressJournal.EnqueueResult
     struct StoredEntry: Codable, Sendable {
         let schemaVersion: Int
@@ -21,6 +28,15 @@ actor NotificationIngressInbox {
                 result[item.key] = item.value.value
             }
         }
+    }
+
+    struct ClaimedEntry: Sendable {
+        let entry: PendingEntry
+        let owner: String
+        let leaseGeneration: Int64
+
+        var payload: [AnyHashable: Any] { entry.payload }
+        var record: StoredEntry { entry.record }
     }
 
     static let shared = NotificationIngressInbox()
@@ -57,14 +73,16 @@ actor NotificationIngressInbox {
         requestIdentifier: String?,
         source: String,
         ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity? = nil,
-        requiredEntryState: String = "durable"
+        requiredEntryState: String = "durable",
+        postChangeNotification: Bool = true
     ) async -> Bool {
         await journal.enqueueIngress(
             codablePayload: codablePayload,
             requestIdentifier: requestIdentifier,
             source: source,
             ackIdentity: ackIdentity,
-            requiredEntryState: requiredEntryState
+            requiredEntryState: requiredEntryState,
+            postChangeNotification: postChangeNotification
         )
     }
 
@@ -73,20 +91,54 @@ actor NotificationIngressInbox {
         requestIdentifier: String?,
         source: String,
         ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity? = nil,
-        requiredEntryState: String = "durable"
+        requiredEntryState: String = "durable",
+        postChangeNotification: Bool = true
     ) async -> EnqueueResult {
         await journal.enqueueIngressResult(
             codablePayload: codablePayload,
             requestIdentifier: requestIdentifier,
             source: source,
             ackIdentity: ackIdentity,
-            requiredEntryState: requiredEntryState
+            requiredEntryState: requiredEntryState,
+            postChangeNotification: postChangeNotification
         )
     }
 
     func pendingEntries(limit: Int? = nil) async -> [PendingEntry] {
         await journal.importLegacyStateIfNeeded()
         return await journal.pendingIngressEntries(limit: limit)
+    }
+
+    func prepareForDrain() async {
+        await journal.importLegacyStateIfNeeded()
+    }
+
+    func queueCounts(
+        now: Date = Date(),
+        importLegacyState: Bool = true
+    ) async -> QueueCounts {
+        if importLegacyState {
+            await journal.importLegacyStateIfNeeded()
+        }
+        return await journal.ingressQueueCounts(now: now)
+    }
+
+    func claimPendingEntries(
+        owner: String,
+        leaseDuration: TimeInterval = 60,
+        limit: Int = 64,
+        now: Date = Date(),
+        importLegacyState: Bool = true
+    ) async -> [ClaimedEntry] {
+        if importLegacyState {
+            await journal.importLegacyStateIfNeeded()
+        }
+        return await journal.claimPendingIngressEntries(
+            owner: owner,
+            leaseDuration: leaseDuration,
+            limit: limit,
+            now: now
+        )
     }
 
     func nextRetryDate(now: Date = Date()) async -> Date? {
@@ -103,6 +155,20 @@ actor NotificationIngressInbox {
         await journal.markIngressCompleted(entryID: entry.record.entryId)
     }
 
+    @discardableResult
+    func markCompleted(_ claimed: ClaimedEntry) async -> Bool {
+        await journal.markIngressCompleted(
+            entryID: claimed.record.entryId,
+            owner: claimed.owner,
+            leaseGeneration: claimed.leaseGeneration
+        )
+    }
+
+    @discardableResult
+    func markCompleted(_ claimedEntries: [ClaimedEntry]) async -> Int {
+        await journal.markIngressCompleted(claimedEntries)
+    }
+
     func markCompleted(fileName: String) async {
         await journal.markIngressCompleted(entryID: fileName)
     }
@@ -114,6 +180,21 @@ actor NotificationIngressInbox {
     ) async {
         await journal.markIngressRetry(
             entryID: entry.record.entryId,
+            reason: reason,
+            retryAfter: retryAfter
+        )
+    }
+
+    @discardableResult
+    func markRetry(
+        _ claimed: ClaimedEntry,
+        reason: String,
+        retryAfter: Date = Date().addingTimeInterval(30)
+    ) async -> Bool {
+        await journal.markIngressRetry(
+            entryID: claimed.record.entryId,
+            owner: claimed.owner,
+            leaseGeneration: claimed.leaseGeneration,
             reason: reason,
             retryAfter: retryAfter
         )
@@ -139,6 +220,14 @@ actor NotificationIngressInbox {
     ) async -> DurableIngressJournal.MaintenanceResult {
         await journal.performMaintenance(now: now, force: force, batchLimit: batchLimit)
     }
+
+#if DEBUG
+    func purgePerformanceFixtures() async -> (rows: Int, shadows: Int) {
+        await journal.purgeTerminalIngressEntriesForPerformanceTesting(
+            source: "debug.ingress_performance"
+        )
+    }
+#endif
 
     private func codablePayloadDictionary(
         from payload: [AnyHashable: Any]

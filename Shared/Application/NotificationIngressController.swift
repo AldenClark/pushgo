@@ -7,6 +7,7 @@ final class NotificationIngressController {
     typealias CachedDeviceKeyProvider = @MainActor () async -> String?
     typealias BeforePersistMessage = @Sendable (PushMessage) async -> Void
     typealias CountsRefreshScheduler = @MainActor () -> Void
+    typealias InboxProgressReporter = @MainActor (ProviderInboxProgress) -> Void
     typealias ProviderErrorRecorder = @MainActor (Error, String) -> Void
     typealias StartupWakeupPullDeferPredicate = @MainActor () -> Bool
 
@@ -17,6 +18,7 @@ final class NotificationIngressController {
     private let cachedDeviceKeyProvider: CachedDeviceKeyProvider
     private let beforePersistMessage: BeforePersistMessage
     private let scheduleCountsRefresh: CountsRefreshScheduler
+    private let reportInboxProgress: InboxProgressReporter
     private let recordProviderError: ProviderErrorRecorder
     private let shouldDeferStartupWakeupPulls: StartupWakeupPullDeferPredicate
     private let notificationIngressInbox: NotificationIngressInbox
@@ -41,18 +43,27 @@ final class NotificationIngressController {
                 guard let self else { return false }
                 return await self.hasPersistedNotification(identity: identity)
             },
-            persistPayload: { [weak self] payload, requestIdentifier in
-                guard let self else { return .failed }
-                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
-                    payload,
-                    requestIdentifier: requestIdentifier,
+            persistPayloads: { [weak self] inputs in
+                guard let self else {
+                    return Array(repeating: .failed, count: inputs.count)
+                }
+                let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                    inputs.map {
+                        NotificationPersistenceCoordinator.RemotePayload(
+                            payload: $0.payload,
+                            requestIdentifier: $0.requestIdentifier
+                        )
+                    },
                     dataStore: self.dataStore,
                     beforeSave: self.beforePersistMessage
                 )
-                return ProviderIngressPersistenceResult(outcome)
+                return outcomes.map(ProviderIngressPersistenceResult.init)
             },
-            applyPersistenceResult: { [weak self] result in
-                self?.applyProviderIngressPersistenceResult(result)
+            applyPersistenceResults: { [weak self] results in
+                self?.applyProviderIngressPersistenceResults(results)
+            },
+            reportInboxProgress: { [reportInboxProgress] progress in
+                reportInboxProgress(progress)
             },
             recordProviderError: { [recordProviderError] error, source in
                 recordProviderError(error, source)
@@ -68,6 +79,7 @@ final class NotificationIngressController {
         cachedDeviceKeyProvider: @escaping CachedDeviceKeyProvider,
         beforePersistMessage: @escaping BeforePersistMessage,
         scheduleCountsRefresh: @escaping CountsRefreshScheduler,
+        reportInboxProgress: @escaping InboxProgressReporter = { _ in },
         recordProviderError: @escaping ProviderErrorRecorder,
         shouldDeferStartupWakeupPulls: @escaping StartupWakeupPullDeferPredicate,
         notificationIngressInbox: NotificationIngressInbox,
@@ -80,6 +92,7 @@ final class NotificationIngressController {
         self.cachedDeviceKeyProvider = cachedDeviceKeyProvider
         self.beforePersistMessage = beforePersistMessage
         self.scheduleCountsRefresh = scheduleCountsRefresh
+        self.reportInboxProgress = reportInboxProgress
         self.recordProviderError = recordProviderError
         self.shouldDeferStartupWakeupPulls = shouldDeferStartupWakeupPulls
         self.notificationIngressInbox = notificationIngressInbox
@@ -395,12 +408,14 @@ final class NotificationIngressController {
     private func hasPersistedNotification(identity: ProviderIngressIdentity) async -> Bool {
         do {
             if let messageId = identity.messageId,
-               try await dataStore.loadMessage(messageId: messageId) != nil
+               let stored = try await dataStore.loadMessage(messageId: messageId),
+               identity.matchesPersisted(stored)
             {
                 return true
             }
             if let deliveryId = identity.deliveryId,
-               try await dataStore.loadMessage(deliveryId: deliveryId) != nil
+               try await dataStore.loadMessages(deliveryId: deliveryId)
+                   .contains(where: identity.matchesPersisted)
             {
                 return true
             }
@@ -408,12 +423,16 @@ final class NotificationIngressController {
         return false
     }
 
-    private func applyProviderIngressPersistenceResult(_ result: ProviderIngressPersistenceResult) {
-        switch result {
-        case .persisted, .duplicate:
+    private func applyProviderIngressPersistenceResults(
+        _ results: [ProviderIngressPersistenceResult]
+    ) {
+        if results.contains(where: { result in
+            switch result {
+            case .persisted, .duplicate: true
+            case .rejected, .failed: false
+            }
+        }) {
             scheduleCountsRefresh()
-        case .rejected, .failed:
-            break
         }
     }
 

@@ -32,6 +32,27 @@ struct MessagePerformanceArchitectureGuardrailTests {
     }
 
     @Test
+    func pageRetrySkipsExistingIdentitiesAndKeepsAdvancingTheCursor() throws {
+        let source = try readSource("Shared/UI/MessageListViewModel.swift")
+        let nextPageSection = try section(
+            in: source,
+            from: "private func loadNextPage()",
+            to: "private func refreshCounts()"
+        )
+        let visiblePageSection = try section(
+            in: source,
+            from: "private func loadVisiblePage(",
+            to: "private func isLocallySuppressed("
+        )
+
+        #expect(nextPageSection.contains("Set(filteredMessages.map(\\.id))"))
+        #expect(nextPageSection.contains("excludingMessageIDs: existingIDs"))
+        #expect(visiblePageSection.contains("consumeUniqueMessagePage("))
+        #expect(visiblePageSection.contains("results.append(contentsOf: consumed.appended)"))
+        #expect(nextPageSection.contains("append(contentsOf: page.messages)"))
+    }
+
+    @Test
     func searchKeepsDisplayedResultsUntilTheCurrentRequestCommits() throws {
         let source = try readSource("Shared/UI/MessageSearchViewModel.swift")
         let queryUpdateSection = try section(

@@ -1,70 +1,40 @@
-# PushGo macOS Automation Matrix
+# PushGo macOS UI quality suite
 
-## Scope
+## Current executable scope
 
-This suite targets the macOS app runtime and validates end-to-end UI reachability across primary pages, startup automation commands, and key settings overlays.
+The target now exposes twenty-eight curated XCTest-discoverable, App-owned product journeys:
 
-## UI Coverage Matrix
+- App-owned empty-state launch and functional message-list readiness;
+- accurate standard message row/detail data and process-relaunch persistence;
+- selected Messages sidebar title remains visibly readable, non-overlapping, and navigable with a real canonical 100+ unread Store rendered as `99+`;
+- message deletion through the real detail action, immediate suppression, real Undo, exact-content restoration, and process-relaunch persistence;
+- deletion deadline commit that permanently removes only the target while preserving an accurate unrelated control message across relaunch;
+- a user-visible slow-load warning before delayed completion;
+- a weekly/Release-only five-sample cold-launch metric from a prepared 1,000-message canonical Store to the exact highest row, followed by the matching detail body; this local Debug ceiling is trend evidence, not a physical Release SLO;
+- visible initial-load failure and recovery through the real Retry control;
+- slow refresh feedback while the last accurate snapshot remains visible;
+- refresh failure ownership, retry, accurate new detail, and relaunch persistence;
+- accurate Event row/detail data, cancel with no state change, confirmed close through the production-shaped delivery path, list/detail/timeline/ongoing-filter/Thing convergence, closed-state persistence, no repeated close action, and exact remaining-detail fallback after deleting the selected Event;
+- Event close failure/retry with visible in-flight feedback, no duplicate action, detail-owned error, unchanged canonical ongoing state after rejection, production-shaped delivery on retry, and relaunch persistence;
+- accurate Thing identity/summary, real Event/Message/Update relation details, working Sheet return, and relaunch persistence;
+- one-start PR Sidebar navigation across accurate Message, Event, Thing, Channel, and Settings destinations, with the selected Simplified-Chinese Messages title still visibly readable, non-overlapping, and clickable beside a real `99+` unread badge;
+- decryption lifecycle through real Settings controls: invalid input stays in its Sheet, valid protected material persists without echo, blank Save preserves it, and explicit Delete survives relaunch;
+- protected-material persistence failure remains owned by the Sheet, does not expose configured state after restart, and only a real retry may configure it;
+- encrypted-message purpose outcomes: a wrong valid-length key preserves the safe fallback, the matching key recovers the exact canonical title/body across relaunch, and corrupt ciphertext remains safely unreadable;
+- real Event page visibility controls, both persisted directions, and an accurate reachable destination;
+- inline invalid-server feedback through real controls;
+- candidate Gateway registration rejection with no local commit, inline ownership, retry, data re-scoping, and relaunch persistence;
+- local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
+- native-minimize the real main window and restore that same usable window through the primary status-item action without duplicating its session or content; then close during in-flight refresh and restore one functional window through the real localized right-click Open Main Window action and again through the primary left click, preserving the same session and accurate Store result; finally use Sidebar keyboard focus to traverse all five domains in both directions and return to the same accurate Message content.
 
-| Test | Coverage |
-| --- | --- |
-| `testLaunchesIntoMessageList` | cold launch baseline (`screen.messages.list`) |
-| `testSidebarNavigationCoversPrimaryScreens` | sidebar route coverage: events/things/channels/settings/messages |
-| `testAutomationRequestCanOpenChannelsScreen` | startup automation request `nav.switch_tab` with channels page markers |
-| `testImportedEventFixtureCanOpenEventDetailFromStartupRequest` | fixture import + event detail deep page reachability |
-| `testImportedThingFixtureCanOpenThingDetailFromStartupRequest` | fixture import + thing detail deep page reachability |
-| `testSettingsSidebarCanOpenDecryptionOverlay` | settings overlay flow (`screen.settings.decryption`) |
-| `testSettingsScreenControlMatrixShowsCriticalGroups` | settings关键控件矩阵（server/page-visibility/decryption） |
-| `testSettingsPageVisibilityCommandCanHideEventPage` | settings mutation command keeps sidebar/events route hidden |
-| `testSettingsPageVisibilityCommandCanRoundTripEventPage` | settings开关前后态正确性（false -> true） |
-| `testFixtureSeedEntityRecordsPublishesProjectionCounts` | 实体投影视图写入链路（`fixture.seed_entity_records`） |
-| `testFixtureSeedSubscriptionsPublishesImportState` | 频道订阅写入链路（`fixture.seed_subscriptions`）与 import bookkeeping 状态 |
-| `testEntityOpenPublishesEntityStateAndProjectionCounts` | entity.open正确性：状态命中detail页 + `entity.opened`事件包含目标`entity_id` |
-| `testMessageOpenPublishesMessageDetailState` | message.open 路由到消息详情并发布 opened message state |
-| `testNotificationOpenPublishesMessageDetailState` | notification.open 路由到消息详情 |
-| `testNotificationMarkReadCommandUpdatesUnreadState` | `notification.mark_read` 更新未读计数与动作事件 |
-| `testNotificationDeleteCommandUpdatesCounts` | `notification.delete` 删除消息并发布动作事件 |
-| `testGatewaySetServerCommandUpdatesConfigurationState` | `gateway.set_server` 更新 server config 与 settings.changed 事件 |
-| `testBaselineAutomationStateHasNoRuntimeErrors` | 启动基线正确性（`runtime_error_count == 0`） |
+The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-eight current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter, exact relation detail, delete/commit/relaunch and registered deep-link purposes are now covered in the App-owned Thing journey. The remaining macOS gaps are Notification Center card interaction/reconciliation under the current system accessibility boundary, physical accessibility/performance, and real external-provider delivery; they are not inferred from fixture, identifier, simulator, or component evidence.
 
-## White-Box Coverage
+## Run
 
-Run the Swift package core tests for semantics, storage, notification handling, and ACK logic:
-
-- `PushGoAppleCoreTests` (68 tests)
-
-Command-response smoke coverage for macOS automation handlers is maintained in:
-
-- `/Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-macOSAutomation/macos_automation_smoke.sh`
-
-## Run Commands
+Use the zero-retry repository runner. It first proves that the interactive console is unlocked, then holds a scoped `caffeinate` assertion so a long lane cannot idle back to the login screen. XCTest observes a quiet window and closes the exact macOS system `Problem Reporter` application before and after every journey; the outer runner also closes the exact process before/after the batch and on interruption/exit. It terminates only stale test-built PushGo/Runner processes at the batch boundary, preventing an interrupted prior run's background App from blocking activation. Therefore an App crash cannot leave its delayed system dialog above the next journey without paying the instability cost of relaunching the UI-test Runner for every method. A crashed journey remains `FAILED`; closing the system dialog is test-environment cleanup, never a retry or a route to green. A locked console or a dialog that cannot be closed is explicitly `BLOCKED` instead of becoming a misleading product failure:
 
 ```bash
-xcodebuild -project /Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj \
-  -scheme PushGo-macOS \
-  -destination 'platform=macOS' \
-  -derivedDataPath /tmp/pushgo-macos-uitests-complete \
-  ARCHS=arm64 \
-  ONLY_ACTIVE_ARCH=YES \
-  test -only-testing:PushGo-macOSUITests
+./scripts/run_macos_ui_tests.sh
 ```
 
-```bash
-swift test --package-path /Users/ethan/Repo/PushGo/pushgo --filter PushGoAppleCoreTests
-```
-
-Serial full Apple pipeline entry:
-
-```bash
-/Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-AppleAutomation/run_apple_automation_serial.sh
-```
-
-## Pass Criteria
-
-- `PushGo-macOSUITests`: all tests pass with zero failures.
-- `PushGoAppleCoreTests`: all suites pass (no skipped failures).
-- No manual interaction required during runs.
-- UI控件矩阵、automation状态字段与 `events.jsonl` 语义事件都必须满足断言。
-
-By default, UI test launches set `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` to avoid blocking prompts such as “PushGo wants to access data from other apps”.
-macOS UI runner requires a normal local development signature; forcing `CODE_SIGNING_ALLOWED=NO` causes the runner to exit before establishing the XCTest connection.
+Set comma-separated `TEST_SCOPES` for a focused run. The runner requires a normal local development signature. A local automation-authorization or pre-execution runner failure is test-system `BLOCKED`; an executed oracle failure is product `FAILED`; neither is retried into green. Core semantic/storage checks remain in `PushGoAppleCoreTests`, but they do not replace the missing physical macOS UI journeys.

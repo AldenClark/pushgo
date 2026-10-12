@@ -78,6 +78,7 @@ struct NotificationSoundSettingsContentView: View {
                             .buttonStyle(.plain)
                             .transientPresentationActionControl()
                             .disabled(isCommittingDraft)
+                            .accessibilityIdentifier("action.settings.notification_sounds.close")
                             .accessibilityLabel(localizationManager.localized("close_notification_sound_settings"))
                         }
                     }
@@ -640,7 +641,9 @@ private struct NotificationSoundPriorityRow: View {
         }
         .buttonStyle(.plain)
         .transientPresentationActionControl()
+        .accessibilityIdentifier("picker.settings.notification_sounds.\(level.rawValue)")
         .accessibilityLabel(localizationManager.localized("sound_for_priority_placeholder", localizedLevelName))
+        .accessibilityValue(selectedOptionTitle)
     }
 
     private var previewButton: some View {

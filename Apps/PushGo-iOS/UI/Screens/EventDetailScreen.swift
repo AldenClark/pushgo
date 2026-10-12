@@ -14,12 +14,27 @@ struct EventDetailScreen: View {
     let event: EventProjection
     var onCommitDelete: (@MainActor () async throws -> Void)? = nil
     var onPrepareDelete: (() -> Void)? = nil
-    var onCloseEvent: (() -> Void)? = nil
+    var onCloseEvent: (@MainActor () async throws -> Void)? = nil
     @State private var activeConfirmation: ConfirmationKind?
+    @State private var isClosing = false
+    @State private var closeErrorMessage: String?
 
     var body: some View {
         navigationContainer {
-            EventDetailPanel(event: event)
+            VStack(spacing: 0) {
+                if let closeErrorMessage {
+                    AppInlineFeedbackBanner(
+                        message: closeErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.event.close"
+                    ) {
+                        self.closeErrorMessage = nil
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                EventDetailPanel(event: event)
+            }
                 .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
@@ -45,8 +60,7 @@ struct EventDetailScreen: View {
                         )
                     ),
                     primaryButton: .default(Text(localizationManager.localized("confirm"))) {
-                        onCloseEvent?()
-                        dismiss()
+                        Task { await closeEvent() }
                     },
                     secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
                 )
@@ -59,11 +73,21 @@ struct EventDetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if canShowCloseAction {
                 Button {
+                    guard !isClosing else { return }
+                    closeErrorMessage = nil
                     activeConfirmation = .close
                 } label: {
-                    Image(systemName: "checkmark.circle")
+                    if isClosing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "checkmark.circle")
+                    }
                 }
+                .disabled(isClosing)
                 .accessibilityLabel(localizationManager.localized("close"))
+                .accessibilityIdentifier(
+                    isClosing ? "state.event.close.in_progress" : "action.event.close"
+                )
             }
 
             if onCommitDelete != nil {
@@ -80,6 +104,23 @@ struct EventDetailScreen: View {
     private var canShowCloseAction: Bool {
         guard onCloseEvent != nil else { return false }
         return eventLifecycleState(from: event.state) != .closed
+    }
+
+    @MainActor
+    private func closeEvent() async {
+        guard let onCloseEvent, !isClosing else { return }
+        isClosing = true
+        closeErrorMessage = nil
+        do {
+            try await onCloseEvent()
+            dismiss()
+        } catch {
+            isClosing = false
+            closeErrorMessage = environment.userFacingErrorMessage(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed")
+            )
+        }
     }
 
     @MainActor
@@ -155,6 +196,9 @@ private struct EventDetailPanel: View {
                             .lineLimit(2)
                         Spacer(minLength: 8)
                         EntityStateBadge(text: statusLabel, tone: statusTone)
+                            .accessibilityIdentifier(
+                                "field.event.detail.status.\(eventLifecycleState(from: event.state).rawValue.lowercased())"
+                            )
                     }
                     if let summary = event.summary, !summary.isEmpty {
                         Text(summary)
@@ -255,6 +299,7 @@ private struct EventDetailPanel: View {
                             )
                         }
                     }
+                    .accessibilityIdentifier("event.timeline.count.\(orderedTimeline.count)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

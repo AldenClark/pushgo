@@ -40,4 +40,24 @@ struct SearchQuerySemanticsTests {
     func emptyQueryHasNoIndexTextQuery() {
         #expect(SearchQuerySemantics.parse("   ").indexTextQuery == nil)
     }
+
+    @Test
+    func thingSearchMatchesPurposeFieldsAndRejectsAnUnrelatedObject() {
+        let purposeFields = [
+            "Ｐｕｍｐ Café", "Primary coolant pump", "Critical-Asset", "thing-pump-42",
+            "archived", "factory-west", "plant-zone", "Bâtiment A / 03",
+            "serial SN-8899", #"{"bearing":"SKF-6205","rpm":1450}"#,
+            "owner Equipo Málaga",
+        ]
+
+        for query in [
+            "pump cafe", "coolant", "critical-asset", "pump-42", "archived",
+            "factory-west", "plant-zone", "batiment a", "serial", "8899",
+            "skf-6205", "malaga",
+        ] {
+            #expect(SearchQuerySemantics.matchesEntityFields(purposeFields, rawQuery: query))
+        }
+        #expect(!SearchQuerySemantics.matchesEntityFields(purposeFields, rawQuery: "missing turbine"))
+        #expect(SearchQuerySemantics.matchesEntityFields(purposeFields, rawQuery: "  "))
+    }
 }

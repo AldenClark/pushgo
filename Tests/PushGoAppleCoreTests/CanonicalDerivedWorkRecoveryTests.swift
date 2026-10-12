@@ -31,6 +31,16 @@ struct CanonicalDerivedWorkRecoveryTests {
                 matching: { $0.state == "retry_wait" && $0.attemptCount >= 1 }
             )
             #expect(retrying.lastError?.contains("injected Spotlight failure") == true)
+
+            // The external Spotlight projection is unavailable, but the
+            // canonical Store remains the user-visible source of truth. Keep
+            // this assertion on the real read/search APIs so a transactional
+            // regression cannot hide behind a durable retry row.
+            let canonicalDuringFailure = try await store.loadMessages()
+                .first { $0.messageId == message.messageId }
+            #expect(canonicalDuringFailure?.title == message.title)
+            #expect(canonicalDuringFailure?.body == message.body)
+            #expect(try await store.searchMessagesCount(query: "Derived retry probe") == 1)
             await indexer.allowSuccess()
 
             // No new ingress or explicit drain request follows. The worker must
@@ -44,6 +54,7 @@ struct CanonicalDerivedWorkRecoveryTests {
             #expect(completed.attemptCount >= retrying.attemptCount)
             #expect(completed.lastError == nil)
             #expect(await indexer.indexAttempts >= 2)
+            #expect(try await store.searchMessagesCount(query: "Derived retry probe") == 1)
         }
     }
 

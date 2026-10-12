@@ -30,7 +30,13 @@ struct EventListScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("screen.events.list")
+        .overlay(alignment: .topLeading) {
+            Text("Events screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.events.list")
+        }
     }
 
     private var eventList: some View {

@@ -15,6 +15,8 @@ struct ToastView: View {
         .background(backgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(radius: 8, y: 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(toast.text)
         .accessibilityIdentifier("feedback.toast.\(styleAccessibilitySuffix)")
     }
 

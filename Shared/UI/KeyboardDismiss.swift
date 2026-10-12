@@ -381,6 +381,7 @@ private struct PushgoImagePreviewOverlay: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(LocalizedStringKey("share"))
+                            .accessibilityIdentifier("action.image.preview.share")
 
                             Button {
                                 dismiss()
@@ -419,6 +420,7 @@ private struct PushgoImagePreviewOverlay: View {
                             .buttonStyle(.plain)
                             .pushgoMacPreviewActionChrome()
                             .accessibilityLabel(Text("save"))
+                            .accessibilityIdentifier("action.image.preview.save")
                             Button {
                                 dismiss()
                             } label: {
@@ -429,6 +431,7 @@ private struct PushgoImagePreviewOverlay: View {
                             .buttonStyle(.plain)
                             .pushgoMacPreviewActionChrome()
                             .accessibilityLabel(LocalizedStringKey("close"))
+                            .accessibilityIdentifier("action.image.preview.close")
                         }
                         .padding(.trailing, 16)
                         .padding(.top, 16)
@@ -449,6 +452,8 @@ private struct PushgoImagePreviewOverlay: View {
                 .zIndex(10)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dialog.image.preview")
 #if os(macOS)
         .frame(minWidth: 980, minHeight: 620)
 #endif
@@ -742,11 +747,32 @@ private struct PushgoImagePreviewOverlay: View {
 
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "pushgo-image.\(contentType.preferredFilenameExtension ?? "png")"
+        let filenameExtension = contentType.preferredFilenameExtension ?? "png"
+        panel.nameFieldStringValue = "pushgo-image.\(filenameExtension)"
         panel.allowedContentTypes = [contentType]
+        if let qualitySession = PushGoAutomationContext.qualitySession {
+            panel.nameFieldStringValue = "pushgo-image-\(qualitySession.sessionID).\(filenameExtension)"
+            let qualitySaveDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("PushGoQualitySavedImages", isDirectory: true)
+                .appendingPathComponent(qualitySession.sessionID, isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: qualitySaveDirectory,
+                withIntermediateDirectories: true
+            )
+            panel.directoryURL = qualitySaveDirectory
+        }
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         do {
             try data.write(to: destination, options: .atomic)
+            if let receiptURL = PushGoAutomationContext.qualityArtifactURL(
+                filename: "saved-image-destination.txt"
+            ) {
+                try? FileManager.default.createDirectory(
+                    at: receiptURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? Data(destination.path.utf8).write(to: receiptURL, options: .atomic)
+            }
             showSaveSuccess()
         } catch {
             showSaveFailure(reason: environment.userFacingErrorMessage(error))
@@ -754,13 +780,13 @@ private struct PushgoImagePreviewOverlay: View {
     }
 
     private static func normalizedImageDataAndType(from image: NSImage) -> (Data, UTType)? {
+        if let png = PushGoMacImageExportEncoder.pngData(from: image) {
+            return (png, .png)
+        }
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff)
         else {
             return nil
-        }
-        if let png = bitmap.representation(using: .png, properties: [:]) {
-            return (png, .png)
         }
         if let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.94]) {
             return (jpeg, .jpeg)
@@ -1014,6 +1040,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .white
         button.toolTip = LocalizationProvider.localized("share_image")
+        button.setAccessibilityIdentifier("action.image.preview.share")
         button.isEnabled = fileURL != nil
         button.target = context.coordinator
         button.action = #selector(Coordinator.shareTapped(_:))
@@ -1024,6 +1051,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         nsView.target = context.coordinator
         nsView.action = #selector(Coordinator.shareTapped(_:))
         context.coordinator.fileURL = fileURL
+        nsView.setAccessibilityIdentifier("action.image.preview.share")
         nsView.isEnabled = fileURL != nil
         nsView.contentTintColor = fileURL == nil ? NSColor.white.withAlphaComponent(0.45) : .white
         nsView.image = Self.shareIcon()

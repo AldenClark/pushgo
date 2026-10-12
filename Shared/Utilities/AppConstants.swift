@@ -15,6 +15,53 @@ import UIKit
 import AppKit
 #endif
 
+#if os(macOS)
+enum PushGoMacImageExportEncoder {
+    static func pngData(from image: NSImage) -> Data? {
+        var proposedRect = CGRect(origin: .zero, size: image.size)
+        guard let cgImage = image.cgImage(
+            forProposedRect: &proposedRect,
+            context: nil,
+            hints: nil
+        ),
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+        let renderContext = CGContext(
+            data: nil,
+            width: cgImage.width,
+            height: cgImage.height,
+            bitsPerComponent: 8,
+            bytesPerRow: cgImage.width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else {
+            return nil
+        }
+        renderContext.interpolationQuality = .none
+        renderContext.draw(
+            cgImage,
+            in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        )
+        guard let normalizedImage = renderContext.makeImage() else { return nil }
+
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, normalizedImage, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+        return output as Data
+    }
+}
+#endif
+
 enum PushGoAnimatedImageRuntime {
     static func bootstrapIfNeeded() {
 #if canImport(SDWebImage)
@@ -41,8 +88,371 @@ enum PushGoAnimatedImageRuntime {
 #endif
 }
 
+enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
+    case emptyClean = "empty.clean"
+    case corePositive = "core.positive"
+    case messagesStandard = "messages.standard"
+    case messagesEncryptedValid = "messages.encrypted.valid"
+    case messagesEncryptedCorrupt = "messages.encrypted.corrupt"
+    case messagesWorkflow = "messages.workflow"
+    case messagesFilters = "messages.filters"
+    case messagesCleanup = "messages.cleanup"
+    case messagesMarkdown = "messages.markdown"
+    case messagesLarge = "messages.large"
+    case eventStandard = "event.standard"
+    case thingStandard = "thing.standard"
+    case channelsStandard = "channels.standard"
+}
+
+enum PushGoQualityLegacyStore: String, Codable, Sendable {
+    case messagesV17 = "messages.v17"
+}
+
+enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
+    case none
+    case newMessage = "new_message"
+    case failOnceThenNewMessage = "fail_once_then_new_message"
+}
+
+enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
+    case none
+    case acceptedAndDelivered = "accepted_and_delivered"
+    case failOnceThenAcceptedAndDelivered = "fail_once_then_accepted_and_delivered"
+}
+
+#if DEBUG
+struct PushGoQualityEventCloseDelivery {
+    let payload: [AnyHashable: Any]
+    let requestIdentifier: String
+
+    static func make(
+        boundaryPayload: [String: Any],
+        endpointPath: String,
+        scenario: PushGoQualityEventCloseScenario
+    ) -> PushGoQualityEventCloseDelivery? {
+        guard scenario != .none,
+              endpointPath.hasSuffix("/event/close"),
+              let eventID = boundaryPayload["event_id"] as? String,
+              !eventID.isEmpty
+        else {
+            return nil
+        }
+
+        var delivered = boundaryPayload.reduce(into: [AnyHashable: Any]()) { result, item in
+            result[item.key] = item.value
+        }
+        delivered["entity_type"] = "event"
+        delivered["entity_id"] = eventID
+        delivered["event_state"] = "closed"
+        delivered["projection_destination"] = "event_head"
+        delivered["delivery_id"] = "quality-event-close-\(eventID)"
+        delivered["received_at"] = "2026-01-15T08:03:00Z"
+
+        return PushGoQualityEventCloseDelivery(
+            payload: delivered,
+            requestIdentifier: "quality-event-close-\(eventID)"
+        )
+    }
+}
+#endif
+
+enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
+    case none
+    case accepted
+    case rejectOnceThenAccepted = "reject_once_then_accepted"
+    case renameRejectOnceThenAccepted = "rename_reject_once_then_accepted"
+    case subscribeAndRenameRejectOnceThenAccepted = "subscribe_and_rename_reject_once_then_accepted"
+    case requireCreateCompensation = "require_create_compensation"
+    case existingSubscribeMustNotCompensate = "existing_subscribe_must_not_compensate"
+}
+
+struct PushGoQualityFaults: Codable, Equatable, Sendable {
+    let failLocalStoreInitialization: Bool
+    let localStoreFailureStreakThreshold: Int?
+    let messageLoadDelayMilliseconds: Int?
+    let messagePageLoadDelayMilliseconds: Int?
+    let messageRefreshDelayMilliseconds: Int?
+    let messageSearchDelayMilliseconds: Int?
+    let pendingDeletionTimeoutMilliseconds: Int?
+    let failMessageSearchOnce: Bool
+    let failMessageLoad: Bool
+    let failMessagePageLoadOnce: Bool
+    let failGatewaySwitchValidationOnce: Bool
+    let failGatewaySwitchCommitOnce: Bool
+    let pauseGatewaySwitchBeforeCommit: Bool
+    let failGatewayPostCommitSyncOnce: Bool
+    let failNotificationMaterialPersistenceOnce: Bool
+    let failChannelSubscriptionPersistenceOnce: Bool
+
+    init(
+        failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
+        messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
+        pendingDeletionTimeoutMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
+        failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        pauseGatewaySwitchBeforeCommit: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false
+    ) {
+        self.failLocalStoreInitialization = failLocalStoreInitialization
+        self.localStoreFailureStreakThreshold = localStoreFailureStreakThreshold
+        self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
+        self.messagePageLoadDelayMilliseconds = messagePageLoadDelayMilliseconds
+        self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
+        self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
+        self.pendingDeletionTimeoutMilliseconds = pendingDeletionTimeoutMilliseconds
+        self.failMessageSearchOnce = failMessageSearchOnce
+        self.failMessageLoad = failMessageLoad
+        self.failMessagePageLoadOnce = failMessagePageLoadOnce
+        self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
+        self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
+        self.pauseGatewaySwitchBeforeCommit = pauseGatewaySwitchBeforeCommit
+        self.failGatewayPostCommitSyncOnce = failGatewayPostCommitSyncOnce
+        self.failNotificationMaterialPersistenceOnce = failNotificationMaterialPersistenceOnce
+        self.failChannelSubscriptionPersistenceOnce = failChannelSubscriptionPersistenceOnce
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case failLocalStoreInitialization = "fail_local_store_initialization"
+        case localStoreFailureStreakThreshold = "local_store_failure_streak_threshold"
+        case messageLoadDelayMilliseconds = "message_load_delay_ms"
+        case messagePageLoadDelayMilliseconds = "message_page_load_delay_ms"
+        case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
+        case messageSearchDelayMilliseconds = "message_search_delay_ms"
+        case pendingDeletionTimeoutMilliseconds = "pending_deletion_timeout_ms"
+        case failMessageSearchOnce = "fail_message_search_once"
+        case failMessageLoad = "fail_message_load"
+        case failMessagePageLoadOnce = "fail_message_page_load_once"
+        case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
+        case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
+        case pauseGatewaySwitchBeforeCommit = "pause_gateway_switch_before_commit"
+        case failGatewayPostCommitSyncOnce = "fail_gateway_post_commit_sync_once"
+        case failNotificationMaterialPersistenceOnce = "fail_notification_material_persistence_once"
+        case failChannelSubscriptionPersistenceOnce = "fail_channel_subscription_persistence_once"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        failLocalStoreInitialization = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failLocalStoreInitialization
+        ) ?? false
+        localStoreFailureStreakThreshold = try container.decodeIfPresent(
+            Int.self,
+            forKey: .localStoreFailureStreakThreshold
+        )
+        messageLoadDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageLoadDelayMilliseconds
+        )
+        messagePageLoadDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messagePageLoadDelayMilliseconds
+        )
+        messageRefreshDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageRefreshDelayMilliseconds
+        )
+        messageSearchDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageSearchDelayMilliseconds
+        )
+        pendingDeletionTimeoutMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .pendingDeletionTimeoutMilliseconds
+        )
+        failMessageSearchOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failMessageSearchOnce
+        ) ?? false
+        failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
+        failMessagePageLoadOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failMessagePageLoadOnce
+        ) ?? false
+        failGatewaySwitchValidationOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewaySwitchValidationOnce
+        ) ?? false
+        failGatewaySwitchCommitOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewaySwitchCommitOnce
+        ) ?? false
+        pauseGatewaySwitchBeforeCommit = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .pauseGatewaySwitchBeforeCommit
+        ) ?? false
+        failGatewayPostCommitSyncOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewayPostCommitSyncOnce
+        ) ?? false
+        failNotificationMaterialPersistenceOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failNotificationMaterialPersistenceOnce
+        ) ?? false
+        failChannelSubscriptionPersistenceOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failChannelSubscriptionPersistenceOnce
+        ) ?? false
+    }
+}
+
+struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: PushGoQualityFixture
+    let faults: PushGoQualityFaults
+    let messageRefreshScenario: PushGoQualityMessageRefreshScenario
+    let eventCloseScenario: PushGoQualityEventCloseScenario
+    let channelMutationScenario: PushGoQualityChannelMutationScenario
+    let expectedChannelMutationGatewayURL: String?
+    let legacyStore: PushGoQualityLegacyStore?
+    let allowsSystemColdLaunch: Bool
+
+    init(
+        schemaVersion: Int = currentSchemaVersion,
+        sessionID: String,
+        fixture: PushGoQualityFixture,
+        faults: PushGoQualityFaults = PushGoQualityFaults(),
+        messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none,
+        eventCloseScenario: PushGoQualityEventCloseScenario = .none,
+        channelMutationScenario: PushGoQualityChannelMutationScenario = .none,
+        expectedChannelMutationGatewayURL: String? = nil,
+        legacyStore: PushGoQualityLegacyStore? = nil,
+        allowsSystemColdLaunch: Bool = false
+    ) {
+        self.schemaVersion = schemaVersion
+        self.sessionID = sessionID
+        self.fixture = fixture
+        self.faults = faults
+        self.messageRefreshScenario = messageRefreshScenario
+        self.eventCloseScenario = eventCloseScenario
+        self.channelMutationScenario = channelMutationScenario
+        self.expectedChannelMutationGatewayURL = expectedChannelMutationGatewayURL
+        self.legacyStore = legacyStore
+        self.allowsSystemColdLaunch = allowsSystemColdLaunch
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+        case faults
+        case messageRefreshScenario = "message_refresh_scenario"
+        case eventCloseScenario = "event_close_scenario"
+        case channelMutationScenario = "channel_mutation_scenario"
+        case expectedChannelMutationGatewayURL = "expected_channel_mutation_gateway_url"
+        case legacyStore = "legacy_store"
+        case allowsSystemColdLaunch = "allows_system_cold_launch"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        sessionID = try container.decode(String.self, forKey: .sessionID)
+        fixture = try container.decode(PushGoQualityFixture.self, forKey: .fixture)
+        faults = try container.decodeIfPresent(PushGoQualityFaults.self, forKey: .faults)
+            ?? PushGoQualityFaults()
+        messageRefreshScenario = try container.decodeIfPresent(
+            PushGoQualityMessageRefreshScenario.self,
+            forKey: .messageRefreshScenario
+        ) ?? .none
+        eventCloseScenario = try container.decodeIfPresent(
+            PushGoQualityEventCloseScenario.self,
+            forKey: .eventCloseScenario
+        ) ?? .none
+        channelMutationScenario = try container.decodeIfPresent(
+            PushGoQualityChannelMutationScenario.self,
+            forKey: .channelMutationScenario
+        ) ?? .none
+        expectedChannelMutationGatewayURL = try container.decodeIfPresent(
+            String.self,
+            forKey: .expectedChannelMutationGatewayURL
+        )
+        legacyStore = try container.decodeIfPresent(
+            PushGoQualityLegacyStore.self,
+            forKey: .legacyStore
+        )
+        allowsSystemColdLaunch = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .allowsSystemColdLaunch
+        ) ?? false
+    }
+}
+
+enum PushGoRuntimeProfile: Equatable, Sendable {
+    case production
+    case quality(PushGoQualitySessionDescriptor)
+}
+
+enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
+    case payloadTooLarge
+    case invalidEncoding
+    case invalidSchemaVersion(Int)
+    case invalidSessionID
+    case invalidMessageLoadDelay(Int)
+    case invalidMessagePageLoadDelay(Int)
+    case invalidMessageRefreshDelay(Int)
+    case invalidMessageSearchDelay(Int)
+    case invalidPendingDeletionTimeout(Int)
+    case invalidLocalStoreFailureStreakThreshold(Int)
+    case systemColdLaunchNotAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .payloadTooLarge:
+            return "Quality session payload exceeds the 64 KiB limit."
+        case .invalidEncoding:
+            return "Quality session payload is not valid base64 JSON."
+        case let .invalidSchemaVersion(version):
+            return "Unsupported quality session schema version: \(version)."
+        case .invalidSessionID:
+            return "Quality session ID must contain 1...64 ASCII letters, digits, underscores, or hyphens."
+        case let .invalidMessageLoadDelay(delay):
+            return "Message load delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessagePageLoadDelay(delay):
+            return "Message page load delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessageRefreshDelay(delay):
+            return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessageSearchDelay(delay):
+            return "Message search delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidPendingDeletionTimeout(timeout):
+            return "Pending deletion timeout must be between 1 and 30000 ms: \(timeout)."
+        case let .invalidLocalStoreFailureStreakThreshold(threshold):
+            return "Local Store failure streak threshold must be between 1 and 3: \(threshold)."
+        case .systemColdLaunchNotAllowed:
+            return "Quality session did not explicitly allow a system cold launch."
+        }
+    }
+}
+
+private struct PushGoQualityColdLaunchLease: Codable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let encodedSession: String
+    let expiresAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case encodedSession = "encoded_session"
+        case expiresAt = "expires_at"
+    }
+}
+
 enum PushGoAutomationContext {
     private static let storageRootEnv = "PUSHGO_AUTOMATION_STORAGE_ROOT"
+    private static let qualitySessionEnv = "PUSHGO_QUALITY_SESSION_BASE64"
     private static let sandboxTempStoragePrefix = "sandbox-tmp:"
     private static let providerTokenEnv = "PUSHGO_AUTOMATION_PROVIDER_TOKEN"
     private static let skipPushAuthorizationEnv = "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"
@@ -50,6 +460,14 @@ enum PushGoAutomationContext {
     private static let gatewayTokenEnv = "PUSHGO_AUTOMATION_GATEWAY_TOKEN"
     private static let forceForegroundAppEnv = "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP"
     private static let allowCrossAppDataAccessEnv = "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"
+    private static let qualityColdLaunchLeaseLifetime: TimeInterval = 5 * 60
+
+    private struct ProcessQualitySessionResolution {
+        let encodedSession: String?
+        let inputStatus: String
+    }
+
+    private static let processQualitySessionResolution = resolveProcessQualitySession()
 
     #if DEBUG
     // Unit tests run concurrently in one process. A task-local override keeps
@@ -63,8 +481,226 @@ enum PushGoAutomationContext {
         if let storageRootOverrideURL {
             return storageRootOverrideURL
         }
-        #endif
+        if let sessionRootURL = qualitySessionRootURL {
+            return sessionRootURL.appendingPathComponent("storage", isDirectory: true)
+        }
         return normalizedURL(for: storageRootEnv)
+        #else
+        return nil
+        #endif
+    }
+
+    static var runtimeProfile: PushGoRuntimeProfile {
+        resolveRuntimeProfile(
+            encodedQualitySession: processQualitySessionResolution.encodedSession
+        )
+    }
+
+    static var qualitySession: PushGoQualitySessionDescriptor? {
+        guard case let .quality(session) = runtimeProfile else { return nil }
+        return session
+    }
+
+    static var qualitySessionInputStatus: String {
+        processQualitySessionResolution.inputStatus
+    }
+
+    static var qualitySessionRootURL: URL? {
+        guard let session = qualitySession,
+              let baseURL = FileManager.default.urls(
+                  for: .applicationSupportDirectory,
+                  in: .userDomainMask
+              ).first
+        else {
+            return nil
+        }
+        return qualitySessionRootURL(for: session, baseURL: baseURL)
+    }
+
+    static func qualitySessionRootURL(
+        for session: PushGoQualitySessionDescriptor,
+        baseURL: URL
+    ) -> URL? {
+        guard session.schemaVersion == PushGoQualitySessionDescriptor.currentSchemaVersion,
+              isValidSessionID(session.sessionID)
+        else {
+            return nil
+        }
+        return baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+            .appendingPathComponent(session.sessionID, isDirectory: true)
+    }
+
+    static func qualityArtifactURL(filename: String) -> URL? {
+        guard let rootURL = qualitySessionRootURL,
+              isSafeArtifactFilename(filename)
+        else {
+            return nil
+        }
+        return rootURL
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent(filename, isDirectory: false)
+    }
+
+    @discardableResult
+    static func cleanupPriorQualitySessions(
+        activeSession: PushGoQualitySessionDescriptor,
+        baseURL: URL,
+        fileManager: FileManager = .default
+    ) throws -> Int {
+        guard isValidSessionID(activeSession.sessionID) else {
+            throw PushGoQualitySessionError.invalidSessionID
+        }
+        let sessionsRoot = baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+        try fileManager.createDirectory(at: sessionsRoot, withIntermediateDirectories: true)
+        let children = try fileManager.contentsOfDirectory(
+            at: sessionsRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        var removed = 0
+        for child in children {
+            guard child.lastPathComponent != activeSession.sessionID,
+                  isValidSessionID(child.lastPathComponent),
+                  try child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            else {
+                continue
+            }
+            try fileManager.removeItem(at: child)
+            removed += 1
+        }
+        return removed
+    }
+
+    @discardableResult
+    static func cleanupPriorQualitySessionsIfNeeded() -> Int {
+#if DEBUG
+        guard let session = qualitySession,
+              let baseURL = FileManager.default.urls(
+                  for: .applicationSupportDirectory,
+                  in: .userDomainMask
+              ).first
+        else {
+            return 0
+        }
+        return (try? cleanupPriorQualitySessions(activeSession: session, baseURL: baseURL)) ?? 0
+#else
+        return 0
+#endif
+    }
+
+    static func decodeQualitySession(_ encoded: String) throws -> PushGoQualitySessionDescriptor {
+        guard encoded.utf8.count <= 65_536 else {
+            throw PushGoQualitySessionError.payloadTooLarge
+        }
+        guard let data = Data(base64Encoded: encoded), !data.isEmpty else {
+            throw PushGoQualitySessionError.invalidEncoding
+        }
+        let descriptor: PushGoQualitySessionDescriptor
+        do {
+            descriptor = try JSONDecoder().decode(PushGoQualitySessionDescriptor.self, from: data)
+        } catch {
+            throw PushGoQualitySessionError.invalidEncoding
+        }
+        guard descriptor.schemaVersion == PushGoQualitySessionDescriptor.currentSchemaVersion else {
+            throw PushGoQualitySessionError.invalidSchemaVersion(descriptor.schemaVersion)
+        }
+        guard isValidSessionID(descriptor.sessionID) else {
+            throw PushGoQualitySessionError.invalidSessionID
+        }
+        if let delay = descriptor.faults.messageLoadDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageLoadDelay(delay)
+        }
+        if let delay = descriptor.faults.messagePageLoadDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessagePageLoadDelay(delay)
+        }
+        if let delay = descriptor.faults.messageRefreshDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageRefreshDelay(delay)
+        }
+        if let delay = descriptor.faults.messageSearchDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageSearchDelay(delay)
+        }
+        if let timeout = descriptor.faults.pendingDeletionTimeoutMilliseconds,
+           !(1 ... 30_000).contains(timeout) {
+            throw PushGoQualitySessionError.invalidPendingDeletionTimeout(timeout)
+        }
+        if let threshold = descriptor.faults.localStoreFailureStreakThreshold,
+           !(1 ... 3).contains(threshold) {
+            throw PushGoQualitySessionError.invalidLocalStoreFailureStreakThreshold(threshold)
+        }
+        return descriptor
+    }
+
+    static func resolveRuntimeProfile(encodedQualitySession: String?) -> PushGoRuntimeProfile {
+        #if DEBUG
+        guard let encodedQualitySession,
+              let descriptor = try? decodeQualitySession(encodedQualitySession)
+        else {
+            return .production
+        }
+        return .quality(descriptor)
+        #else
+        return .production
+        #endif
+    }
+
+    static func writeQualityColdLaunchLease(
+        encodedSession: String,
+        baseURL: URL,
+        expiresAt: Date,
+        fileManager: FileManager = .default
+    ) throws {
+        let descriptor = try decodeQualitySession(encodedSession)
+        guard descriptor.allowsSystemColdLaunch else {
+            throw PushGoQualitySessionError.systemColdLaunchNotAllowed
+        }
+        let handoff = PushGoQualityColdLaunchLease(
+            schemaVersion: PushGoQualityColdLaunchLease.currentSchemaVersion,
+            encodedSession: encodedSession,
+            expiresAt: expiresAt
+        )
+        let targetURL = qualityColdLaunchLeaseURL(baseURL: baseURL)
+        try fileManager.createDirectory(
+            at: targetURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(handoff).write(to: targetURL, options: .atomic)
+    }
+
+    static func loadQualityColdLaunchLease(
+        baseURL: URL,
+        now: Date,
+        fileManager: FileManager = .default
+    ) -> String? {
+        let targetURL = qualityColdLaunchLeaseURL(baseURL: baseURL)
+        guard let data = try? Data(contentsOf: targetURL) else { return nil }
+        guard let handoff = try? JSONDecoder().decode(
+            PushGoQualityColdLaunchLease.self,
+            from: data
+        ),
+              handoff.schemaVersion == PushGoQualityColdLaunchLease.currentSchemaVersion,
+              handoff.expiresAt > now,
+              let descriptor = try? decodeQualitySession(handoff.encodedSession),
+              descriptor.allowsSystemColdLaunch
+        else {
+            try? fileManager.removeItem(at: targetURL)
+            return nil
+        }
+        return handoff.encodedSession
+    }
+
+    static func clearQualityColdLaunchLease(
+        baseURL: URL,
+        fileManager: FileManager = .default
+    ) {
+        try? fileManager.removeItem(at: qualityColdLaunchLeaseURL(baseURL: baseURL))
     }
 
     static var keychainDirectoryURL: URL? {
@@ -72,22 +708,39 @@ enum PushGoAutomationContext {
     }
 
     static var providerToken: String? {
+        #if DEBUG
         normalizedString(for: providerTokenEnv)
+        #else
+        nil
+        #endif
     }
 
     static var gatewayBaseURLString: String? {
+        #if DEBUG
         normalizedString(for: gatewayBaseURLEnv)
+        #else
+        nil
+        #endif
     }
 
     static var gatewayToken: String? {
+        #if DEBUG
         normalizedString(for: gatewayTokenEnv)
+        #else
+        nil
+        #endif
     }
 
     static var isActive: Bool {
-        storageRootURL != nil
+        #if DEBUG
+        qualitySession != nil
+            || storageRootURL != nil
             || providerToken != nil
             || gatewayBaseURLString != nil
             || gatewayToken != nil
+        #else
+        false
+        #endif
     }
 
     static var forceForegroundApp: Bool {
@@ -146,6 +799,75 @@ enum PushGoAutomationContext {
         return URL(fileURLWithPath: raw, isDirectory: true)
     }
 
+    private static func resolveProcessQualitySession() -> ProcessQualitySessionResolution {
+        #if DEBUG
+        let explicitSession = normalizedString(for: qualitySessionEnv)
+        let baseURL = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first
+        if let explicitSession {
+            guard let descriptor = try? decodeQualitySession(explicitSession) else {
+                return ProcessQualitySessionResolution(
+                    encodedSession: nil,
+                    inputStatus: "invalid"
+                )
+            }
+            if let baseURL {
+                if descriptor.allowsSystemColdLaunch {
+                    do {
+                        try writeQualityColdLaunchLease(
+                            encodedSession: explicitSession,
+                            baseURL: baseURL,
+                            expiresAt: Date().addingTimeInterval(qualityColdLaunchLeaseLifetime)
+                        )
+                    } catch {
+                        return ProcessQualitySessionResolution(
+                            encodedSession: nil,
+                            inputStatus: "invalid"
+                        )
+                    }
+                } else {
+                    clearQualityColdLaunchLease(baseURL: baseURL)
+                }
+            } else if descriptor.allowsSystemColdLaunch {
+                return ProcessQualitySessionResolution(
+                    encodedSession: nil,
+                    inputStatus: "invalid"
+                )
+            }
+            return ProcessQualitySessionResolution(
+                encodedSession: explicitSession,
+                inputStatus: "valid"
+            )
+        }
+        guard let baseURL,
+              let handedOffSession = loadQualityColdLaunchLease(
+                  baseURL: baseURL,
+                  now: Date()
+              )
+        else {
+            return ProcessQualitySessionResolution(
+                encodedSession: nil,
+                inputStatus: "missing"
+            )
+        }
+        return ProcessQualitySessionResolution(
+            encodedSession: handedOffSession,
+            inputStatus: "valid"
+        )
+        #else
+        return ProcessQualitySessionResolution(encodedSession: nil, inputStatus: "missing")
+        #endif
+    }
+
+    private static func qualityColdLaunchLeaseURL(baseURL: URL) -> URL {
+        baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Control", isDirectory: true)
+            .appendingPathComponent("cold-launch-lease.json", isDirectory: false)
+    }
+
     private static func sandboxTempStorageURL(from raw: String) -> URL? {
         guard raw.hasPrefix(sandboxTempStoragePrefix) else { return nil }
         let relative = raw
@@ -166,16 +888,40 @@ enum PushGoAutomationContext {
     }
 
     private static func normalizedString(for envKey: String) -> String? {
-        let rawValue: String
-        if let cString = getenv(envKey) {
-            rawValue = String(cString: cString)
-        } else {
-            rawValue = ProcessInfo.processInfo.environment[envKey]
-                ?? launchArgumentValue(for: envKey)
-                ?? ""
+        let processValue = getenv(envKey).map { String(cString: $0) }
+        let candidates = [
+            processValue,
+            ProcessInfo.processInfo.environment[envKey],
+            launchArgumentValue(for: envKey),
+        ]
+        return candidates.lazy.compactMap { candidate in
+            let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized?.isEmpty == false ? normalized : nil
+        }.first
+    }
+
+    private static func isValidSessionID(_ value: String) -> Bool {
+        guard (1 ... 64).contains(value.utf8.count) else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
         }
-        let raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? nil : raw
+    }
+
+    private static func isSafeArtifactFilename(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count <= 80 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 46, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
+        } && value != "." && value != ".."
     }
 
     private static func launchArgumentValue(for envKey: String) -> String? {
@@ -200,15 +946,20 @@ enum OpaqueId {
 }
 
 enum PushGoSystemInteraction {
-    static func copyTextToPasteboard(_ text: String) {
-        guard !text.isEmpty else { return }
-        guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return }
+    @discardableResult
+    static func copyTextToPasteboard(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return false }
 #if os(iOS)
         UIPasteboard.general.string = text
+        return UIPasteboard.general.string == text
 #elseif os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        return pasteboard.setString(text, forType: .string)
+            && pasteboard.string(forType: .string) == text
+#else
+        return false
 #endif
     }
 
@@ -360,29 +1111,31 @@ enum AppConstants {
             try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
         }
 
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+        try withSQLiteMigrationLock(directory: databaseDirectory) {
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                directory: databaseDirectory,
+                legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
-        try migrateSharedDatabaseArtifactsIntoAppLocal(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier,
-            targetDirectory: databaseDirectory
-        )
+                directory: databaseDirectory,
+                legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+            try migrateSharedDatabaseArtifactsIntoAppLocal(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier,
+                targetDirectory: databaseDirectory
+            )
+        }
         return databaseDirectory
     }
 
@@ -405,24 +1158,48 @@ enum AppConstants {
             try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
         }
 
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+        try withSQLiteMigrationLock(directory: databaseDirectory) {
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                directory: databaseDirectory,
+                legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
+                directory: databaseDirectory,
+                legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+        }
+    }
+
+    private static func withSQLiteMigrationLock<T>(
+        directory: URL,
+        operation: () throws -> T
+    ) throws -> T {
+        // App, extension, and watch processes can open the same store. Keep
+        // source discovery, marker writes, and every SQLite sidecar move under
+        // one target-directory lock so they cannot publish mixed file families.
+        let lockPath = directory.appendingPathComponent(".pushgo-sqlite-migration.lock").path
+        let descriptor = Darwin.open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        defer { Darwin.close(descriptor) }
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try operation()
     }
 
     private static func migrateSQLiteFileFamily(
@@ -432,18 +1209,31 @@ enum AppConstants {
         targetFilename: String
     ) throws {
         let targetBaseURL = directory.appendingPathComponent(targetFilename)
+        let markerURL = directory.appendingPathComponent(targetFilename + ".legacy-migration-source")
+        let markedSource = try readSQLiteMigrationSource(
+            fileManager: fileManager,
+            markerURL: markerURL,
+            candidates: legacyFilenames,
+            targetFilename: targetFilename
+        )
         if fileManager.fileExists(atPath: targetBaseURL.path) {
             let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
                 .int64Value ?? 0
-            if targetSize > 0 {
+            if targetSize > 0, markedSource == nil {
                 return
             }
-            try? fileManager.removeItem(at: targetBaseURL)
+            if targetSize == 0 {
+                try? fileManager.removeItem(at: targetBaseURL)
+            }
         }
-        guard let sourceFilename = legacyFilenames.first(where: {
+        guard let sourceFilename = markedSource ?? legacyFilenames.first(where: {
             fileManager.fileExists(atPath: directory.appendingPathComponent($0).path)
         }) else {
             return
+        }
+
+        if markedSource == nil {
+            try sourceFilename.write(to: markerURL, atomically: true, encoding: .utf8)
         }
 
         let suffixes = ["", "-wal", "-shm", "-journal"]
@@ -458,6 +1248,29 @@ enum AppConstants {
                 targetURL: targetURL
             )
         }
+        try fileManager.removeItem(at: markerURL)
+    }
+
+    private static func readSQLiteMigrationSource(
+        fileManager: FileManager,
+        markerURL: URL,
+        candidates: [String],
+        targetFilename: String
+    ) throws -> String? {
+        guard fileManager.fileExists(atPath: markerURL.path) else { return nil }
+        let source = try String(contentsOf: markerURL, encoding: .utf8)
+        let isDiscoverableLegacyName = targetFilename == databaseStoreFilename
+            ? legacyDatabaseVersion(from: source) != nil
+            : targetFilename == messageIndexDatabaseFilename
+                && legacyMessageIndexVersion(from: source) != nil
+        guard candidates.contains(source) || isDiscoverableLegacyName else {
+            throw NSError(
+                domain: "io.ethan.pushgo.sqlite-migration",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid SQLite migration source marker."]
+            )
+        }
+        return source
     }
 
     private static func migrateSingleFile(
@@ -468,7 +1281,11 @@ enum AppConstants {
         do {
             try fileManager.moveItem(at: sourceURL, to: targetURL)
         } catch {
-            try fileManager.copyItem(at: sourceURL, to: targetURL)
+            try copySingleFile(
+                fileManager: fileManager,
+                sourceURL: sourceURL,
+                targetURL: targetURL
+            )
             try? fileManager.removeItem(at: sourceURL)
         }
     }
@@ -489,26 +1306,28 @@ enum AppConstants {
             return
         }
 
-        try migrateSQLiteFileFamilyBetweenDirectories(
-            fileManager: fileManager,
-            sourceDirectory: sharedDatabaseDirectory,
-            targetDirectory: targetDirectory,
-            sourceCandidates: databaseStoreSourceCandidates(
+        try withSQLiteMigrationLock(directory: sharedDatabaseDirectory) {
+            try migrateSQLiteFileFamilyBetweenDirectories(
                 fileManager: fileManager,
-                sourceDirectory: sharedDatabaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamilyBetweenDirectories(
-            fileManager: fileManager,
-            sourceDirectory: sharedDatabaseDirectory,
-            targetDirectory: targetDirectory,
-            sourceCandidates: messageIndexDatabaseSourceCandidates(
+                sourceDirectory: sharedDatabaseDirectory,
+                targetDirectory: targetDirectory,
+                sourceCandidates: databaseStoreSourceCandidates(
+                    fileManager: fileManager,
+                    sourceDirectory: sharedDatabaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamilyBetweenDirectories(
                 fileManager: fileManager,
-                sourceDirectory: sharedDatabaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
+                sourceDirectory: sharedDatabaseDirectory,
+                targetDirectory: targetDirectory,
+                sourceCandidates: messageIndexDatabaseSourceCandidates(
+                    fileManager: fileManager,
+                    sourceDirectory: sharedDatabaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+        }
     }
 
     private static func migrateSQLiteFileFamilyBetweenDirectories(
@@ -519,21 +1338,33 @@ enum AppConstants {
         targetFilename: String
     ) throws {
         let targetBaseURL = targetDirectory.appendingPathComponent(targetFilename)
+        let markerURL = targetDirectory.appendingPathComponent(targetFilename + ".shared-migration-source")
+        let markedSource = try readSQLiteMigrationSource(
+            fileManager: fileManager,
+            markerURL: markerURL,
+            candidates: sourceCandidates,
+            targetFilename: targetFilename
+        )
         if fileManager.fileExists(atPath: targetBaseURL.path) {
             let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
                 .int64Value ?? 0
-            if targetSize > 0 {
+            if targetSize > 0, markedSource == nil {
                 return
             }
-            try? fileManager.removeItem(at: targetBaseURL)
+            if targetSize == 0 {
+                try? fileManager.removeItem(at: targetBaseURL)
+            }
         }
 
-        let sourceFilename = preferredSQLiteSourceFilename(
+        let sourceFilename = markedSource ?? preferredSQLiteSourceFilename(
             fileManager: fileManager,
             directory: sourceDirectory,
             candidates: sourceCandidates
         )
         guard let sourceFilename else { return }
+        if markedSource == nil {
+            try sourceFilename.write(to: markerURL, atomically: true, encoding: .utf8)
+        }
 
         let suffixes = ["", "-wal", "-shm", "-journal"]
         for suffix in suffixes {
@@ -547,6 +1378,7 @@ enum AppConstants {
                 targetURL: targetURL
             )
         }
+        try fileManager.removeItem(at: markerURL)
     }
 
     private static func copySingleFile(
@@ -554,12 +1386,27 @@ enum AppConstants {
         sourceURL: URL,
         targetURL: URL
     ) throws {
+        // Copy into the destination directory first. A failed copy may leave
+        // a short file; publishing that as SQLite's main file can make a
+        // subsequent launch skip the complete source and its WAL.
+        let temporaryURL = URL(fileURLWithPath: targetURL.path + ".copying")
+        if fileManager.fileExists(atPath: temporaryURL.path) {
+            try fileManager.removeItem(at: temporaryURL)
+        }
         do {
-            try fileManager.copyItem(at: sourceURL, to: targetURL)
-        } catch {
-            if fileManager.fileExists(atPath: targetURL.path) {
-                return
+            try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+            let sourceSize = try fileManager.attributesOfItem(atPath: sourceURL.path)[.size] as? NSNumber
+            let copiedSize = try fileManager.attributesOfItem(atPath: temporaryURL.path)[.size] as? NSNumber
+            guard let sourceSize, let copiedSize, sourceSize == copiedSize else {
+                throw NSError(
+                    domain: "io.ethan.pushgo.sqlite-migration",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Incomplete SQLite family copy."]
+                )
             }
+            try fileManager.moveItem(at: temporaryURL, to: targetURL)
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
             throw error
         }
     }

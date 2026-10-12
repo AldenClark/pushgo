@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let messageListViewModel: MessageListViewModel
@@ -16,14 +17,20 @@ struct MessageSplitScreen: View {
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     @State private var isHistoryCleanupPresented = false
+    @State private var isPullRefreshing = false
+    @State private var isPullRefreshSlow = false
+    @State private var didPullRefreshFail = false
+    @State private var synchronizedMessageRevision: UUID?
 
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             messageListPane
+            Divider()
             messageDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .navigationTitle(localizationManager.localized("messages"))
         .environment(searchViewModel)
         .onAppear {
@@ -67,7 +74,7 @@ struct MessageSplitScreen: View {
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedMessageSnapshot,
                isPendingLocalDeletion(selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
             {
@@ -98,7 +105,7 @@ struct MessageSplitScreen: View {
                 viewModel: messageListViewModel,
                 messages: visibleFilteredMessages,
                 searchResults: visibleSearchResults,
-                isShowingSearchResults: searchViewModel.hasSearched,
+                isShowingSearchResults: searchViewModel.hasSearched || searchViewModel.isSearching,
                 selection: $selection,
                 onOpenMessage: { message in
                     selection = message.id
@@ -120,6 +127,11 @@ struct MessageSplitScreen: View {
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .overlay(alignment: .top) {
+                messageRefreshFeedback
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+            }
             .refreshable {
                 await handleProviderIngressPullRefresh()
             }
@@ -155,7 +167,11 @@ struct MessageSplitScreen: View {
                     useNavigationContainer: false,
                     showsDeleteToolbarAction: false,
                 )
-                .id(displayedMessage.id)
+                // A store revision is part of the detail's data identity. Recreate the
+                // detail only after the selected canonical snapshot has synchronized to
+                // that revision; this prevents an older display seed from masquerading
+                // as current data without coupling the child to an unversioned snapshot.
+                .id("\(displayedMessage.id.uuidString)|\(synchronizedMessageRevision?.uuidString ?? "unsynchronized")")
             } else if let messageId = selection {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -187,8 +203,63 @@ struct MessageSplitScreen: View {
 
     @MainActor
     private func handleProviderIngressPullRefresh() async {
-        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        guard !isPullRefreshing else { return }
+        isPullRefreshing = true
+        isPullRefreshSlow = false
+        let slowStateTask = Task { @MainActor in
+            try await Task.sleep(for: .seconds(1))
+            try Task.checkCancellation()
+            isPullRefreshSlow = true
+        }
+        defer {
+            slowStateTask.cancel()
+            isPullRefreshSlow = false
+            isPullRefreshing = false
+        }
+#if DEBUG
+        if let delay = PushGoAutomationContext.qualitySession?.faults.messageRefreshDelayMilliseconds,
+           delay > 0 {
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+#endif
+        let outcome = await environment.syncProviderIngressOutcome(reason: "messages_pull_to_refresh")
+        if case .failed = outcome {
+            didPullRefreshFail = true
+        } else {
+            didPullRefreshFail = false
+        }
         await refreshVisibleMessageData()
+    }
+
+    @ViewBuilder
+    private var messageRefreshFeedback: some View {
+        if didPullRefreshFail {
+            Label(
+                localizationManager.localized("message_refresh_failed"),
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.refresh.failed")
+        } else if isPullRefreshSlow {
+            Label(
+                localizationManager.localized("message_ingress_processing_slow"),
+                systemImage: "arrow.clockwise"
+            )
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(.regularMaterial, in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.refresh.slow")
+        }
     }
 
     @MainActor
@@ -231,19 +302,23 @@ struct MessageSplitScreen: View {
         guard let messageId else {
             await MainActor.run {
                 selectedMessageSnapshot = nil
+                synchronizedMessageRevision = nil
             }
             return
         }
 
+        let revision = environment.messageStoreRevision
         let existingSnapshot = await MainActor.run { selectedMessageSnapshot }
-        if let existingSnapshot, existingSnapshot.id == messageId {
+        if let existingSnapshot,
+           existingSnapshot.id == messageId,
+           synchronizedMessageRevision == revision
+        {
             if markRead {
                 await markMessageReadIfNeeded(existingSnapshot, messageId: messageId)
             }
             return
         }
 
-        let revision = environment.messageStoreRevision
         let loadResult = await MessageDetailSnapshotCache.shared.loadMessage(
             id: messageId,
             revision: revision
@@ -254,6 +329,7 @@ struct MessageSplitScreen: View {
         await MainActor.run {
             guard selection == messageId else { return }
             selectedMessageSnapshot = loaded
+            synchronizedMessageRevision = revision
         }
         if let loaded {
             scheduleDetailImageMetadataPrime(for: loaded)
@@ -355,7 +431,7 @@ struct MessageSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ messageId: UUID, channelId: String?) -> Bool {
-        environment.pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
+        pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
     }
 
     private var displayedTagOptions: [String] {
@@ -384,7 +460,7 @@ struct MessageSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [message],
             identity: { $0.id },
             title: { $0.title },
@@ -420,6 +496,20 @@ struct MessageSplitScreen: View {
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                Task { await handleProviderIngressPullRefresh() }
+            } label: {
+                if isPullRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .help(localizationManager.localized("refresh"))
+            .accessibilityLabel(localizationManager.localized("refresh"))
+            .accessibilityIdentifier("action.messages.refresh")
+            .disabled(isPullRefreshing)
             if !searchViewModel.hasSearched && messageListViewModel.hasUnreadMessagesInCurrentScope {
                 Button {
                     Task { await markAllCurrentScopeMessagesAsRead() }
@@ -428,6 +518,7 @@ struct MessageSplitScreen: View {
                 }
                 .help(localizationManager.localized("mark_all_as_read"))
                 .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                .accessibilityIdentifier("action.messages.mark_all_read")
             }
             Button {
                 isFilterPopoverPresented = true
@@ -455,6 +546,7 @@ struct MessageSplitScreen: View {
             }
             .help(localizationManager.localized("delete"))
             .accessibilityLabel(localizationManager.localized("delete"))
+            .accessibilityIdentifier("action.message.delete")
             .disabled(selectedMessageSnapshot?.id != selection)
         }
     }
@@ -463,6 +555,7 @@ struct MessageSplitScreen: View {
         ScrollView {
             filterPopoverContent
         }
+        .accessibilityIdentifier("filter.surface")
         .frame(maxHeight: 420)
     }
 
@@ -475,6 +568,7 @@ struct MessageSplitScreen: View {
                 ) {
                     messageListViewModel.toggleUnreadOnlyFilter()
                 }
+                .accessibilityIdentifier("filter.unread_only")
 
                 filterCloudChip(
                     title: localizationManager.localized("history_cleanup_chip"),
@@ -507,6 +601,7 @@ struct MessageSplitScreen: View {
                         ) {
                             messageListViewModel.toggleChannelSelection(summary.key)
                         }
+                        .accessibilityIdentifier("filter.\(summary.key.id)")
                     }
                 }
             }

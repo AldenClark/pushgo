@@ -1,8 +1,62 @@
 import Foundation
 import Testing
+#if os(macOS)
+import AppKit
+import ImageIO
+#endif
 @testable import PushGoAppleCore
 
 struct ValidationUtilitiesTests {
+#if os(macOS)
+    @Test
+    @MainActor
+    func macOSImageExportProducesDecodablePixelExactPNG() throws {
+        let canonicalBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+        let canonicalData = try #require(Data(base64Encoded: canonicalBase64))
+        let sourceImage = try #require(NSImage(data: canonicalData))
+        let exportedData = try #require(PushGoMacImageExportEncoder.pngData(from: sourceImage))
+
+        _ = try #require(NSBitmapImageRep(data: exportedData))
+        let canonicalPixels = try #require(normalizedRGBA8Pixels(from: canonicalData))
+        let exportedPixels = try #require(normalizedRGBA8Pixels(from: exportedData))
+        #expect(exportedPixels.width == canonicalPixels.width)
+        #expect(exportedPixels.height == canonicalPixels.height)
+        #expect(exportedPixels.data == canonicalPixels.data)
+    }
+
+    private func normalizedRGBA8Pixels(from data: Data) -> (width: Int, height: Int, data: Data)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        else {
+            return nil
+        }
+
+        let width = image.width
+        let height = image.height
+        var pixels = Data(count: width * height * 4)
+        let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue
+            ) else {
+                return false
+            }
+            context.interpolationQuality = .none
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return rendered ? (width, height, pixels) : nil
+    }
+#endif
+
     @Test
     func channelNameNormalizationTrimsWhitespace() throws {
         #expect(try ChannelNameValidator.normalize("  alerts  ") == "alerts")

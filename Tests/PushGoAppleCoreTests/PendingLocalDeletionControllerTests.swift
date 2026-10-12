@@ -260,6 +260,64 @@ struct PendingLocalDeletionControllerTests {
     }
 
     @Test
+    func expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let message = Self.makeMessage(title: "lease-recovery")
+            try await store.saveMessage(message)
+            let startedAt = Date()
+            let pending = try await store.enqueuePendingLocalDeletion(
+                summary: message.title,
+                undoLabel: "Undo",
+                intent: .messages(ids: [message.id]),
+                timeout: 0,
+                now: startedAt
+            )
+
+            let firstClaim = try #require(try await store.claimNextPendingLocalDeletion(
+                owner: "first-executor",
+                leaseDuration: 1,
+                timeout: 5,
+                now: startedAt
+            ))
+            #expect(firstClaim.id == pending.id)
+            #expect(firstClaim.state == .executing)
+            #expect(firstClaim.attemptCount == 1)
+
+            let recoveredAt = startedAt.addingTimeInterval(2)
+            let secondClaim = try #require(try await store.claimNextPendingLocalDeletion(
+                owner: "second-executor",
+                leaseDuration: 30,
+                timeout: 5,
+                now: recoveredAt
+            ))
+            #expect(secondClaim.id == pending.id)
+            #expect(secondClaim.state == .executing)
+            #expect(secondClaim.attemptCount == 2)
+            #expect(secondClaim.leaseOwner == "second-executor")
+            #expect(secondClaim.lastErrorCode == "execution_lease_expired")
+
+            await #expect(throws: (any Error).self) {
+                _ = try await store.commitClaimedPendingLocalDeletion(
+                    id: secondClaim.id,
+                    owner: "first-executor",
+                    now: recoveredAt
+                )
+            }
+            #expect(try await store.loadMessage(id: message.id) != nil)
+
+            _ = try await store.commitClaimedPendingLocalDeletion(
+                id: secondClaim.id,
+                owner: "second-executor",
+                now: recoveredAt
+            )
+            try await store.completePendingLocalDeletionCleanup(id: secondClaim.id)
+
+            #expect(try await store.loadMessage(id: message.id) == nil)
+            #expect(try await store.loadPendingLocalDeletions(now: recoveredAt).isEmpty)
+        }
+    }
+
+    @Test
     func failedChannelCommitRollsBackPrimaryDeletionAndKeepsDurableLease() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let message = Self.makeMessage(title: "channel-rollback", channel: "channel-a")

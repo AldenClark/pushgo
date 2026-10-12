@@ -54,7 +54,10 @@ struct WatchEventDetailScreen: View {
 
                 if let imageURL = event.imageURL {
                     Section(LocalizationManager.shared.localized("image")) {
-                        AsyncImage(url: imageURL) { phase in
+                        WatchCachedImage(
+                            url: imageURL,
+                            accessibilityLabel: LocalizationManager.shared.localized("image")
+                        ) { phase in
                             switch phase {
                             case let .success(image):
                                 Button {
@@ -63,9 +66,12 @@ struct WatchEventDetailScreen: View {
                                     image
                                         .resizable()
                                         .scaledToFit()
+                                        .frame(height: 90)
                                 }
                                 .buttonStyle(.plain)
-                            default:
+                                .accessibilityLabel(LocalizationManager.shared.localized("image"))
+                                .accessibilityIdentifier("image.event.\(event.eventId)")
+                            case .empty, .failure:
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(Color.appSurfaceSunken)
                                     .frame(height: 90)
@@ -79,21 +85,28 @@ struct WatchEventDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.event.detail")
         .navigationTitle(event?.title ?? "")
         .sheet(item: $previewImageItem) { item in
             NavigationStack {
                 ZStack {
                     Color.appImagePreviewScrim.ignoresSafeArea()
-                    AsyncImage(url: item.url) { phase in
+                    WatchCachedImage(
+                        url: item.url,
+                        accessibilityLabel: LocalizationManager.shared.localized("image")
+                    ) { phase in
                         switch phase {
                         case let .success(image):
                             image
                                 .resizable()
                                 .scaledToFit()
+                                .accessibilityElement()
+                                .accessibilityLabel(LocalizationManager.shared.localized("image"))
+                                .accessibilityIdentifier("image.event.preview")
                         case .failure:
                             Image(systemName: "photo")
                                 .foregroundStyle(Color.appOverlayForeground)
-                        default:
+                        case .empty:
                             ProgressView().tint(Color.appOverlayForeground)
                         }
                     }

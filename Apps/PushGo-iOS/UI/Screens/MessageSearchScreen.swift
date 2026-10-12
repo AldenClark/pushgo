@@ -144,6 +144,8 @@ private struct MessageSearchScreenModern: View {
                 detailKey: "enter_any_keyword_to_quickly_locate_messages_from_historical_push_notifications",
             )
             .frame(maxWidth: .infinity, minHeight: 240)
+        } else if viewModel.searchFailed {
+            searchFailureContent
         } else if viewModel.displayedResults.isEmpty {
             MessageSearchPlaceholderView(
                 imageName: "questionmark.circle",
@@ -154,6 +156,24 @@ private struct MessageSearchScreenModern: View {
         } else {
             resultsSection
         }
+    }
+
+    private var searchFailureContent: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("operation_failed"))
+                .font(.headline)
+            Button(localizationManager.localized("retry")) {
+                viewModel.retrySearch()
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.search.retry")
+        }
+        .frame(maxWidth: .infinity, minHeight: 240)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.failed")
     }
 
     private var resultsSection: some View {

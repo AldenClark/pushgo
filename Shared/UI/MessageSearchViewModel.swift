@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+#if DEBUG
+private enum PushGoQualityInjectedMessageSearchError: Error {
+    case requestedFailure
+}
+#endif
+
 @MainActor
 @Observable
 final class MessageSearchViewModel {
@@ -9,6 +15,14 @@ final class MessageSearchViewModel {
     private(set) var displayedQuery: String = ""
     private(set) var completedSearchRevision: UInt64 = 0
     private(set) var displayedResultsIdentityRevision: UInt64 = 0
+    /// Identifies the search request after debounce has actually launched.
+    /// UI loading feedback must be timed from this point, not from each
+    /// character-level query update.
+    private(set) var activeSearchRequestRevision: UInt64?
+    /// Request-local slow state owned by the search state machine. Keeping
+    /// this state here prevents view lifecycle or list virtualization races
+    /// from dropping the only user-visible indication before results commit.
+    private(set) var isSearchLoadSlow: Bool = false
     private(set) var displayedResults: [PushMessageSummary] = [] {
         didSet {
             guard messageIDsChanged(from: oldValue, to: displayedResults) else { return }
@@ -18,6 +32,7 @@ final class MessageSearchViewModel {
     private(set) var totalResults: Int = 0
     private(set) var hasSearched: Bool = false
     private(set) var isSearching: Bool = false
+    private(set) var searchFailed: Bool = false
 
     private let pageSize: Int = 20
     private let maxCachedResults: Int = 200
@@ -31,11 +46,20 @@ final class MessageSearchViewModel {
     private var searchTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
+    private var slowSearchTask: Task<Void, Never>?
     private var searchRequestRevision: UInt64 = 0
+    private var shouldApplyQualitySearchDelay = true
+#if DEBUG
+    private var remainingQualitySearchFailures: Int
+#endif
 
     init(environment: AppEnvironment? = nil) {
         self.environment = environment ?? AppEnvironment.shared
         dataStore = self.environment.dataStore
+#if DEBUG
+        remainingQualitySearchFailures = PushGoAutomationContext.qualitySession?.faults
+            .failMessageSearchOnce == true ? 1 : 0
+#endif
     }
     func updateQuery(_ text: String) {
         query = text
@@ -62,6 +86,12 @@ final class MessageSearchViewModel {
     }
 
     func refreshMessagesImmediatelyIfNeeded() {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        performSearchImmediately(with: trimmed)
+    }
+
+    func retrySearch() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         performSearchImmediately(with: trimmed)
@@ -100,6 +130,24 @@ final class MessageSearchViewModel {
 
     private func launchSearch(with trimmedQuery: String, requestRevision: UInt64) {
         guard requestRevision == searchRequestRevision else { return }
+        activeSearchRequestRevision = requestRevision
+        isSearchLoadSlow = false
+        slowSearchTask?.cancel()
+        slowSearchTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(1))
+                try Task.checkCancellation()
+                guard let self,
+                      self.isSearching,
+                      self.activeSearchRequestRevision == requestRevision else {
+                    return
+                }
+                self.isSearchLoadSlow = true
+            } catch {
+                // Query replacement or request completion cancels this task;
+                // the next request owns a fresh timer.
+            }
+        }
         searchTask = Task(priority: .userInitiated) { @MainActor [weak self] in
             await self?.loadFirstPage(
                 trimmedQuery: trimmedQuery,
@@ -136,7 +184,12 @@ final class MessageSearchViewModel {
         searchTask = nil
         loadMoreTask?.cancel()
         loadMoreTask = nil
+        slowSearchTask?.cancel()
+        slowSearchTask = nil
+        activeSearchRequestRevision = nil
+        isSearchLoadSlow = false
         isLoadingMore = false
+        searchFailed = false
         isSearching = true
         return searchRequestRevision
     }
@@ -149,7 +202,12 @@ final class MessageSearchViewModel {
         searchTask = nil
         loadMoreTask?.cancel()
         loadMoreTask = nil
+        slowSearchTask?.cancel()
+        slowSearchTask = nil
+        activeSearchRequestRevision = nil
+        isSearchLoadSlow = false
         hasSearched = false
+        searchFailed = false
         isSearching = false
         isLoadingMore = false
         displayedQuery = ""
@@ -165,10 +223,16 @@ final class MessageSearchViewModel {
             if requestRevision == searchRequestRevision {
                 isSearching = false
                 searchTask = nil
+                slowSearchTask?.cancel()
+                slowSearchTask = nil
+                activeSearchRequestRevision = nil
+                isSearchLoadSlow = false
             }
         }
 
         do {
+            try await applyQualitySearchDelayIfNeeded()
+            try consumeQualitySearchFailureIfNeeded()
             let count = try await dataStore.searchMessagesCount(query: trimmedQuery)
             try Task.checkCancellation()
             let page = try await loadVisiblePage(
@@ -184,6 +248,7 @@ final class MessageSearchViewModel {
             nextCursor = page.nextCursor
             hasMoreResults = page.hasMoreResults
             hasSearched = true
+            searchFailed = false
             completedSearchRevision &+= 1
         } catch {
             guard isCurrentSearchRequest(requestRevision, query: trimmedQuery) else { return }
@@ -193,8 +258,29 @@ final class MessageSearchViewModel {
             nextCursor = nil
             hasMoreResults = false
             hasSearched = true
+            searchFailed = true
             completedSearchRevision &+= 1
         }
+    }
+
+    private func applyQualitySearchDelayIfNeeded() async throws {
+        #if DEBUG
+        guard shouldApplyQualitySearchDelay,
+              let delay = PushGoAutomationContext.qualitySession?.faults
+                .messageSearchDelayMilliseconds,
+              delay > 0
+        else { return }
+        shouldApplyQualitySearchDelay = false
+        try await Task.sleep(for: .milliseconds(delay))
+        #endif
+    }
+
+    private func consumeQualitySearchFailureIfNeeded() throws {
+        #if DEBUG
+        guard remainingQualitySearchFailures > 0 else { return }
+        remainingQualitySearchFailures -= 1
+        throw PushGoQualityInjectedMessageSearchError.requestedFailure
+        #endif
     }
 
     private func loadNextPage(trimmedQuery: String, requestRevision: UInt64) async {
@@ -255,38 +341,20 @@ final class MessageSearchViewModel {
         before cursor: MessagePageCursor?,
         targetVisibleCount: Int
     ) async throws -> (messages: [PushMessageSummary], nextCursor: MessagePageCursor?, hasMoreResults: Bool) {
-        guard targetVisibleCount > 0 else {
-            return ([], cursor, false)
-        }
-
-        var results: [PushMessageSummary] = []
-        var currentCursor = cursor
-
-        while results.count < targetVisibleCount {
-            let page = try await dataStore.searchMessageSummariesPage(
-                query: trimmedQuery,
-                before: currentCursor,
-                limit: pageSize,
-                sortMode: sortMode
-            )
-            guard !page.isEmpty else {
-                return (results, currentCursor, false)
-            }
-
-            currentCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-
-            let visiblePage = page.filter(self.isVisible)
-            let needed = targetVisibleCount - results.count
-            results.append(contentsOf: visiblePage.prefix(needed))
-
-            if page.count < pageSize {
-                return (results, currentCursor, false)
-            }
-        }
-
-        return (results, currentCursor, true)
+        try await loadVisibleMessageSearchPage(
+            before: cursor,
+            targetVisibleCount: targetVisibleCount,
+            pageSize: pageSize,
+            loadPage: { cursor, limit in
+                try await self.dataStore.searchMessageSummariesPage(
+                    query: trimmedQuery,
+                    before: cursor,
+                    limit: limit,
+                    sortMode: self.sortMode
+                )
+            },
+            isVisible: self.isVisible
+        )
     }
 
     private func isVisible(_ message: PushMessageSummary) -> Bool {

@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "product_source_revision": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+  "problem": "Search pagination skipped unconsumed matches while filling a page after locally suppressed rows",
+  "before_fix": {
+    "canonical_matches": 43,
+    "hidden_rows": 2,
+    "returned_visible_rows": 23,
+    "expected_visible_rows": 41,
+    "regression_issues": 3,
+    "evidence_scope": "Real Store regression after unchanged baseline paging algorithm extraction; not an untouched baseline App run"
+  },
+  "after_fix": {
+    "focused_tests_passed": 2,
+    "canonical_matches": 43,
+    "visible_rows": 41,
+    "ordered_unique_results_and_store_reopen": "PASSED",
+    "core_registered": 457,
+    "core_executed": 453,
+    "explicit_scale_opt_ins_skipped": 4,
+    "local_notification_extension_compile": "PASSED; unsigned Simulator build"
+  },
+  "initial_ci_failure": {
+    "source": "90cce351aa8ae8f32aa83e19e9b500d572ea25a7",
+    "cause": "Shared-model helper referenced a cursor defined only in Store; NSE target lacked that type",
+    "product_status": "NOT_RUN",
+    "ui_assertions_executed": 0,
+    "native_ci": {
+      "conclusion": "failure",
+      "headSha": "90cce351aa8ae8f32aa83e19e9b500d572ea25a7",
+      "status": "completed",
+      "url": "https://github.com/AldenClark/pushgo/actions/runs/37109193962"
+    },
+    "concurrency_ci": {
+      "conclusion": "failure",
+      "headSha": "90cce351aa8ae8f32aa83e19e9b500d572ea25a7",
+      "status": "completed",
+      "url": "https://github.com/AldenClark/pushgo/actions/runs/37109291896"
+    }
+  },
+  "concurrency_final": {
+    "ci": {
+      "conclusion": "success",
+      "headSha": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+      "status": "completed",
+      "url": "https://github.com/AldenClark/pushgo/actions/runs/37109768958"
+    },
+    "source_equivalence": {
+      "event_head": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+      "actual_checkout": "739b06ee947e22ed28a86d11baec52c2fb7792fc",
+      "checked_paths": [
+        "Shared",
+        "Apps",
+        "Extensions",
+        "Tests",
+        "scripts",
+        "config",
+        "Package.swift",
+        "Package.resolved",
+        "pushgo.xcodeproj",
+        "fastlane",
+        ".github/workflows/apple-concurrency-gate.yml"
+      ],
+      "different_input_files": [],
+      "conclusion": "Actual PR merge checkout has identical product, test, build and concurrency-runner inputs to the submitted head."
+    },
+    "actual_unsigned_debug_builds": [
+      "PushGo-macOS",
+      "PushGo-watchOS",
+      "PushGo-iOS"
+    ],
+    "core_registered": 457,
+    "core_executed": 453,
+    "scale_skips": 4,
+    "tsan_focused_tests_passed": 3
+  },
+  "native_final": {
+    "status": "PASSED",
+    "ci": {
+      "conclusion": "success",
+      "headSha": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+      "status": "completed",
+      "url": "https://github.com/AldenClark/pushgo/actions/runs/37109835517"
+    },
+    "source_revision": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+    "ios_runtime_version": "26.4.1",
+    "expected_tests": 3,
+    "executed_tests": 3,
+    "passed_tests": 3,
+    "failed_tests": 0,
+    "skipped_tests": 0,
+    "expected_failures": 0,
+    "max_retries": 0,
+    "runtime_warning_count": 0,
+    "product_status": "PASSED",
+    "test_system_status": "PASSED",
+    "quality_gate_status": "NOT_RUN",
+    "signing_mode": "unsigned_simulator_test_build_only",
+    "root_review": {
+      "source_revision": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+      "expected_selector_set_matches_actual_xcresult_leaves": true,
+      "actual_test_cases": [
+        {
+          "identifier": "PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch",
+          "result": "Passed"
+        },
+        {
+          "identifier": "PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail",
+          "result": "Passed"
+        },
+        {
+          "identifier": "PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions",
+          "result": "Passed"
+        }
+      ],
+      "status": "PASSED"
+    },
+    "scope": "Integration App-owned Simulator journeys; exact suppressed paging defect covered by host Store regression"
+  },
+  "formal_quality": {
+    "product_status": "NOT_RUN",
+    "test_system_status": "BLOCKED",
+    "cause": "Preserved expired QoS registration and overdue P1-STORE static checks; not waived",
+    "ci": {
+      "conclusion": "failure",
+      "headSha": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+      "status": "completed",
+      "url": "https://github.com/AldenClark/pushgo/actions/runs/37109768932"
+    }
+  },
+  "actual_signing": "NOT_RUN",
+  "publication": "NOT_RUN",
+  "raw_logs": {
+    "search-paging-before-fix.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/search-paging-before-fix.log",
+      "sha256": "3ae274dc233a8dadd6e5613a59359bd7a15601a8a1ebaa7713cf93931a19b217"
+    },
+    "search-paging-after-fix.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/search-paging-after-fix.log",
+      "sha256": "c4cc7ef3451dc3cce2bfcc2924853c1d2d4cea7b008df4e5198269f4ad2582f4"
+    },
+    "core-full.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/core-full.log",
+      "sha256": "550da8661dc356825a3b7fcc8e3089938eb8d8c88346c58f6453b764511ffb42"
+    },
+    "cursor-relocation-core.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/cursor-relocation-core.log",
+      "sha256": "8ae8b7f76813f78519f263338fa00862c36f97157a9be071d9346f1c9fe2a146"
+    },
+    "core-final.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/core-final.log",
+      "sha256": "b81b12dad10fafe433e77887ecebaf1f3859105a41e25d063e9af95ddfde8187"
+    },
+    "nse-local-build.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/nse-local-build.log",
+      "sha256": "b37a499944e1f41df7237d99e58ebd6a41769f1e5dae593dc91629a009ebf496"
+    },
+    "ios-ci-failed.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/ios-ci-failed.log",
+      "sha256": "c45ae7c55e4bdb9c6f4e08b0da31e6a01992ec9530249db447e49f6ddfa25518"
+    },
+    "concurrency-before-fix.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/concurrency-before-fix.log",
+      "sha256": "0e7eb93acf18a0aa8dfb7654c815cd3c08d8796e7dcc5d8560fe59a64be2b989"
+    },
+    "concurrency-final.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/concurrency-final.log",
+      "sha256": "a40f3e837e3c3d1cf507eb014f2b17efcb28b215f728cc117d891a4e07be751e"
+    },
+    "pr-ci-failed.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/pr-ci-failed.log",
+      "sha256": "d7782c62860a59311834e04647c7c1235fb76e64f9fb0d115482c299c1de0cdb"
+    },
+    "changed-plan.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/changed-plan.log",
+      "sha256": "a5c67250a3c85b4ab7f85ee4fabb28d9aa69a1cecafbb815c8dbcc64638f42a2"
+    },
+    "cursor-changed-plan.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/cursor-changed-plan.log",
+      "sha256": "2769fae49678a280a9e54bb904cf5ff0497a48de161c8f3212d377e25bd8ed51"
+    },
+    "ios-final-terminal.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/ios-final-terminal.json",
+      "sha256": "0d52a897bebd3dc3a20bf309f2320c395251506dcb78ba36852a2f55b6c1c7e0"
+    },
+    "formal-final-terminal.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/formal-final-terminal.json",
+      "sha256": "abc7dfc6300c8865b028265d2452790be2527bef453f7078adaddc1f5b524d57"
+    },
+    "formal-final-failed.log": {
+      "path": "build/quality-results/apple-search-paging-20261003/formal-final-failed.log",
+      "sha256": "0b8db5f49dfcbc9c07d97cc22395db91dd63361d3b4a1d725e1197d19ee3d371"
+    },
+    "native-tests-root-review.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/native-tests-root-review.json",
+      "sha256": "bbb13e4a8d4f2b40642e35e57e21620a5b834f1facdcefdbff6c769867e664cf"
+    },
+    "native-root-review-receipt.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/native-root-review-receipt.json",
+      "sha256": "0d84e794e0aeeea77846184b1bc0a5d82a38633072b6c95bd5bbab0bfd439f48"
+    },
+    "ios-final-raw/run-37109835517-1/diagnostic-summary.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/ios-final-raw/run-37109835517-1/diagnostic-summary.json",
+      "sha256": "ae979782837c90ea9dca7161575690adc1854318e30b44e6b4befbec4208047f"
+    },
+    "ios-final-raw/run-37109835517-1/native-classification.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/ios-final-raw/run-37109835517-1/native-classification.json",
+      "sha256": "1e41add1486b870fe880209a46d2e00c478710410f59257abd782c8f13762883"
+    },
+    "ios-final-raw/run-37109835517-1/native-summary-raw.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/ios-final-raw/run-37109835517-1/native-summary-raw.json",
+      "sha256": "60b014a8b1548ee433897b2e959fbc54e80b8a18fc9b4758a351a25a894f8535"
+    },
+    "concurrency-final-terminal.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/concurrency-final-terminal.json",
+      "sha256": "686dc7bfcf0a9c51a35f187a21f78242b1ccfbd05eea861ba958ccad287c6dd6"
+    },
+    "concurrency-source-equivalence.json": {
+      "path": "build/quality-results/apple-search-paging-20261003/concurrency-source-equivalence.json",
+      "sha256": "63b1e0bb9c0c7a8db558b80d89b393be900cd8241e949ebd5e9be8249a1f2d0d"
+    }
+  }
+}

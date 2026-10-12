@@ -3,27 +3,68 @@ import os
 import Testing
 @testable import PushGoAppleCore
 
+@MainActor
+private func withProviderIngressLocalDataStore<T: Sendable>(
+    _ body: @MainActor @Sendable (LocalDataStore, String) async throws -> T
+) async rethrows -> T {
+    try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await body(store, appGroupIdentifier)
+    }
+}
+
 private actor ProviderIngressCapture {
     private var results: [ProviderIngressPersistenceResult]
+    private let pausesFirstBatch: Bool
+    private var firstBatchContinuation: CheckedContinuation<Void, Never>?
+    private var firstBatchWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var deliveryIds: [String] = []
     private(set) var payloadDeliveryIds: [String?] = []
+    private(set) var batchSizes: [Int] = []
     private(set) var errors: [String] = []
 
-    init(results: [ProviderIngressPersistenceResult]) {
+    init(results: [ProviderIngressPersistenceResult], pausesFirstBatch: Bool = false) {
         self.results = results
+        self.pausesFirstBatch = pausesFirstBatch
     }
 
     func persist(
-        deliveryId: String?,
-        payloadDeliveryId: String?
-    ) -> ProviderIngressPersistenceResult {
-        deliveryIds.append(deliveryId ?? "")
-        payloadDeliveryIds.append(payloadDeliveryId)
-        return results.isEmpty ? .persisted : results.removeFirst()
+        inputs: [ProviderIngressCoordinator.PersistenceInput]
+    ) async -> [ProviderIngressPersistenceResult] {
+        batchSizes.append(inputs.count)
+        if pausesFirstBatch, batchSizes.count == 1 {
+            let waiters = firstBatchWaiters
+            firstBatchWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+            await withCheckedContinuation { firstBatchContinuation = $0 }
+        }
+        return inputs.map { input in
+            deliveryIds.append(input.requestIdentifier ?? "")
+            payloadDeliveryIds.append(input.payload["delivery_id"] as? String)
+            return results.isEmpty ? .persisted : results.removeFirst()
+        }
+    }
+
+    func waitUntilFirstBatchStarts() async {
+        if !batchSizes.isEmpty { return }
+        await withCheckedContinuation { firstBatchWaiters.append($0) }
+    }
+
+    func releaseFirstBatch() {
+        firstBatchContinuation?.resume()
+        firstBatchContinuation = nil
     }
 
     func record(error: Error, source: String) {
         errors.append("\(source):\(error)")
+    }
+}
+
+@MainActor
+private final class ProviderInboxProgressCapture {
+    private(set) var events: [ProviderInboxProgress] = []
+
+    func record(_ progress: ProviderInboxProgress) {
+        events.append(progress)
     }
 }
 
@@ -142,10 +183,11 @@ private final class ProviderIngressHTTPState: Sendable {
     }
 }
 
+@MainActor
 struct ProviderIngressCoordinatorTests {
     @Test
     func v2FullSyncTraversesEmptyCorruptPageAndUsesOuterDeliveryIds() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-pages-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(pullPayloads: [
@@ -179,7 +221,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func rejectedItemSurvivesAckFailureAndDrainRetriesWithoutPersistedRow() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-rejected-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(
@@ -223,7 +265,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func failedTargetReleasesClaimAndPeerRetryCanPersistAndAck() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-claim-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let page = #"{"success":true,"data":{"items":[{"delivery_id":"target-001","payload":{"title":"target"}}],"has_more":false}}"#
@@ -260,7 +302,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func legacyFallbackPersistsOuterIdentityWithoutCreatingAckMarker() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-legacy-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(
@@ -297,7 +339,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func failedLegacyCanonicalWriteRecoversFromJournalWithoutRepullOrAck() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-legacy-recovery-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(
@@ -384,7 +426,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test @MainActor
     func cancelledAckDrainDoesNotAcquireLeaseOrReachNetwork() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-cancelled-ack-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(pullPayloads: [])
@@ -429,7 +471,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func legacyDirectAckMarkerRetriesThroughSingleItemRoute() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-legacy-ack-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(pullPayloads: [])
@@ -464,7 +506,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func directAckUsesPayloadGatewayAndDeviceAcrossCurrentConfigSwitch() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let hostA = "provider-direct-a-\(UUID().uuidString.lowercased()).example"
             let hostB = "provider-direct-b-\(UUID().uuidString.lowercased()).example"
             let baseURLA = try #require(URL(string: "https://\(hostA)/GatewayA"))
@@ -522,7 +564,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func directAckWithMissingImmutableSourceDoesNotGuessCurrentConfig() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-direct-missing-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/CurrentGateway"))
             let httpState = ProviderIngressHTTPState(pullPayloads: [])
@@ -568,7 +610,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func freshPartialAckKeepsMarkerUntilIdempotentDrainConfirmsProtocolResponse() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-partial-ack-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(
@@ -619,7 +661,7 @@ struct ProviderIngressCoordinatorTests {
 
     @Test
     func successfulCurrentGatewaySyncCannotPurgeUnresolvedForeignWakeupHint() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-foreign-hint-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let context = makeCoordinatorContext(
@@ -650,8 +692,126 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
+    func foreignGatewayDeliveryIDReusePullsAndPersistsWithoutChangingOriginalMessage() async throws {
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
+            let deliveryID = "shared-delivery-\(UUID().uuidString.lowercased())"
+            let oldBaseURL = try #require(URL(string: "https://old-gateway.example/Root"))
+            let host = "provider-source-isolation-\(UUID().uuidString.lowercased()).example"
+            let newBaseURL = try #require(URL(string: "https://\(host)/Root"))
+            _ = await store.saveCachedDeviceKey("new-device", for: "macos")
+            let oldMessageID = "old-\(deliveryID)"
+            let newMessageID = "new-\(deliveryID)"
+            let oldOutcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                [
+                    "message_id": oldMessageID,
+                    "delivery_id": deliveryID,
+                    "base_url": oldBaseURL.absoluteString,
+                    "provider_device_key": "old-device",
+                    "title": "Original gateway message",
+                    "body": "Original body",
+                ],
+                requestIdentifier: deliveryID,
+                dataStore: store
+            )
+            guard case .persistedMain = oldOutcome else {
+                Issue.record("The original gateway message must be canonical before the collision")
+                return
+            }
+
+            let httpState = ProviderIngressHTTPState(pullPayloads: [
+                """
+                {"success":true,"data":{"items":[{"delivery_id":"\(deliveryID)","payload":{"message_id":"\(newMessageID)","title":"New gateway message","body":"New body"}}],"has_more":false}}
+                """,
+            ])
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+            let session = URLSession(configuration: configuration)
+            ChannelServiceURLProtocol.register(host: host) { request in
+                try httpState.handle(request)
+            }
+            defer {
+                session.invalidateAndCancel()
+                ChannelServiceURLProtocol.unregister(host: host)
+            }
+
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let coordinator = ProviderIngressCoordinator(
+                platformSuffix: "test",
+                dataStore: store,
+                channelSubscriptionService: ChannelSubscriptionService(session: session),
+                notificationIngressInbox: inbox,
+                ackMarkerStore: ackStore,
+                wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier),
+                hooks: .init(
+                    isEnabled: { true },
+                    serverConfig: { ServerConfig(baseURL: newBaseURL, token: "token") },
+                    cachedDeviceKey: { "new-device" },
+                    hasPersistedNotification: { identity in
+                        if let messageID = identity.messageId,
+                           let stored = try? await store.loadMessage(messageId: messageID),
+                           identity.matchesPersisted(stored) {
+                            return true
+                        }
+                        if let deliveryID = identity.deliveryId,
+                           let stored = try? await store.loadMessages(deliveryId: deliveryID),
+                           stored.contains(where: identity.matchesPersisted) {
+                            return true
+                        }
+                        return false
+                    },
+                    persistPayloads: { inputs in
+                        let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                            inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) },
+                            dataStore: store
+                        )
+                        return outcomes.map(ProviderIngressPersistenceResult.init)
+                    },
+                    applyPersistenceResults: { _ in },
+                    reportInboxProgress: { _ in },
+                    recordProviderError: { _, _ in }
+                )
+            )
+            #expect(await inbox.enqueue(
+                payload: [
+                    "provider_wakeup": "1",
+                    "provider_mode": "wakeup",
+                    "delivery_id": deliveryID,
+                    "base_url": newBaseURL.absoluteString,
+                    "_skip_persist": "1",
+                ],
+                requestIdentifier: deliveryID,
+                source: "test.new_gateway_hint"
+            ))
+
+            _ = await coordinator.mergeInbox(
+                reason: "test_foreign_delivery_id_reuse",
+                allowFallbackPull: true
+            )
+
+            #expect(httpState.recordedPaths().contains("/Root/v2/messages/pull"))
+            #expect(try await store.loadMessage(messageId: oldMessageID)?.title == "Original gateway message")
+            #expect(try await store.loadMessage(messageId: oldMessageID)?.body == "Original body")
+            #expect(try await store.loadMessage(messageId: newMessageID)?.title == "New gateway message")
+            #expect(try await store.loadMessage(messageId: newMessageID)?.body == "New body")
+            let sameDeliveryRows = try await store.loadMessages(deliveryId: deliveryID)
+            #expect(sameDeliveryRows.count == 2)
+            let newGatewayIdentity = coordinator.identity(from: [
+                "provider_wakeup": "1",
+                "delivery_id": deliveryID,
+                "base_url": newBaseURL.absoluteString,
+            ])
+            #expect(sameDeliveryRows.filter(newGatewayIdentity.matchesPersisted).count == 1)
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).count == 1)
+            await coordinator.drainAckMarkers(source: "test_foreign_delivery_id_reuse")
+            #expect(httpState.recordedPaths().contains("/Root/v2/messages/ack"))
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
+        }
+    }
+
+    @Test
     func inboxMergeWithFallbackDisabledCannotReachDestructiveLegacyPull() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-no-legacy-merge-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             _ = await store.saveCachedDeviceKey("device-key", for: "macos")
@@ -696,13 +856,77 @@ struct ProviderIngressCoordinatorTests {
         }
     }
 
+    @Test
+    func concurrentInboxMergesShareOneProgressiveBatchDrain() async throws {
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
+            let host = "provider-single-flight-\(UUID().uuidString.lowercased()).example"
+            let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
+            let httpState = ProviderIngressHTTPState(pullPayloads: [])
+            let capture = ProviderIngressCapture(results: [], pausesFirstBatch: true)
+            let progressCapture = ProviderInboxProgressCapture()
+            let context = makeCoordinatorContext(
+                host: host,
+                baseURL: baseURL,
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                httpState: httpState,
+                capture: capture,
+                progressCapture: progressCapture
+            )
+            defer { context.cleanup() }
+
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            for index in 0..<265 {
+                #expect(await inbox.enqueue(
+                    codablePayload: [
+                        "message_id": AnyCodable("batch-drain-\(index)"),
+                        "delivery_id": AnyCodable("batch-drain-\(index)"),
+                        "title": AnyCodable("Batch \(index)"),
+                        "body": AnyCodable("Body \(index)"),
+                    ],
+                    requestIdentifier: "batch-drain-\(index)",
+                    source: "test.progressive_batch"
+                ))
+            }
+
+            let first = Task { @MainActor in
+                await context.coordinator.mergeInbox(
+                    reason: "test_first",
+                    allowFallbackPull: false
+                )
+            }
+            await capture.waitUntilFirstBatchStarts()
+            let joining = Task { @MainActor in
+                await context.coordinator.mergeInbox(
+                    reason: "test_joining",
+                    allowFallbackPull: false
+                )
+            }
+            await Task.yield()
+            await capture.releaseFirstBatch()
+
+            #expect(await first.value == 265)
+            #expect(await joining.value == 265)
+            #expect(await capture.batchSizes == [64, 200, 1])
+            #expect(progressCapture.events == [
+                .processing(completed: 0, total: 265),
+                .processing(completed: 64, total: 265),
+                .processing(completed: 264, total: 265),
+                .processing(completed: 265, total: 265),
+                .completed(processed: 265),
+            ])
+            #expect(await inbox.pendingEntries().isEmpty)
+        }
+    }
+
     private func makeCoordinatorContext(
         host: String,
         baseURL: URL,
         store: LocalDataStore,
         appGroupIdentifier: String,
         httpState: ProviderIngressHTTPState,
-        capture: ProviderIngressCapture
+        capture: ProviderIngressCapture,
+        progressCapture: ProviderInboxProgressCapture? = nil
     ) -> CoordinatorContext {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ChannelServiceURLProtocol.self]
@@ -724,14 +948,13 @@ struct ProviderIngressCoordinatorTests {
                 serverConfig: { ServerConfig(baseURL: baseURL, token: "token") },
                 cachedDeviceKey: { "device-key" },
                 hasPersistedNotification: { _ in false },
-                persistPayload: { payload, deliveryId in
-                    let payloadDeliveryId = payload["delivery_id"] as? String
-                    return await capture.persist(
-                        deliveryId: deliveryId,
-                        payloadDeliveryId: payloadDeliveryId
-                    )
+                persistPayloads: { inputs in
+                    await capture.persist(inputs: inputs)
                 },
-                applyPersistenceResult: { _ in },
+                applyPersistenceResults: { _ in },
+                reportInboxProgress: { progress in
+                    progressCapture?.record(progress)
+                },
                 recordProviderError: { error, source in
                     Task { await capture.record(error: error, source: source) }
                 }

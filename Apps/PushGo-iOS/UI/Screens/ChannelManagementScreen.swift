@@ -1,12 +1,16 @@
 import SwiftUI
+import UIKit
 
 struct ChannelManagementScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var pendingRemoval: ChannelSubscription?
     @State private var isRemoving = false
     @State private var pendingRename: ChannelSubscription?
     @State private var renameAlias: String = ""
+    @State private var renameErrorMessage: String?
     @State private var isRenaming = false
     @State private var isShowingRemovalConfirmation = false
     @State private var isShowingRenameAlert = false
@@ -20,16 +24,23 @@ struct ChannelManagementScreen: View {
     @State private var subscribeChannelPassword = ""
     @State private var isSubscribeSubmitting = false
     @State private var channelEntryErrorMessage: String?
+    let channelSummaries: [MessageChannelSummary]
+    let channelSummariesLoadState: MessageChannelSummariesLoadState
     private let channelEntryFieldsMinHeight: CGFloat = 196
 
     private var channelEntrySheetHeight: CGFloat {
         channelEntryErrorMessage == nil ? 348 : 408
     }
 
+    private var channelEntrySheetDetents: Set<PresentationDetent> {
+        dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(channelEntrySheetHeight)]
+    }
+
     var body: some View {
         navigationContainer {
             channelManagementScaffold
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .confirmationDialog(
             pendingRemoval.map { localizationManager.localized("unsubscribe_channel_title", $0.displayName) }
                 ?? "",
@@ -43,6 +54,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Text(localizationManager.localized("unsubscribe_and_delete_history"))
             }
+            .accessibilityIdentifier("action.channel.unsubscribe.delete_history")
             Button {
                 if let target = pendingRemoval {
                     Task { await removeChannel(target, deleteHistory: false) }
@@ -50,28 +62,14 @@ struct ChannelManagementScreen: View {
             } label: {
                 Text(localizationManager.localized("unsubscribe_keep_history"))
             }
+            .accessibilityIdentifier("action.channel.unsubscribe.keep_history")
             Button(role: .cancel) {
             } label: {
                 Text(localizationManager.localized("cancel"))
             }
         }
-        .alert(
-            localizationManager.localized("rename_channel"),
-            isPresented: $isShowingRenameAlert
-        ) {
-            TextField(
-                localizationManager.localized("channel_name_placeholder"),
-                text: $renameAlias
-            )
-            Button(localizationManager.localized("confirm")) {
-                if let target = pendingRename {
-                    Task { await renameChannel(target) }
-                }
-            }
-            .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button(localizationManager.localized("cancel"), role: .cancel) {
-                pendingRename = nil
-            }
+        .sheet(isPresented: $isShowingRenameAlert, onDismiss: resetRenameState) {
+            renameSheet
         }
         .sheet(
             isPresented: $isChannelEntrySheetPresented,
@@ -83,16 +81,6 @@ struct ChannelManagementScreen: View {
         .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
             if !isPresented {
                 pendingRemoval = nil
-            }
-        }
-        .onChange(of: isShowingRenameAlert) { _, isPresented in
-            if !isPresented {
-                pendingRename = nil
-            }
-        }
-        .onAppear {
-            Task { @MainActor in
-                await environment.syncSubscriptionsOnChannelListEntry()
             }
         }
     }
@@ -159,6 +147,43 @@ struct ChannelManagementScreen: View {
         }
     }
 
+    private var renameSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(localizationManager.localized("rename_channel"))
+                .font(.headline)
+            TextField(
+                localizationManager.localized("channel_name_placeholder"),
+                text: $renameAlias
+            )
+            .textFieldStyle(.roundedBorder)
+            .disabled(isRenaming)
+            .accessibilityIdentifier("field.channel.rename.alias")
+            if let renameErrorMessage {
+                Text(renameErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("feedback.channel.rename")
+            }
+            HStack {
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    isShowingRenameAlert = false
+                }
+                .accessibilityIdentifier("action.channel.rename.cancel")
+                Spacer()
+                Button(localizationManager.localized("confirm")) {
+                    if let target = pendingRename {
+                        Task { await renameChannel(target) }
+                    }
+                }
+                .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("action.channel.rename.save")
+            }
+        }
+        .padding(24)
+        .presentationDetents([.medium])
+    }
+
     private var channelList: some View {
         Section {
             ForEach(visibleChannelSubscriptions) { subscription in
@@ -169,7 +194,7 @@ struct ChannelManagementScreen: View {
     }
 
     private var visibleChannelSubscriptions: [ChannelSubscription] {
-        let suppressed = environment.pendingLocalDeletionController.effectiveScope.channelIDs
+        let suppressed = pendingLocalDeletionController.effectiveScope.channelIDs
         return environment.channelSubscriptions.filter {
             !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -197,13 +222,26 @@ struct ChannelManagementScreen: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
+
+                    Text(
+                        localizedMessageChannelActivityText(
+                            identifier: channelId,
+                            summaries: channelSummaries,
+                            loadState: channelSummariesLoadState,
+                            localizationManager: localizationManager
+                        )
+                    )
+                        .font(.caption)
+                        .foregroundStyle(Color.appTextSecondary)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("channel.stats.\(channelId)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.vertical, 8)
-        .contentShape(Rectangle())
         .accessibilityIdentifier("channel.row.\(channelId)")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
@@ -212,6 +250,7 @@ struct ChannelManagementScreen: View {
                 Label(localizationManager.localized("rename_channel"), systemImage: "pencil")
             }
             .tint(.appAccentPrimary)
+            .accessibilityIdentifier("action.channel.\(channelId).rename")
 
             Button(role: .destructive) {
                 pendingRemoval = subscription
@@ -219,6 +258,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
             }
+            .accessibilityIdentifier("action.channel.\(channelId).unsubscribe")
         }
         .disabled(isRemoving || isRenaming)
     }
@@ -252,16 +292,12 @@ struct ChannelManagementScreen: View {
 
     @ViewBuilder
     private var channelEntryFields: some View {
-        ZStack(alignment: .topLeading) {
-            channelEntryCreateFields
-                .opacity(channelEntryMode == .create ? 1 : 0)
-                .allowsHitTesting(channelEntryMode == .create)
-                .accessibilityHidden(channelEntryMode != .create)
-
-            channelEntrySubscribeFields
-                .opacity(channelEntryMode == .subscribe ? 1 : 0)
-                .allowsHitTesting(channelEntryMode == .subscribe)
-                .accessibilityHidden(channelEntryMode != .subscribe)
+        Group {
+            if channelEntryMode == .create {
+                channelEntryCreateFields
+            } else {
+                channelEntrySubscribeFields
+            }
         }
         .frame(maxWidth: .infinity, minHeight: channelEntryFieldsMinHeight, alignment: .topLeading)
         .transaction { transaction in
@@ -290,20 +326,31 @@ struct ChannelManagementScreen: View {
             AppFormField(
                 titleText: localizationManager.localized("channel_password")
             ) {
-                SecureField(
-                    "",
+                ChannelSecureTextField(
                     text: $createChannelPassword,
-                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                )
+                    placeholder: localizationManager.localized("channel_password_placeholder"),
+                    accessibilityIdentifier: "field.channels.create.password",
+                    isSecureEntry: PushGoAutomationContext.qualitySession == nil,
+                    isEnabled: !isCreateSubmitting
+                ) {
+                    Task { await submitChannelEntryFromSheet() }
+                }
                 .textFieldStyle(.plain)
                 .accessibilityIdentifier("field.channels.create.password")
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .submitLabel(.go)
-                .onSubmit {
-                    Task { await submitChannelEntryFromSheet() }
-                }
                 .disabled(isCreateSubmitting)
+            }
+
+            if PushGoAutomationContext.qualitySession != nil {
+                Text("\(createChannelPassword.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("quality.channels.create.credential_length")
+                    .accessibilityLabel("Credential length")
+                    .accessibilityValue("\(createChannelPassword.count)")
             }
 
         }
@@ -331,19 +378,20 @@ struct ChannelManagementScreen: View {
             AppFormField(
                 titleText: localizationManager.localized("channel_password")
             ) {
-                SecureField(
-                    "",
+                ChannelSecureTextField(
                     text: $subscribeChannelPassword,
-                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                )
+                    placeholder: localizationManager.localized("channel_password_placeholder"),
+                    accessibilityIdentifier: "field.channels.subscribe.password",
+                    isSecureEntry: PushGoAutomationContext.qualitySession == nil,
+                    isEnabled: !isSubscribeSubmitting
+                ) {
+                    Task { await submitChannelEntryFromSheet() }
+                }
                 .textFieldStyle(.plain)
                 .accessibilityIdentifier("field.channels.subscribe.password")
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .submitLabel(.go)
-                .onSubmit {
-                    Task { await submitChannelEntryFromSheet() }
-                }
                 .disabled(isSubscribeSubmitting)
             }
 
@@ -352,60 +400,75 @@ struct ChannelManagementScreen: View {
     }
 
     private var channelEntryActionButtons: some View {
-        AppActionButton(
-            variant: .primary,
-            isLoading: isChannelEntrySubmitting
-        ) {
-            Task { await submitChannelEntryFromSheet() }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: channelEntryMode == .create ? "plus.circle.fill" : "dot.radiowaves.left.and.right")
-                Text(channelEntryConfirmTitle)
-                    .fontWeight(.semibold)
+        HStack(spacing: 12) {
+            AppActionButton(
+                title: localizationManager.localized("cancel"),
+                variant: .secondary
+            ) {
+                dismissChannelEntrySheet()
             }
+            .disabled(isChannelEntrySubmitting)
+            .accessibilityIdentifier("action.channels.entry.cancel")
+
+            AppActionButton(
+                variant: .primary,
+                isLoading: isChannelEntrySubmitting
+            ) {
+                Task { await submitChannelEntryFromSheet() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: channelEntryMode == .create ? "plus.circle.fill" : "dot.radiowaves.left.and.right")
+                    Text(channelEntryConfirmTitle)
+                        .fontWeight(.semibold)
+                }
+            }
+            .disabled(!canSubmitChannelEntry)
+            .accessibilityIdentifier("action.channels.entry.submit")
         }
-        .disabled(!canSubmitChannelEntry)
-        .accessibilityIdentifier("action.channels.entry.submit")
     }
 
     private var channelEntrySheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $channelEntryMode) {
-                Text(localizationManager.localized("create_channel"))
-                    .tag(ChannelEntryMode.create)
-                Text(localizationManager.localized("subscribe_channel"))
-                    .tag(ChannelEntryMode.subscribe)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("select.channels.entry.mode")
-            .disabled(isChannelEntrySubmitting)
-
-            if let channelEntryErrorMessage {
-                AppInlineFeedbackBanner(
-                    message: channelEntryErrorMessage,
-                    tone: .danger,
-                    accessibilityID: "feedback.channels.entry"
-                ) {
-                    self.channelEntryErrorMessage = nil
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("", selection: $channelEntryMode) {
+                    Text(localizationManager.localized("create_channel"))
+                        .tag(ChannelEntryMode.create)
+                        .accessibilityIdentifier("mode.channels.entry.create")
+                    Text(localizationManager.localized("subscribe_channel"))
+                        .tag(ChannelEntryMode.subscribe)
+                        .accessibilityIdentifier("mode.channels.entry.subscribe")
                 }
-                .transition(.opacity)
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("select.channels.entry.mode")
+                .disabled(isChannelEntrySubmitting)
+
+                if let channelEntryErrorMessage {
+                    AppInlineFeedbackBanner(
+                        message: channelEntryErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.channels.entry"
+                    ) {
+                        self.channelEntryErrorMessage = nil
+                    }
+                    .transition(.opacity)
+                }
+
+                channelEntryFields
+
+                channelEntryActionButtons
             }
-
-            channelEntryFields
-
-            channelEntryActionButtons
+            .padding(.horizontal, 16)
+            .padding(.top, 22)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 22)
-        .padding(.bottom, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: channelEntrySheetHeight, alignment: .topLeading)
+        .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("sheet.channels.entry")
         .transaction { transaction in
             transaction.animation = nil
         }
         .animation(nil, value: channelEntryMode)
-        .ignoresSafeArea(.keyboard, edges: .bottom)
-        .presentationDetents([.height(channelEntrySheetHeight)])
+        .presentationDetents(channelEntrySheetDetents)
         .presentationDragIndicator(.visible)
         .onChange(of: channelEntryMode) { _, _ in
             channelEntryErrorMessage = nil
@@ -560,36 +623,48 @@ struct ChannelManagementScreen: View {
     private func renameChannel(_ subscription: ChannelSubscription) async {
         guard !isRenaming else { return }
         isRenaming = true
-        defer {
-            isRenaming = false
-            pendingRename = nil
-            renameAlias = ""
-        }
+        defer { isRenaming = false }
+        let submittedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            let trimmedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedAlias.isEmpty else { return }
-            if trimmedAlias == subscription.displayName {
+            guard !submittedAlias.isEmpty else { return }
+            if submittedAlias == subscription.displayName {
+                isShowingRenameAlert = false
+                pendingRename = nil
+                renameAlias = ""
+                renameErrorMessage = nil
                 return
             }
             try await environment.renameChannel(
                 channelId: subscription.channelId,
-                alias: trimmedAlias
+                alias: submittedAlias
             )
             environment.showToast(
                 message: localizationManager.localized("channel_renamed"),
                 style: .success,
                 duration: 1.5
             )
+            isShowingRenameAlert = false
+            pendingRename = nil
+            renameAlias = ""
+            renameErrorMessage = nil
         } catch {
-            environment.showErrorToast(error, duration: 2.5)
+            renameAlias = submittedAlias
+            renameErrorMessage = environment.userFacingErrorMessage(error)
         }
     }
 
     private func copyChannelId(_ value: String) {
-        PushGoSystemInteraction.copyTextToPasteboard(value)
+        guard PushGoSystemInteraction.copyTextToPasteboard(value) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
-            message: localizationManager.localized("channel_id_copied"),
+            message: "\(localizationManager.localized("channel_id_copied")): \(value)",
             style: .success,
             duration: 1.2
         )
@@ -598,12 +673,100 @@ struct ChannelManagementScreen: View {
     private func beginRename(_ subscription: ChannelSubscription) {
         guard !isRenaming else { return }
         renameAlias = subscription.displayName
+        renameErrorMessage = nil
         pendingRename = subscription
         isShowingRenameAlert = true
+    }
+
+    private func resetRenameState() {
+        pendingRename = nil
+        renameAlias = ""
+        renameErrorMessage = nil
     }
 }
 
 private enum ChannelEntryMode: Hashable {
     case create
     case subscribe
+}
+
+private struct ChannelSecureTextField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let accessibilityIdentifier: String
+    let isSecureEntry: Bool
+    let isEnabled: Bool
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.isSecureTextEntry = isSecureEntry
+        textField.borderStyle = .none
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.returnKeyType = .go
+        textField.textContentType = isSecureEntry ? .password : nil
+        textField.accessibilityIdentifier = accessibilityIdentifier
+        textField.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textDidChange(_:)),
+            for: .editingChanged
+        )
+        textField.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.beginEditing(_:)),
+            for: .touchDown
+        )
+        return textField
+    }
+
+    func updateUIView(_ textField: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if textField.text != text {
+            textField.text = text
+        }
+        textField.placeholder = placeholder
+        textField.isSecureTextEntry = isSecureEntry
+        textField.textContentType = isSecureEntry ? .password : nil
+        textField.isEnabled = isEnabled
+        textField.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: ChannelSecureTextField
+
+        init(parent: ChannelSecureTextField) {
+            self.parent = parent
+        }
+
+        @objc func textDidChange(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        @objc func beginEditing(_ sender: UITextField) {
+            // Moving from the adjacent SwiftUI TextField into this UIKit-backed
+            // secure field can otherwise leave the former responder active
+            // while the keyboard is already visible. SwiftUI can finish its
+            // own focus update after this touchDown callback, so arbitrate on
+            // the next main-loop turn. A real first tap must transfer
+            // ownership; requiring a second tap would be a product interaction
+            // defect, not something the UI test should hide.
+            DispatchQueue.main.async { [weak sender] in
+                guard let sender, sender.window != nil, sender.isEnabled else { return }
+                if !sender.isFirstResponder {
+                    sender.becomeFirstResponder()
+                }
+            }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            return true
+        }
+    }
 }

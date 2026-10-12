@@ -1,62 +1,99 @@
-# PushGo iOS Automation Matrix
+# PushGo iOS UI quality suite
 
-## Scope
+## Purpose
 
-This suite validates iOS startup automation, deep-page navigation, tab routing, and settings mutation commands.
+Curated lanes execute only the high-value App-owned journeys listed below. The 22 legacy Runtime command/state or screenshot-diagnostic bodies have been renamed `legacyDiagnostic...`, so XCTest no longer discovers or executes them; they remain temporarily only to support incremental helper removal and must not be used to claim product coverage. The old host-path automation shell runners have been deleted.
 
-## UI Coverage Matrix
+A product result passes only when the test uses a reachable user entry and verifies accurate visible data, a real action result, persisted/relaunch state, or an independently meaningful system/data endpoint. Screen identifiers, fixture markers, response files, Runtime state, launch success, and sheet existence are supporting diagnostics only.
 
-| Test | Coverage |
-| --- | --- |
-| `testLaunchesIntoMessageList` | cold launch baseline (`screen.messages.list`) |
-| `testAutomationRequestCanOpenChannelsScreen` | startup command `nav.switch_tab` + channels page markers |
-| `testNavSwitchTabMatrixCoversPrimaryScreens` | command-routed tab matrix: messages/events/things/channels |
-| `testImportedEventFixtureCanOpenEventDetail` | fixture import + event detail deep page |
-| `testImportedThingFixtureCanOpenThingDetail` | fixture import + thing detail deep page |
-| `testPushSettingsCanOpenDecryptionScreen` | settings decryption overlay command flow |
-| `testFixtureSeedMessagesRefreshesMessageList` | 消息写入后列表刷新链路（`fixture.seed_messages`） |
-| `testFixtureSeedEntityRecordsPublishesProjectionCounts` | 实体投影视图写入链路（`fixture.seed_entity_records`） |
-| `testFixtureSeedSubscriptionsPublishesImportState` | 频道订阅写入链路（`fixture.seed_subscriptions`）与 import bookkeeping 状态 |
-| `testSettingsPageVisibilityCommandCanHideEventPage` | settings mutation boundary (`event_page_enabled=false`) |
-| `testSettingsPageVisibilityCommandCanRoundTripEventPage` | settings开关前后态正确性（false -> true） |
-| `testSettingsSetDecryptionKeyRejectsInvalidLength` | invalid decryption key boundary (`ok=false`, `invalid key`) |
-| `testSettingsSetDecryptionKeyAcceptsBase64Key` | decryption key success path (`notification_key_configured=true`, `notification_key_encoding=base64`) |
-| `testEntityOpenPublishesEntityStateAndProjectionCounts` | entity.open正确性：状态命中detail页 + `entity.opened`事件包含目标`entity_id` |
-| `testMessageOpenPublishesMessageDetailState` | message.open 路由到消息详情并发布 opened message state |
-| `testNotificationOpenPublishesMessageDetailState` | notification.open 路由到消息详情 |
-| `testNotificationMarkReadCommandUpdatesUnreadState` | `notification.mark_read` 更新未读计数与动作事件 |
-| `testNotificationDeleteCommandUpdatesCounts` | `notification.delete` 删除消息并发布动作事件 |
-| `testGatewaySetServerCommandUpdatesConfigurationState` | `gateway.set_server` 更新 server config 与 settings.changed 事件 |
-| `testBaselineAutomationStateHasNoRuntimeErrors` | 启动基线正确性（`runtime_error_count == 0`） |
-| `testWatchResyncReceiverCommandPublishesReceiverState` | `watch.resync_receiver` 使用 `watch_receiver_state`，不再把 receiver 状态当作 mirror/standalone 用户模式 |
+## Curated journeys
 
-## Run Command
+| Lane | Journey | Product oracle |
+| --- | --- | --- |
+| PR+ | Empty/content/workflow messages | Functional empty state; accurate list/detail; exact message URL handoff to Safari and return continuity; page-size boundary; read state; filters; relaunch |
+| PR+ | Search/delete/undo/commit | Exclusion and exact-result sets; accurate detail; immediate suppression; undo restore or real-deadline permanent removal; unrelated control preserved; relaunch |
+| PR+ | Slow/error/refresh | User-visible slow/error states; accurate snapshot retained; provider result persisted; real Retry recovery |
+| PR+ | Primary navigation | One real session proves a canonical 100+ unread Store renders the capped `99+` badge without hiding or disabling Messages, reaches the unique Messages, Events, Things, Channels, and Settings destinations, then uses the production Getting Started action to hand off to Safari at `pushgo.dev` |
+| Nightly+ | Event/Thing | Production ingestion/projection; accurate detail and relations; close/filter/back/relaunch outcomes |
+| Nightly+ | Channel | Create, rename, keep-history unsubscribe, delete-history unsubscribe, and relaunch through production UI/Store paths |
+| Nightly+ | Settings visibility | Real Event page control changes navigation, reaches the accurate destination, and survives both relaunch directions |
+| Nightly+ | Settings server | Invalid input stays in the editor; normalized address persists; gateway-scoped channel data changes immediately and after relaunch |
+| Nightly+ | Settings decryption | Invalid key stays in the editor; configured status changes only after persistence; relaunch retains status; the value is not echoed; blank Save is non-destructive across relaunch; explicit Delete remains absent after relaunch |
+| Nightly+ | Local configuration failures | Candidate validation may succeed while local gateway commit fails: the old gateway survives restart and retry alone commits; protected key persistence failure stays sheet-owned, remains unconfigured after restart, and retry alone configures |
+| Performance | Prepared 1k-message cold launch | Measures full launch-to-exact-content latency, launch responsiveness, CPU, and memory; opens the highest-index row and verifies its exact detail body |
+| Performance sensitivity | Deliberately slow prepared 1k-message cold launch | Reuses the positive build; only the exact title followed by an 8s ceiling failure is accepted. Removing the 8s injected delay must fail the strict expected-failure contract; product status remains `NOT_RUN` |
+| Data-field sensitivity | Fixed wrong body against the prepared highest-index row | Reuses the positive build; first proves the exact real title/body, then only the strict wrong-body assertion may fail. Product status remains `NOT_RUN` |
+| Physical performance | Dedicated reference-device cold launch | Release build, ten iterations, device-specific full launch-to-exact-content budget, then exact detail verification; never substitutes a personal device or Simulator |
 
-```bash
-xcodebuild -project /Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj \
-  -scheme PushGo-iOS \
-  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.2' \
-  -derivedDataPath /tmp/pushgo-ios-uitests-complete \
-  ARCHS=arm64 \
-  ONLY_ACTIVE_ARCH=YES \
-  EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_iphonesimulator=x86_64 \
-  EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_watchsimulator=x86_64 \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY= \
-  test -only-testing:PushGo-iOSUITests
-```
+The Settings decryption journeys separately prove configuration persistence, wrong-material safe failure followed by correction, successful recovery of the same canonical encrypted message, and corrupt-ciphertext safe failure across relaunch. Gateway accepted-mutation sessions isolate unavailable remote/FCM/private-transport side effects; they do not prove a public gateway or real provider.
 
-Serial full Apple pipeline entry:
+## Lanes
+
+Run the repository wrappers so environment readiness, result classification, evidence capture, and curated scope remain consistent:
 
 ```bash
-/Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-AppleAutomation/run_apple_automation_serial.sh
+scripts/quality_test.sh pr
+scripts/quality_test.sh nightly
+scripts/quality_test.sh release
+
+# Opt-in: 50 fresh App-owned functional launches, never a routine PR cost
+scripts/run_ios_startup_reliability.sh
 ```
 
-## Pass Criteria
+The performance lane always runs the App-owned Simulator gross-regression gate. A dedicated, pre-seeded reference device is opt-in and must be named explicitly:
 
-- `PushGo-iOSUITests`: all tests pass with zero failures.
-- No manual interaction required during run.
-- Command response/state + `events.jsonl` + UI identifiers all satisfy assertions (not only page reachability).
+```bash
+IOS_PERFORMANCE_DEVICE_ID='<device-udid>' \
+PUSHGO_PHYSICAL_EXPECTED_TITLE='<pre-seeded exact title>' \
+PUSHGO_PHYSICAL_EXPECTED_BODY='<pre-seeded exact body>' \
+PUSHGO_PHYSICAL_MAX_SECONDS='<device-specific budget>' \
+  scripts/quality_test.sh performance
+```
 
-UI test launches set `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` to keep unattended runs clear of pasteboard-related cross-app prompts.
+That physical runner proves launch-to-accurate-content only. Frame/hitch traces, APNs delivery, and other real-system claims remain `NOT RUN` until their own evidence is executed.
+
+For a focused journey:
+
+```bash
+TEST_SCOPES='PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch' \
+  scripts/quality_test.sh focused
+```
+
+The ordinary iOS runner uses a scoped cold Simulator boot by default. For a
+diagnostic A/B that avoids restarting Apple Simulator daemons, an already
+Booted PushGo quality device may be reused explicitly:
+
+```bash
+QUALITY_IOS_SIMULATOR_LIFECYCLE=warm \
+  TEST_SCOPES='PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch' \
+  scripts/run_ios_ui_tests.sh
+```
+
+Warm mode never boots or resets a different device and never falls back to a
+cold boot; an unavailable or non-Booted target is `BLOCKED`. It retains the
+same App-owned installation/readiness handshake, single-worker lease, native
+result-count checks, and product-purpose Oracles. It is therefore an
+investigation/control mode, not permission to skip isolation or to treat the
+absence of a crash dialog as a product result.
+
+The iOS runner also starts the exact host `Problem Reporter`/
+`UserNotificationCenter` cleaner before the batch, watches it during the batch
+for delayed Simulator/App crash dialogs, and runs it again on exit. A cleanup
+failure is `BLOCKED`; a crashed product or Simulator process remains classified
+from its original result bundle and is never retried into green. The cleaner
+does not kill Simulator/CoreSimulator or perform a global reset.
+
+`scripts/quality_changed.sh` derives the deterministic minimum lane from `config/quality-impact.json`. That plan is a lower bound, not a coverage score.
+
+Changes inside the ordinary iOS, macOS, or watchOS XCTest journey source are selected from the diff instead of being hidden behind the fixed PR list. A hunk owned by one unchanged `test...` method produces an exact `Target/Class/testMethod` scope; a shared helper or fixture hunk expands to every runnable method in the changed `XCTestCase`. Those methods are partitioned by execution profile, so accessibility and real-system-notification journeys retain their required environment instead of being mixed into a default batch. Deleted, renamed, non-runnable, or ambiguous tests are `BLOCKED` before execution. The selector records the expected runnable-method count for both exact-method and whole-class selection; each profile's xcresult executed count must match its selected methods, so executing zero or only a subset is a test-system failure. Specialized system-notification and performance files retain their dedicated lanes and environments.
+
+## Result rules
+
+- Business assertion failures are never retried.
+- Product and preparation failures are never retried. The former pre-action Simulator compatibility retry was removed after a clean 50/50 App-owned startup campaign; a new failure before any Test Case is now `BLOCKED` for fresh attribution, not retried into green.
+- Missing readiness, invalid session control, or unavailable infrastructure is `BLOCKED`, not a timed-out product failure.
+- Opt-in scale/performance tests absent from a run are `NOT RUN`, never counted as passed.
+- Simulator evidence does not prove APNs, physical accessibility, background delivery, signing, install/upgrade, or other real-system behavior.
+- UI launches use an App-owned session Store and built-in synthetic fixtures. Tests do not ask the App to read a host database or host fixture path.
+
+The migration disposition and remaining weak tests are tracked in `docs/quality/current-test-disposition.md`; capability truth and residual gaps are tracked in `docs/quality/capability-coverage.md` and the quality-overhaul workstream.

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-struct PendingLocalDeletionScope: Codable, Equatable, Sendable {
+struct PendingLocalDeletionScope: Codable, Equatable, Hashable, Sendable {
     let messageIDs: Set<UUID>
     let eventIDs: Set<String>
     let thingIDs: Set<String>

@@ -1,0 +1,473 @@
+{
+  "source_sha": "736ff6c46479c1bee90e25d1d7133ab6a6ebec15",
+  "verified_product_revision": "1e541eb3d49fc5a14dac165f332694babfa3b3d5",
+  "equivalent_input_paths": [
+    "Shared",
+    "Apps",
+    "Extensions",
+    "Tests",
+    "scripts",
+    "config",
+    "Package.swift",
+    "Package.resolved",
+    "pushgo.xcodeproj",
+    "fastlane",
+    ".github/workflows"
+  ],
+  "different_input_files": [],
+  "distribution_signing_status": "NOT_RUN",
+  "product_runtime_status": "NOT_RUN",
+  "quality_gate_status": "NOT_RUN",
+  "builds": [
+    {
+      "platform": "ios",
+      "scheme": "PushGo-iOS",
+      "sdk": "iphoneos",
+      "command": [
+        "xcodebuild",
+        "-project",
+        "/Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj",
+        "-scheme",
+        "PushGo-iOS",
+        "-configuration",
+        "Release",
+        "-sdk",
+        "iphoneos",
+        "-destination",
+        "generic/platform=iOS",
+        "-derivedDataPath",
+        "/Users/ethan/Repo/PushGo/pushgo/build/quality-results/apple-release-refresh-20261003/derived-data/ios",
+        "-onlyUsePackageVersionsFromResolvedFile",
+        "-disableAutomaticPackageResolution",
+        "-skipPackageUpdates",
+        "-jobs",
+        "2",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGN_STYLE=Manual",
+        "DEVELOPMENT_TEAM=",
+        "PROVISIONING_PROFILE_SPECIFIER=",
+        "PROVISIONING_PROFILE=",
+        "build"
+      ],
+      "status": "PASSED",
+      "exit_code": 0,
+      "source_frozen": true,
+      "settings_status": "PASSED",
+      "per_target_settings_sha256": "28ce5d87701176cbedf03b64a59c1dee2b068994c0e41f53222528fb26819834",
+      "started_utc": "2026-10-03T09:01:21.473107+00:00",
+      "finished_utc": "2026-10-03T09:03:40.906799+00:00"
+    },
+    {
+      "platform": "watchos",
+      "scheme": "PushGo-watchOS",
+      "sdk": "watchos",
+      "command": [
+        "xcodebuild",
+        "-project",
+        "/Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj",
+        "-scheme",
+        "PushGo-watchOS",
+        "-configuration",
+        "Release",
+        "-sdk",
+        "watchos",
+        "-destination",
+        "generic/platform=watchOS",
+        "-derivedDataPath",
+        "/Users/ethan/Repo/PushGo/pushgo/build/quality-results/apple-release-refresh-20261003/derived-data/watchos",
+        "-onlyUsePackageVersionsFromResolvedFile",
+        "-disableAutomaticPackageResolution",
+        "-skipPackageUpdates",
+        "-jobs",
+        "2",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGN_STYLE=Manual",
+        "DEVELOPMENT_TEAM=",
+        "PROVISIONING_PROFILE_SPECIFIER=",
+        "PROVISIONING_PROFILE=",
+        "build"
+      ],
+      "status": "PASSED",
+      "exit_code": 0,
+      "source_frozen": true,
+      "settings_status": "PASSED",
+      "per_target_settings_sha256": "677f59d3d8670dccf2ada9d0212a4e9cd06cefdc8f3f32370102d085dc70ca4a",
+      "started_utc": "2026-10-03T09:03:42.076476+00:00",
+      "finished_utc": "2026-10-03T09:04:29.616479+00:00"
+    },
+    {
+      "platform": "macos",
+      "scheme": "PushGo-macOS",
+      "sdk": "macosx",
+      "command": [
+        "xcodebuild",
+        "-project",
+        "/Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj",
+        "-scheme",
+        "PushGo-macOS",
+        "-configuration",
+        "Release",
+        "-sdk",
+        "macosx",
+        "-destination",
+        "generic/platform=macOS",
+        "-derivedDataPath",
+        "/Users/ethan/Repo/PushGo/pushgo/build/quality-results/apple-release-refresh-20261003/derived-data/macos",
+        "-onlyUsePackageVersionsFromResolvedFile",
+        "-disableAutomaticPackageResolution",
+        "-skipPackageUpdates",
+        "-jobs",
+        "2",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGN_STYLE=Manual",
+        "DEVELOPMENT_TEAM=",
+        "PROVISIONING_PROFILE_SPECIFIER=",
+        "PROVISIONING_PROFILE=",
+        "build"
+      ],
+      "status": "PASSED",
+      "exit_code": 0,
+      "source_frozen": true,
+      "settings_status": "PASSED",
+      "per_target_settings_sha256": "0ab12c507303d1af59a331686205debe8c485efabdec244e7b690173daaedb86",
+      "started_utc": "2026-10-03T09:04:30.707304+00:00",
+      "finished_utc": "2026-10-03T09:06:57.450448+00:00"
+    }
+  ],
+  "status": "PASSED",
+  "inspected_binaries": 12,
+  "source_release_guard_checks": 20,
+  "bundles": [
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo",
+      "target": "PushGo-iOS",
+      "relative_bundle": "PushGo.app",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64"
+      ],
+      "mach_o_platforms": [
+        "IOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "d49923f645fdc3e5cd6e28a5972b08053420668be1df45bc64aad4bedd453525",
+      "info_plist_sha256": "968d93cccad07e22321de30a411dc6dd53e5549b9497f205f195e3711fb18e8b"
+    },
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo.NotificationServiceExtension",
+      "target": "PushGoNSE-iOS",
+      "relative_bundle": "PushGo.app/PlugIns/NotificationServiceExtension.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64"
+      ],
+      "mach_o_platforms": [
+        "IOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "564af2a38fa0d789f3debfa78687be4de46b59d9522b2a8c84e743de52289508",
+      "info_plist_sha256": "847c4907d2f91ef52e4c48243be32a2295dcbfb020ee9fa973eb227ccc9e30aa"
+    },
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo.widgets",
+      "target": "PushGoWidgets-iOS",
+      "relative_bundle": "PushGo.app/PlugIns/PushGoWidgets.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64"
+      ],
+      "mach_o_platforms": [
+        "IOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "82d78899f15fc7a1e0317864127adb56cad39293356d9a595322272c5c059ca8",
+      "info_plist_sha256": "ecbd13e035c082fbe24b6fc3da5287af148db825c4657d1bb465e05cf0e9e0be"
+    },
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo.watchkitapp",
+      "target": "PushGo-watchOS",
+      "relative_bundle": "PushGo.app/Watch/PushGoWatch.app",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "0e3440b62d0aa483e7c585dcb9939abac5c9489ddd1396357dd9afc7775327f8",
+      "info_plist_sha256": "14a5e1bb7dae791c1179ebe660ac969c41d962f0d7acf5bb91ebd912801ade06"
+    },
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo.watchkitapp.NotificationServiceExtension",
+      "target": "PushGoNSE-watchOS",
+      "relative_bundle": "PushGo.app/Watch/PushGoWatch.app/PlugIns/NotificationServiceExtensionWatch.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "8f110c76a17dd8553f1b9b5af20057560c324546f4e4d105cc7ff9a17c39d91b",
+      "info_plist_sha256": "f29b1e84b051a2ea53cd9c2253255271b140799241b8f6fe09c7d5d1ef891279"
+    },
+    {
+      "build": "ios",
+      "bundle_id": "io.ethan.pushgo.watchkitapp.widgets",
+      "target": "PushGoWidgets-watchOS",
+      "relative_bundle": "PushGo.app/Watch/PushGoWatch.app/PlugIns/PushGoWidgetsWatch.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "0c54793157ff59e9e54184bdfd869f8012d50f88b729f3424e3918826a98c235",
+      "info_plist_sha256": "a72789c4ff1ffcdb04e40557199a676e37acc67959f17fe955b72bc21b8b397a"
+    },
+    {
+      "build": "watchos",
+      "bundle_id": "io.ethan.pushgo.watchkitapp",
+      "target": "PushGo-watchOS",
+      "relative_bundle": "PushGoWatch.app",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "72c908fc77440cf55472058c7e19b65db4ce5a7f04a522d96e3c2d262e9dcae9",
+      "info_plist_sha256": "14a5e1bb7dae791c1179ebe660ac969c41d962f0d7acf5bb91ebd912801ade06"
+    },
+    {
+      "build": "watchos",
+      "bundle_id": "io.ethan.pushgo.watchkitapp.NotificationServiceExtension",
+      "target": "PushGoNSE-watchOS",
+      "relative_bundle": "PushGoWatch.app/PlugIns/NotificationServiceExtensionWatch.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "2b5c32d2c5dd3b21ac1cb06652ccd6ea2e3226865a1cdfdb75d6c38584de62ed",
+      "info_plist_sha256": "f29b1e84b051a2ea53cd9c2253255271b140799241b8f6fe09c7d5d1ef891279"
+    },
+    {
+      "build": "watchos",
+      "bundle_id": "io.ethan.pushgo.watchkitapp.widgets",
+      "target": "PushGoWidgets-watchOS",
+      "relative_bundle": "PushGoWatch.app/PlugIns/PushGoWidgetsWatch.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "arm64_32"
+      ],
+      "mach_o_platforms": [
+        "WATCHOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "23b5564726b5177384e0249af3a59a1bb9a0eb52ab85d1e69ed498ac08ca539a",
+      "info_plist_sha256": "a72789c4ff1ffcdb04e40557199a676e37acc67959f17fe955b72bc21b8b397a"
+    },
+    {
+      "build": "macos",
+      "bundle_id": "io.ethan.pushgo",
+      "target": "PushGo-macOS",
+      "relative_bundle": "PushGo.app",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "mach_o_platforms": [
+        "MACOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "c873983c05be89ac66ce5744c55632028a80abc8dd398962896ddb244d04260d",
+      "info_plist_sha256": "b499e6927e213e8632f00697456478131cb0a8eca110ca1a9b5d23053599103e"
+    },
+    {
+      "build": "macos",
+      "bundle_id": "io.ethan.pushgo.macwidgets",
+      "target": "PushGoWidgets-macOS",
+      "relative_bundle": "PushGo.app/Contents/PlugIns/PushGoWidgetsMac.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "mach_o_platforms": [
+        "MACOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "67fc2d8afb86f45f5623faaaba07f150caebc0665759ac6ddcfa0853664875e7",
+      "info_plist_sha256": "8bd525fc83be3fa0d4cb5303cf7d2f0f496f17d0132f36bb56570f2c89265a7e"
+    },
+    {
+      "build": "macos",
+      "bundle_id": "io.ethan.pushgo.NotificationServiceExtension",
+      "target": "PushGoNSE-macOS",
+      "relative_bundle": "PushGo.app/Contents/PlugIns/PushgoNotificationServiceExtension.appex",
+      "version": "1.3.3",
+      "build_number": "91",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "mach_o_platforms": [
+        "MACOS"
+      ],
+      "distribution_signature": "NOT_RUN",
+      "binary_sha256": "ee3990c6cae7c1d14ec3f955b9892eed81d12bfdce48e9fa0a37b07006b0bbed",
+      "info_plist_sha256": "9d25a62176f713986fba778f680cf93841d85add71144ad19431d7d1fc9f7dff"
+    }
+  ],
+  "claim_limit": "Local unsigned iOS/watchOS device SDK and macOS Release compilation, versions, target architectures, binary identities and source/settings isolation; no App launch, physical device, distribution signing or formal Release gate.",
+  "raw_logs": {
+    "PushGoWidgets-iOS-release-settings.log": {
+      "sha256": "ef14e6f7ef13013e94f8bf7e6d5dca272e5648e0df251dca8fa43951bb1d9c44"
+    },
+    "ios-PushGoWidgets-iOS-vtool.log": {
+      "sha256": "d777458501e342e1cf47e87e3b83de4cf03ab29b7c3c9eca1a41fb136ab02585"
+    },
+    "ios-PushGoNSE-watchOS-codesign.log": {
+      "sha256": "d71e3db5b12663e4d5664eea14c5284a0c4abddfbcd3745e7a50cd540e03d546"
+    },
+    "watchos-PushGoNSE-watchOS-vtool.log": {
+      "sha256": "daa182eba8b1e8c848d70149e9ce52a4feb271029dd469585c31b1f2a13e0460"
+    },
+    "ios-PushGoWidgets-watchOS-vtool.log": {
+      "sha256": "a28b3e158149dcee71ccbff07e7d3fd1e59176a4af9ccf8129c98dc95a1c638c"
+    },
+    "ios-PushGoNSE-iOS-codesign.log": {
+      "sha256": "ff3d8ed31428efa8129421b448ed6b4ec436e40ba54919b9a446096ee8dd816d"
+    },
+    "PushGoNSE-iOS-release-settings.log": {
+      "sha256": "1f1c30a505fe09270ed76b710a813015b9ff9693e7766e91835a2a8dfb435329"
+    },
+    "watchos-PushGoNSE-watchOS-codesign.log": {
+      "sha256": "8e5d0ed0315d32d63030a8fae105227baac39dc3013e6b6245a58f8592c73e77"
+    },
+    "watchos-PushGoWidgets-watchOS-codesign.log": {
+      "sha256": "7c4ad400938781b1889f979829b2d413d5e8e55a476dfe3bae4e60c3c49cacf3"
+    },
+    "macos-PushGo-macOS-codesign.log": {
+      "sha256": "ebb57696a9cb14ca5b7f2e7b94c1bceaaebbbcfff4e0c1dd3a993d6a01e86d8d"
+    },
+    "ios-release-settings.log": {
+      "sha256": "28ce5d87701176cbedf03b64a59c1dee2b068994c0e41f53222528fb26819834"
+    },
+    "macos-PushGoNSE-macOS-vtool.log": {
+      "sha256": "279477fb29c3ec99007ac75b71f867a747332ed984eb567ed3fbff074269d082"
+    },
+    "macos-PushGo-macOS-vtool.log": {
+      "sha256": "2a358fb5d4d3c4d0ce3d094feefde4c1120a338346a10d3186abda9562918680"
+    },
+    "watchos-PushGo-watchOS-codesign.log": {
+      "sha256": "7e3470ae0569acb3d9cde85ffc5196738196cb2db02e5a073b7b60475ef122b7"
+    },
+    "watchos-PushGo-watchOS-vtool.log": {
+      "sha256": "c119eb152d4af38a5b4b423205682d3d73a58633e7ef7b0a6b75071049859496"
+    },
+    "ios-PushGoNSE-iOS-vtool.log": {
+      "sha256": "eac5d6a4ec577687ed7da1abbb695bb949c80ee8ea749523c11c1d254a0a5e7f"
+    },
+    "watchos-release-settings.log": {
+      "sha256": "677f59d3d8670dccf2ada9d0212a4e9cd06cefdc8f3f32370102d085dc70ca4a"
+    },
+    "ios-PushGoWidgets-iOS-codesign.log": {
+      "sha256": "13e8ccc20a67abd3421267d830a2540a53c0a23b5f06a300837d45d013196fac"
+    },
+    "ios-PushGoNSE-watchOS-vtool.log": {
+      "sha256": "f9bb594942dd859b2926adb499a1ba6bae0c619075d00d75b60456764a69a705"
+    },
+    "macos-architectures.json": {
+      "sha256": "f5b6c1c53bab1702db0022ccc7b509659b67ba71156d817c722ba7211785f890"
+    },
+    "ios-PushGoWidgets-watchOS-codesign.log": {
+      "sha256": "d026223654625860cc2851fec526dd0731e2dbdfcae574d6befb35ac08703cbb"
+    },
+    "watchos-PushGoWidgets-watchOS-vtool.log": {
+      "sha256": "669204a3bea4eca09b3b5bbc6dc7a8a30a874d9c412e9e8fa175f81233380f00"
+    },
+    "macos-PushGoWidgets-macOS-vtool.log": {
+      "sha256": "e294344ebae3649bd354030142d481a38aeb3d6f24c9b9603ddc0480282c7aa4"
+    },
+    "macos-build.log": {
+      "sha256": "dda936999551e1967946b020359e856125fae9cb3cf621096ad3daf548ab3f7c"
+    },
+    "ios-PushGo-iOS-codesign.log": {
+      "sha256": "2c02408cde113d189c9d9e93f18a5d7886710fbe27e99180eb67622e4880ecc8"
+    },
+    "PushGoNSE-macOS-release-settings.log": {
+      "sha256": "cfc2b5f5f691ba16a8e399abc1929a09170d4047ebf9869e464d8c95852c6992"
+    },
+    "macos-release-settings.log": {
+      "sha256": "0ab12c507303d1af59a331686205debe8c485efabdec244e7b690173daaedb86"
+    },
+    "ios-PushGo-watchOS-codesign.log": {
+      "sha256": "e12decfbd20f9e9cadb489094ab651c9261b6f169564d0030890cf99bed119b5"
+    },
+    "ios-build.log": {
+      "sha256": "4d39e7c981d14cb102a6d6b3ddbce0cd04b21220fc3e8fd843f40e338eaa0249"
+    },
+    "macos-PushGoWidgets-macOS-codesign.log": {
+      "sha256": "6a24b35c0bec2881ff9cdadb3ac2331fc6dc0212c7673ccf1ab985bec644b1ec"
+    },
+    "PushGoNSE-watchOS-release-settings.log": {
+      "sha256": "b8a763e143a1719c944cfcf5f6f79957ee2c2f88e0d3e6170b13a39e7ee12e36"
+    },
+    "macos-PushGoNSE-macOS-codesign.log": {
+      "sha256": "f7bee9f3a4c76d5e07a04f55c9857f5f27d643790825223eb687f0ceb91688ad"
+    },
+    "PushGoWidgets-watchOS-release-settings.log": {
+      "sha256": "8a5492a6af8750654a59b80be243abc9b08d9349260adcedd4e50916ac12e1b8"
+    },
+    "watchos-build.log": {
+      "sha256": "0423e6857059e1d50b921afdf7f4be5b307333e6dce8552f37313fb1790f68d7"
+    },
+    "PushGoWidgets-macOS-release-settings.log": {
+      "sha256": "48154940dc66075ac570f2a81f06301dd18852eb6feb16488a97c40f25405849"
+    },
+    "ios-PushGo-watchOS-vtool.log": {
+      "sha256": "9adf1df8e87edb5249d263f5388abc240846514f888c4a3aaf239f7d4e12a355"
+    },
+    "ios-PushGo-iOS-vtool.log": {
+      "sha256": "8fa95a22512603bedaf1f6a8577f5244317b0d854945cc72b1e1e7a017ce5c48"
+    },
+    "xcode-version-after-build.log": {
+      "sha256": "694b44731d0b415c5b11d844151e466d7f5e200a95627efda377f232f1a6ab77"
+    }
+  },
+  "toolchain_observed_after_build": "Xcode 27.0\nBuild version 27A266a"
+}

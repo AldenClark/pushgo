@@ -7,6 +7,8 @@ import Darwin
 import Testing
 @testable import PushGoAppleCore
 
+private let runtimeQualityOptInEnabled = RuntimeQualityConfiguration.fromEnvironment().enabled
+
 @Suite(.serialized)
 struct RuntimeQualityLargeScaleTests {
     @Test
@@ -273,6 +275,93 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v21_message_search_derived_state"))
             #expect(applied.contains("v22_split_message_stats_and_revision_update_triggers"))
             #expect(applied.contains("v23_trigram_message_search_index"))
+            #expect(applied.contains("v24_durable_pending_local_deletions"))
+            #expect(applied.contains("v25_canonical_derived_work_outbox"))
+
+            let migratedTables = try await dbQueue.read { db in
+                try Set(
+                    String.fetchAll(
+                        db,
+                        sql: "SELECT name FROM sqlite_master WHERE type = 'table';"
+                    )
+                )
+            }
+            #expect(migratedTables.contains("pending_local_deletions"))
+            #expect(migratedTables.contains("canonical_derived_work"))
+        }
+    }
+
+    @Test
+    func currentV24StorePreservesPendingDeletionThroughV25AndReopen() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let v24Store = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let now = Date(timeIntervalSince1970: 1_768_500_000)
+            let pending = try await v24Store.enqueuePendingLocalDeletion(
+                summary: "Delete migrated event",
+                undoLabel: "Undo",
+                intent: .events(ids: ["migration-event-v24"]),
+                timeout: 30,
+                now: now
+            )
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+
+            let databaseURL = try upgradeMainDatabaseURL(
+                appGroupIdentifier: appGroupIdentifier
+            )
+            do {
+                let queue = try DatabaseQueue(path: databaseURL.path)
+                try await queue.write { db in
+                    try db.execute(sql: "DROP TABLE IF EXISTS canonical_derived_work;")
+                    try db.execute(
+                        sql: "DELETE FROM grdb_migrations WHERE identifier = 'v25_canonical_derived_work_outbox';"
+                    )
+                }
+            }
+
+            let migratedStore = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let afterMigration = try await migratedStore.loadPendingLocalDeletions(now: now)
+            #expect(afterMigration.count == 1)
+            #expect(afterMigration.first == pending)
+            #expect(afterMigration.first?.id == pending.id)
+            #expect(afterMigration.first?.summary == "Delete migrated event")
+            #expect(afterMigration.first?.intent == .events(ids: ["migration-event-v24"]))
+            #expect(afterMigration.first?.state == .undoable)
+            #expect(afterMigration.first?.deadline == pending.deadline)
+
+            let migrationFacts = try await DatabaseQueue(path: databaseURL.path).read { db in
+                let applied = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS(SELECT 1 FROM grdb_migrations WHERE identifier = 'v25_canonical_derived_work_outbox');"
+                ) ?? false
+                let table = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'canonical_derived_work');"
+                ) ?? false
+                return (applied, table)
+            }
+            #expect(migrationFacts.0)
+            #expect(migrationFacts.1)
+
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopenedStore = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let afterReopen = try await reopenedStore.loadPendingLocalDeletions(now: now)
+            #expect(afterReopen.count == 1)
+            #expect(afterReopen.first == pending)
+            #expect(afterReopen.first?.id == pending.id)
+            #expect(afterReopen.first?.summary == "Delete migrated event")
+            #expect(afterReopen.first?.undoLabel == "Undo")
+            #expect(afterReopen.first?.intent == .events(ids: ["migration-event-v24"]))
+            #expect(afterReopen.first?.state == .undoable)
+            #expect(afterReopen.first?.deadline == pending.deadline)
         }
     }
 
@@ -286,14 +375,9 @@ struct RuntimeQualityLargeScaleTests {
         )
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func legacyUpgradeHundredThousandOpensRebuildsAndServesCanonicalQueries() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter legacyUpgradeHundredThousandOpensRebuildsAndServesCanonicalQueries")
-            return
-        }
-
         try await runLegacyUpgradeScenario(
             scale: max(100_000, configuration.coreScale),
             metricPrefix: "upgrade100k",
@@ -302,14 +386,9 @@ struct RuntimeQualityLargeScaleTests {
         )
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func largeScaleCoreStorePathsHaveStableCorrectnessAndPerformance() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let generator = RuntimeQualityFixtureGenerator(seed: configuration.seed, platform: .iOS)
             let dataset = generator.makeDataset(count: configuration.coreScale)
@@ -502,14 +581,9 @@ struct RuntimeQualityLargeScaleTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func watchLightStoreHandlesTenThousandItemSnapshot() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, _ in
             let generator = RuntimeQualityFixtureGenerator(seed: configuration.seed, platform: .watchOS)
             let snapshot = generator.makeWatchSnapshot(
@@ -560,14 +634,9 @@ struct RuntimeQualityLargeScaleTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func concurrentOutOfOrderBatchesConvergeWithoutDuplicates() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, _ in
             let batchCount = 8
             let batchSize = max(1, configuration.concurrentScale / batchCount)
@@ -1063,6 +1132,8 @@ struct RuntimeQualityLargeScaleTests {
                 DROP TABLE IF EXISTS message_channel_stats;
                 DROP TABLE IF EXISTS message_global_stats;
                 DROP TABLE IF EXISTS message_store_revision;
+                DROP TABLE IF EXISTS canonical_derived_work;
+                DROP TABLE IF EXISTS pending_local_deletions;
                 DROP INDEX IF EXISTS idx_messages_top_level_read_received;
                 DROP INDEX IF EXISTS idx_messages_top_level_channel_key_read_received;
                 DROP INDEX IF EXISTS idx_messages_top_level_channel_key_received;
@@ -1074,7 +1145,9 @@ struct RuntimeQualityLargeScaleTests {
                     'v20_message_entity_identity_index',
                     'v21_message_search_derived_state',
                     'v22_split_message_stats_and_revision_update_triggers',
-                    'v23_trigram_message_search_index'
+                    'v23_trigram_message_search_index',
+                    'v24_durable_pending_local_deletions',
+                    'v25_canonical_derived_work_outbox'
                 );
                 """)
         }
