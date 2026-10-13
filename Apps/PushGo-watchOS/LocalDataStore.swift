@@ -6,31 +6,11 @@ private let watchSQLiteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type
 
 struct WatchPublicationState: Codable, Hashable, Sendable {
     var syncGenerations: WatchSyncGenerationState
-    var mirrorSnapshotContentDigest: String?
     var standaloneProvisioningContentDigest: String?
 
     static let empty = WatchPublicationState(
         syncGenerations: .zero,
-        mirrorSnapshotContentDigest: nil,
         standaloneProvisioningContentDigest: nil
-    )
-}
-
-struct WatchModeControlPersistenceState: Codable, Hashable, Sendable {
-    var desiredMode: WatchMode
-    var effectiveMode: WatchMode
-    var standaloneReady: Bool
-    var switchStatus: WatchModeSwitchStatus
-    var lastConfirmedControlGeneration: Int64
-    var lastObservedReportedGeneration: Int64
-
-    static let initial = WatchModeControlPersistenceState(
-        desiredMode: .standalone,
-        effectiveMode: .standalone,
-        standaloneReady: false,
-        switchStatus: .idle,
-        lastConfirmedControlGeneration: 0,
-        lastObservedReportedGeneration: 0
     )
 }
 
@@ -72,7 +52,6 @@ private struct WatchLocalSettings: Codable, Sendable {
     var watchMode: WatchMode
     var watchSyncGenerations: WatchSyncGenerationState
     var watchPublicationState: WatchPublicationState
-    var watchModeControlState: WatchModeControlPersistenceState
     var dataPageVisibility: DataPageVisibilitySnapshot
     var launchAtLoginEnabled: Bool?
 
@@ -80,7 +59,6 @@ private struct WatchLocalSettings: Codable, Sendable {
         watchMode: .standalone,
         watchSyncGenerations: .zero,
         watchPublicationState: .empty,
-        watchModeControlState: .initial,
         dataPageVisibility: .default,
         launchAtLoginEnabled: nil
     )
@@ -353,16 +331,6 @@ actor LocalDataStore {
         await saveSettings(settings)
     }
 
-    func loadWatchModeControlState() async -> WatchModeControlPersistenceState {
-        await loadSettings().watchModeControlState
-    }
-
-    func saveWatchModeControlState(_ state: WatchModeControlPersistenceState) async {
-        var settings = await loadSettings()
-        settings.watchModeControlState = state
-        await saveSettings(settings)
-    }
-
     func loadWatchSyncGenerationState() async -> WatchSyncGenerationState {
         await loadSettings().watchSyncGenerations
     }
@@ -422,6 +390,17 @@ actor LocalDataStore {
             baseURL: baseURL,
             deviceKey: deviceKey
         )
+    }
+
+    func loadWatchAlertWindowMinutes() async -> Int {
+        let minutes = (try? sqliteStore?.loadWatchAlertWindowMinutes()) ?? 30
+        UserDefaults(suiteName: AppConstants.appGroupIdentifier)?.set(minutes, forKey: AppConstants.watchAlertWindowMinutesDefaultsKey)
+        return minutes
+    }
+
+    func saveWatchAlertWindowMinutes(_ minutes: Int) async throws {
+        try requireSQLiteStore().saveWatchAlertWindowMinutes(minutes)
+        _ = await loadWatchAlertWindowMinutes()
     }
 
     func loadWatchProvisioningState() async -> WatchProvisioningState? {
@@ -527,8 +506,10 @@ actor LocalDataStore {
         try sqliteStore.commitProvisioning(
             config: normalizedConfig,
             state: provisioningState,
-            previousDeviceKey: previousDeviceKey
+            previousDeviceKey: previousDeviceKey,
+            watchAlertWindowMinutes: snapshot.watchAlertWindowMinutes
         )
+        _ = await loadWatchAlertWindowMinutes()
         return provisioningState
     }
 
@@ -542,11 +523,6 @@ actor LocalDataStore {
         } catch {
             return true
         }
-    }
-
-    func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
-        let sqliteStore = try requireSQLiteStore()
-        try sqliteStore.mergeMirrorSnapshot(snapshot)
     }
 
     func clearWatchLightStore() async throws {
@@ -629,24 +605,9 @@ actor LocalDataStore {
         try sqliteStore.deleteWatchLightMessage(messageId: messageId)
     }
 
-    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) async throws {
-        let sqliteStore = try requireSQLiteStore()
-        try sqliteStore.enqueueWatchMirrorAction(action)
-    }
-
     func deleteAllMessages() async throws {
         let sqliteStore = try requireSQLiteStore()
         try sqliteStore.clearWatchLightStore()
-    }
-
-    func loadWatchMirrorActions() async throws -> [WatchMirrorAction] {
-        let sqliteStore = try requireSQLiteStore()
-        return try sqliteStore.loadWatchMirrorActions()
-    }
-
-    func deleteWatchMirrorActions(actionIds: [String]) async throws {
-        let sqliteStore = try requireSQLiteStore()
-        try sqliteStore.deleteWatchMirrorActions(actionIds: actionIds)
     }
 
     private func loadSettings() async -> WatchLocalSettings {
@@ -760,6 +721,8 @@ private final class WatchLocalSQLiteStore {
         try Self.execute("PRAGMA foreign_keys = ON;", db: openedDb)
         try Self.execute("PRAGMA busy_timeout = 5000;", db: openedDb)
         try Self.createSchemaIfNeeded(db: openedDb)
+        // Abandon obsolete iPhone writeback actions without touching content or delivery ACKs.
+        try Self.execute("DROP TABLE IF EXISTS watch_mirror_action_queue;", db: openedDb)
         db = openedDb
     }
 
@@ -767,6 +730,14 @@ private final class WatchLocalSQLiteStore {
         if let db {
             sqlite3_close(db)
         }
+    }
+
+    func loadWatchAlertWindowMinutes() throws -> Int {
+        WatchNotificationFreshness.normalizedMinutes(Int(try loadAppSetting(column: "watch_alert_window_minutes") ?? "30") ?? 30)
+    }
+
+    func saveWatchAlertWindowMinutes(_ minutes: Int) throws {
+        try upsertAppSettings(columns: ["watch_alert_window_minutes": String(WatchNotificationFreshness.normalizedMinutes(minutes))])
     }
 
     func loadProvisioningServerConfig() throws -> ServerConfig? {
@@ -798,7 +769,8 @@ private final class WatchLocalSQLiteStore {
     func commitProvisioning(
         config: ServerConfig?,
         state: WatchProvisioningState,
-        previousDeviceKey: String?
+        previousDeviceKey: String?,
+        watchAlertWindowMinutes: Int
     ) throws {
         try writeTransaction {
             try recordPreviousGatewayRouteIfNeeded(
@@ -807,6 +779,7 @@ private final class WatchLocalSQLiteStore {
             )
             try saveProvisioningServerConfig(config)
             try saveProvisioningState(state)
+            try saveWatchAlertWindowMinutes(watchAlertWindowMinutes)
             try upsertAppSettings(columns: [
                 "watch_provisioning_pending_generation": nil,
                 "watch_provisioning_pending_digest": nil,
@@ -975,21 +948,11 @@ private final class WatchLocalSQLiteStore {
         ])
     }
 
-    func mergeMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) throws {
-        try writeTransaction {
-            for message in snapshot.messages { try upsertWatchLightMessage(message) }
-            for event in snapshot.events { try upsertWatchLightEvent(event) }
-            for thing in snapshot.things { try upsertWatchLightThing(thing) }
-        }
-        DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
-    }
-
     func clearWatchLightStore() throws {
         try writeTransaction {
             try execute("DELETE FROM watch_light_messages;")
             try execute("DELETE FROM watch_light_events;")
             try execute("DELETE FROM watch_light_things;")
-            try execute("DELETE FROM watch_mirror_action_queue;")
             try execute("DELETE FROM watch_delivery_records;")
         }
         DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
@@ -1167,38 +1130,6 @@ private final class WatchLocalSQLiteStore {
         try bindText(statement, index: 1, value: normalized)
         try stepDone(statement)
         DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
-    }
-
-    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) throws {
-        let statement = try prepare("INSERT INTO watch_mirror_action_queue (action_id, kind, message_id, issued_at) VALUES (?, ?, ?, ?) ON CONFLICT(action_id) DO UPDATE SET kind = excluded.kind, message_id = excluded.message_id, issued_at = excluded.issued_at;")
-        defer { sqlite3_finalize(statement) }
-        try bindText(statement, index: 1, value: action.actionId)
-        try bindText(statement, index: 2, value: action.kind.rawValue)
-        try bindText(statement, index: 3, value: action.messageId)
-        sqlite3_bind_double(statement, 4, action.issuedAt.timeIntervalSince1970)
-        try stepDone(statement)
-    }
-
-    func loadWatchMirrorActions() throws -> [WatchMirrorAction] {
-        let statement = try prepare("SELECT action_id, kind, message_id, issued_at FROM watch_mirror_action_queue ORDER BY issued_at ASC, action_id ASC;")
-        defer { sqlite3_finalize(statement) }
-        var items: [WatchMirrorAction] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            items.append(Self.decodeWatchMirrorAction(statement))
-        }
-        return items
-    }
-
-    func deleteWatchMirrorActions(actionIds: [String]) throws {
-        let normalized = actionIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard !normalized.isEmpty else { return }
-        let placeholders = Array(repeating: "?", count: normalized.count).joined(separator: ", ")
-        let statement = try prepare("DELETE FROM watch_mirror_action_queue WHERE action_id IN (\(placeholders));")
-        defer { sqlite3_finalize(statement) }
-        for (index, value) in normalized.enumerated() {
-            try bindText(statement, index: Int32(index + 1), value: value)
-        }
-        try stepDone(statement)
     }
 
     private func loadAppSetting(column: String) throws -> String? {
@@ -1430,15 +1361,6 @@ private final class WatchLocalSQLiteStore {
         )
     }
 
-    private static func decodeWatchMirrorAction(_ statement: OpaquePointer?) -> WatchMirrorAction {
-        WatchMirrorAction(
-            actionId: columnText(statement, index: 0) ?? "",
-            kind: WatchMirrorActionKind(rawValue: columnText(statement, index: 1) ?? "read") ?? .read,
-            messageId: columnText(statement, index: 2) ?? "",
-            issuedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3))
-        )
-    }
-
     private static func decodeWatchDeliveryRecord(_ statement: OpaquePointer?) -> WatchDeliveryRecord {
         let ingressSource = WatchIngressSource(rawValue: columnText(statement, index: 6) ?? "") ?? .watchAPNS
         let serverAckState = WatchServerAckState(rawValue: columnText(statement, index: 9) ?? "") ?? .pending
@@ -1607,18 +1529,6 @@ private final class WatchLocalSQLiteStore {
             db: db
         )
         try execute("CREATE INDEX IF NOT EXISTS idx_watch_light_things_updated_at ON watch_light_things(updated_at DESC, thing_id DESC);", db: db)
-        try execute(
-            """
-            CREATE TABLE IF NOT EXISTS watch_mirror_action_queue (
-                action_id TEXT PRIMARY KEY NOT NULL,
-                kind TEXT NOT NULL,
-                message_id TEXT NOT NULL,
-                issued_at REAL NOT NULL
-            );
-            """,
-            db: db
-        )
-        try execute("CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);", db: db)
         try ensureWatchDeliveryRecordsSchema(db: db)
         try execute(
             """
@@ -1647,6 +1557,7 @@ private final class WatchLocalSQLiteStore {
         try ensureColumn("watch_provisioning_source_control_generation", type: "INTEGER", db: db)
         try ensureColumn("watch_provisioning_pending_generation", type: "INTEGER", db: db)
         try ensureColumn("watch_provisioning_pending_digest", type: "TEXT", db: db)
+        try ensureColumn("watch_alert_window_minutes", type: "TEXT", db: db)
         try execute(
             """
             CREATE TABLE IF NOT EXISTS watch_gateway_route_cleanups (

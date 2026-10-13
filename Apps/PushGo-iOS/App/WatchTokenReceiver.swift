@@ -16,12 +16,11 @@ final class WatchTokenReceiver {
                     await AppEnvironment.shared.handleWatchSessionStateDidChange()
                 },
                 manifestDidReceive: { manifest in
-                    await Self.handleIncomingManifest(manifest)
+                    await Self.handleIncomingManifest(manifest, controller: AppEnvironment.shared.watchSyncController)
                 },
                 eventDidReceive: { event in
                     await Self.handleIncomingEvent(event)
                 },
-                mirrorPackageDidReceive: nil,
                 standalonePackageDidReceive: nil,
                 latestManifestRequested: {
                     await AppEnvironment.shared.handleWatchLatestManifestRequested()
@@ -58,29 +57,25 @@ final class WatchTokenReceiver {
         coordinator.replayLatestManifestIfPossible()
     }
 
-    func sendMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) {
-        coordinator.prepareMirrorSnapshot(snapshot)
-    }
-
     func sendStandaloneProvisioning(_ snapshot: WatchStandaloneProvisioningSnapshot) {
         coordinator.prepareStandaloneProvisioning(snapshot)
-    }
-
-    func sendMirrorActionAck(_ ack: WatchMirrorActionAck) {
-        coordinator.enqueueReliableMirrorActionAck(ack)
     }
 
     private func refreshAvailability(from state: WatchLinkState) {
         isWatchCompanionAvailable = state.isCompanionAvailable
     }
 
+    static func handleIncomingManifest(_ manifest: WatchSyncManifest, controller: WatchSyncController) async {
+        if let status = manifest.standaloneReadinessStatus {
+            await controller.handleWatchStandaloneReadinessStatus(status)
+        }
+        if let ack = manifest.standaloneProvisioningAck {
+            await controller.handleWatchStandaloneProvisioningAck(WatchStandaloneProvisioningAck(generation: ack.generation, contentDigest: ack.contentDigest, appliedAt: ack.appliedAt))
+        }
+    }
+
     private static func handleIncomingEvent(_ event: WatchEventEnvelope) async {
         switch event.kind {
-        case .mirrorActionBatch:
-            guard let batch = WatchConnectivityWire.decode(WatchMirrorActionBatch.self, from: event.payload) else {
-                return
-            }
-            await AppEnvironment.shared.applyWatchMirrorActionBatch(batch)
         case .pushTokenUpdate:
             guard let token = WatchConnectivityWire.decode(String.self, from: event.payload) else {
                 return
@@ -96,88 +91,9 @@ final class WatchTokenReceiver {
                 return
             }
             await AppEnvironment.shared.handleWatchStandaloneProvisioningNack(nack)
-        case .mirrorSnapshotAck:
-            guard let ack = WatchConnectivityWire.decode(WatchMirrorSnapshotAck.self, from: event.payload) else {
-                return
-            }
-            await AppEnvironment.shared.handleWatchMirrorSnapshotAck(ack)
-        case .mirrorSnapshotNack:
-            guard let nack = WatchConnectivityWire.decode(WatchMirrorSnapshotNack.self, from: event.payload) else {
-                return
-            }
-            await AppEnvironment.shared.handleWatchMirrorSnapshotNack(nack)
-        case .mirrorActionAck, .mirrorSnapshotInline, .standaloneProvisioningInline:
+        case .mirrorActionBatch, .mirrorSnapshotAck, .mirrorSnapshotNack, .mirrorActionAck, .mirrorSnapshotInline, .standaloneProvisioningInline:
             break
         }
     }
 
-    private static func handleIncomingManifest(_ manifest: WatchSyncManifest) async {
-        if let effectiveModeStatus = manifest.effectiveModeStatus {
-            await AppEnvironment.shared.handleWatchEffectiveModeStatus(effectiveModeStatus)
-        } else {
-            await AppEnvironment.shared.handleWatchEffectiveModeStatus(
-                WatchEffectiveModeStatus(
-                    effectiveMode: manifest.mode,
-                    sourceControlGeneration: manifest.controlGeneration,
-                    appliedAt: Date(),
-                    noop: false,
-                    status: .applied,
-                    failureReason: nil
-                )
-            )
-        }
-
-        if let standaloneReadinessStatus = manifest.standaloneReadinessStatus {
-            await AppEnvironment.shared.handleWatchStandaloneReadinessStatus(standaloneReadinessStatus)
-        } else if manifest.mode == .mirror {
-            await AppEnvironment.shared.handleWatchStandaloneReadinessStatus(
-                WatchStandaloneReadinessStatus(
-                    effectiveMode: .mirror,
-                    standaloneReady: false,
-                    sourceControlGeneration: manifest.controlGeneration,
-                    provisioningGeneration: manifest.standalonePackage?.generation ?? 0,
-                    reportedAt: Date(),
-                    failureReason: nil
-                )
-            )
-        }
-
-        if let mirrorAck = manifest.mirrorSnapshotAck,
-           mirrorAck.generation > 0
-        {
-            await AppEnvironment.shared.handleWatchMirrorSnapshotAck(
-                WatchMirrorSnapshotAck(
-                    generation: mirrorAck.generation,
-                    contentDigest: mirrorAck.contentDigest,
-                    appliedAt: mirrorAck.appliedAt
-                )
-            )
-        }
-
-        if let standaloneAck = manifest.standaloneProvisioningAck,
-           standaloneAck.generation > 0
-        {
-            await AppEnvironment.shared.handleWatchStandaloneProvisioningAck(
-                WatchStandaloneProvisioningAck(
-                    generation: standaloneAck.generation,
-                    contentDigest: standaloneAck.contentDigest,
-                    appliedAt: standaloneAck.appliedAt
-                )
-            )
-        }
-
-        guard manifest.mode == .mirror,
-              let generation = manifest.ackCursor?.generation,
-              generation > 0
-        else {
-            return
-        }
-        await AppEnvironment.shared.handleWatchMirrorSnapshotAck(
-            WatchMirrorSnapshotAck(
-                generation: generation,
-                contentDigest: "",
-                appliedAt: Date()
-            )
-        )
-    }
 }

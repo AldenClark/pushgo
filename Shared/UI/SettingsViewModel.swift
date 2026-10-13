@@ -27,11 +27,9 @@ final class SettingsViewModel {
     private(set) var notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?
     private(set) var isWatchCompanionAvailable: Bool = false
 #if os(iOS)
-    private(set) var watchMode: WatchMode = .standalone
-    private(set) var effectiveWatchMode: WatchMode = .standalone
-    private(set) var standaloneReady: Bool = false
-    private(set) var watchModeSwitchStatus: WatchModeSwitchStatus = .idle
-    private(set) var isSwitchingWatchMode: Bool = false
+    private(set) var isResyncingWatchReceiver = false
+    private(set) var watchAlertWindowMinutes = WatchNotificationFreshness.defaultMinutes
+    private(set) var isSavingWatchAlertWindow = false
     private(set) var watchReceiverState: WatchReceiverState = .unprovisioned
 #endif
     var manualKeyInput = ManualKeyInput() {
@@ -112,17 +110,8 @@ final class SettingsViewModel {
         notificationStatus = environment.pushRegistrationService.authorizationState
         notificationKeyMaterial = environment.currentNotificationMaterial
 #if os(iOS)
-        watchMode = environment.watchMode
-        effectiveWatchMode = environment.effectiveWatchMode
-        standaloneReady = environment.standaloneReady
-        watchModeSwitchStatus = environment.watchModeSwitchStatus
         isWatchCompanionAvailable = environment.isWatchCompanionAvailable
-        watchReceiverState = Self.receiverState(
-            companionAvailable: isWatchCompanionAvailable,
-            effectiveMode: effectiveWatchMode,
-            standaloneReady: standaloneReady,
-            switchStatus: watchModeSwitchStatus
-        )
+        watchReceiverState = environment.watchReceiverState
 #else
         isWatchCompanionAvailable = false
 #endif
@@ -196,8 +185,8 @@ final class SettingsViewModel {
             )
             return
         }
-        isSwitchingWatchMode = true
-        defer { isSwitchingWatchMode = false }
+        isResyncingWatchReceiver = true
+        defer { isResyncingWatchReceiver = false }
         do {
             try await environment.resyncWatchReceiverProvisioning()
             refresh()
@@ -217,31 +206,28 @@ final class SettingsViewModel {
     }
 
 #if os(iOS)
-    private static func receiverState(
-        companionAvailable: Bool,
-        effectiveMode: WatchMode,
-        standaloneReady: Bool,
-        switchStatus: WatchModeSwitchStatus
-    ) -> WatchReceiverState {
-        guard companionAvailable else { return .offline }
-        if switchStatus == .switching {
-            return .provisioning
+    func updateWatchAlertWindowMinutes(_ minutes: Int) async {
+        guard !isSavingWatchAlertWindow else { return }
+        isSavingWatchAlertWindow = true
+        defer { isSavingWatchAlertWindow = false }
+        do {
+            try await environment.updateWatchAlertWindowMinutes(minutes)
+            watchAlertWindowMinutes = await dataStore.loadWatchAlertWindowMinutes()
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "watch_alert_window_save_failed"
+            )
         }
-        if switchStatus == .failed || switchStatus == .timedOut {
-            return .degraded
-        }
-        if effectiveMode == .standalone, standaloneReady {
-            return .ready
-        }
-        if effectiveMode == .standalone {
-            return .degraded
-        }
-        return .unprovisioned
     }
 #endif
 
     private func loadPersistedPreferences() {
         Task { @MainActor in
+#if os(iOS)
+            watchAlertWindowMinutes = await dataStore.loadWatchAlertWindowMinutes()
+#endif
             let manualPrefs = await dataStore.loadManualKeyPreferences()
             var input = manualKeyInput
             if let storedEncoding = manualPrefs,

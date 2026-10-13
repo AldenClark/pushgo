@@ -141,6 +141,10 @@ SPECIAL_UI_TEST_PROFILES = {
         "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
     ): "accessibility",
     (
+        "ios",
+        "testWatchReminderWindowUsesRealPickerAndPersistsAtLargeText",
+    ): "accessibility",
+    (
         "macos",
         "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
     ): "system",

@@ -19,6 +19,10 @@
           "disposition": "DEFERRED",
           "reason": "Real receiver resync is residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09; a state string is not accepted as closure."
         },
+        "row.settings.watch_alert_window": {
+          "disposition": "SEMANTICALLY_COVERED_BY_CHILD_ACTIONS",
+          "reason": "This containing row labels the Watch reminder-window Picker. Its child action.settings.watch_alert_window is exercised by testWatchReminderWindowUsesRealPickerAndPersistsAtLargeText, which requires accessibility5, checks the default 30-minute value, selects five minutes through the real menu and checks the restored value after relaunch. Runtime execution remains separate from this reviewed identifier mapping."
+        },
         "row.settings.watch_receiver": {
           "disposition": "DEFERRED",
           "reason": "Real receiver status and recovery are residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09."

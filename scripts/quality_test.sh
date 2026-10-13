@@ -236,7 +236,8 @@ PY
         ios)
           selected_claims+=("impact-selected changed iOS UI tests ($scope_profile): $scope_list")
           if [[ "$scope_profile" == "accessibility" ]]; then
-            QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+            TEST_SCOPES="$scope_list" \
+              QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
               run_accessibility_localization
           elif [[ "$scope_profile" == "default" ]]; then
             TEST_SCOPES="$scope_list" \
@@ -651,13 +652,13 @@ run_release_isolation() {
 }
 
 run_accessibility_localization() {
-  selected_claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
+  selected_claims+=("iOS zh-Hans accessibility5 purpose journeys: ${TEST_SCOPES:-$accessibility_ui_scope}")
   python3 "$repo_root/scripts/verify_apple_localizations.py"
   QUALITY_CONTENT_SIZE="accessibility-extra-extra-extra-large" \
-    TEST_SCOPES="$accessibility_ui_scope" \
+    TEST_SCOPES="${TEST_SCOPES:-$accessibility_ui_scope}" \
     MAX_RETRIES="${MAX_RETRIES:-0}" \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-  claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
+  claims+=("iOS zh-Hans accessibility5 purpose journeys: ${TEST_SCOPES:-$accessibility_ui_scope}")
 }
 
 run_watch_ui() {

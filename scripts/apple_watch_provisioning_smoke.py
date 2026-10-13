@@ -87,7 +87,17 @@ def launch(device: str, app_id: str, role_root: Path, request: dict[str, Any] | 
     state_dir.mkdir(parents=True, exist_ok=True)
     response = state_dir / "response.json"
     state = state_dir / "state.json"
+    # Stop the previous writer before removing observations. Deleting first
+    # lets an in-flight old-process enrichment recreate an accepted snapshot.
+    try:
+        simctl("terminate", device, app_id)
+    except SmokeError as error:
+        if "found nothing to terminate" not in str(error):
+            raise
     response.unlink(missing_ok=True)
+    # Require a new process observation after relaunch; an old state file may
+    # already contain the expected generation/window before the app restarts.
+    state.unlink(missing_ok=True)
     env = dict(os.environ)
     env.update({
         "SIMCTL_CHILD_PUSHGO_AUTOMATION_STORAGE_ROOT": f"sandbox-tmp:watch-provisioning-smoke/{role_root.name}",
@@ -100,7 +110,7 @@ def launch(device: str, app_id: str, role_root: Path, request: dict[str, Any] | 
         env["SIMCTL_CHILD_PUSHGO_AUTOMATION_REQUEST"] = json.dumps(request, separators=(",", ":"))
     else:
         env.pop("SIMCTL_CHILD_PUSHGO_AUTOMATION_REQUEST", None)
-    simctl("launch", "--terminate-running-process", device, app_id, env=env)
+    simctl("launch", device, app_id, env=env)
     return state
 
 
@@ -137,7 +147,11 @@ def main() -> int:
     parser.add_argument("--watch-app", type=Path, required=True, help="Built watchOS .app")
     parser.add_argument("--results-dir", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=60)
+    parser.add_argument("--alert-window-minutes", type=int, choices=(5, 15, 30, 60), help="Provision and verify this Watch alert window")
+    parser.add_argument("--updated-alert-window-minutes", type=int, choices=(5, 15, 30, 60), help="Provision a second different window and verify a new generation/digest")
     args = parser.parse_args()
+    if args.updated_alert_window_minutes is not None and (args.alert_window_minutes is None or args.updated_alert_window_minutes == args.alert_window_minutes):
+        parser.error("--updated-alert-window-minutes requires a different --alert-window-minutes")
 
     try:
         if not args.ios_app.is_dir() or not args.watch_app.is_dir():
@@ -172,24 +186,47 @@ def main() -> int:
         run_request(args.phone_id, phone_bundle, phone_session_root, "fixture.seed_subscriptions", {
             "path": str(fixture),
         }, args.timeout)
-        acceptance = run_request(args.phone_id, phone_bundle, phone_session_root, "watch.provisioning_acceptance", {}, args.timeout)
-        phone_state = acceptance.get("state") or {}
-        generation = phone_state.get("watch_provisioning_generation")
-        digest = phone_state.get("watch_provisioning_digest")
-        if not isinstance(generation, int) or generation <= 0 or not isinstance(digest, str) or not digest:
-            raise SmokeError("iOS acceptance response omitted the published generation/digest")
-        if phone_state.get("watch_provisioning_ack_generation") != generation or phone_state.get("watch_provisioning_ack_digest") != digest:
-            raise SmokeError("iOS did not observe a matching Watch ACK")
-
-        watch_state_path = launch(args.watch_id, watch_bundle, watch_session_root, None)
+        windows = [args.alert_window_minutes]
+        if args.updated_alert_window_minutes is not None:
+            windows.append(args.updated_alert_window_minutes)
+        window_checks = []
+        previous_generation = None
+        previous_digest = None
         expected_channels = ["p2", "p2-secondary"]
-        watch_state = wait_json(watch_state_path, args.timeout, lambda item:
-            item.get("watch_provisioning_generation") == generation
-            and item.get("watch_provisioning_digest") == digest
-            and item.get("watch_provisioning_gateway_base_url") == "https://pushgo.example.test"
-            and item.get("watch_provisioning_token_present") is True
-            and item.get("watch_provisioning_channel_ids") == expected_channels
-        )
+        for window in windows:
+            request_args = {} if window is None else {"value": str(window)}
+            acceptance = run_request(args.phone_id, phone_bundle, phone_session_root, "watch.provisioning_acceptance", request_args, args.timeout)
+            phone_state = acceptance.get("state") or {}
+            generation = phone_state.get("watch_provisioning_generation")
+            digest = phone_state.get("watch_provisioning_digest")
+            if not isinstance(generation, int) or generation <= 0 or not isinstance(digest, str) or not digest:
+                raise SmokeError("iOS acceptance response omitted the published generation/digest")
+            if phone_state.get("watch_provisioning_ack_generation") != generation or phone_state.get("watch_provisioning_ack_digest") != digest:
+                raise SmokeError("iOS did not observe a matching Watch ACK")
+            if previous_generation is not None and (generation <= previous_generation or digest == previous_digest):
+                raise SmokeError("changed Watch alert window did not publish a new generation and content digest")
+
+            # Ordinary process relaunch retains the same sandbox Store. The
+            # enriched state reads the persisted Watch value, not phone input.
+            watch_state_path = launch(args.watch_id, watch_bundle, watch_session_root, None)
+            watch_state = wait_json(watch_state_path, args.timeout, lambda item:
+                item.get("watch_provisioning_generation") == generation
+                and item.get("watch_provisioning_digest") == digest
+                and item.get("watch_provisioning_gateway_base_url") == "https://pushgo.example.test"
+                and item.get("watch_provisioning_token_present") is True
+                and item.get("watch_provisioning_channel_ids") == expected_channels
+                and (window is None or item.get("watch_alert_window_minutes") == window)
+            )
+            if window is not None:
+                window_checks.append({
+                    "requested_minutes": window,
+                    "persisted_watch_minutes_after_relaunch": watch_state["watch_alert_window_minutes"],
+                    "generation": generation,
+                    "content_digest": digest,
+                    "ack_generation": phone_state["watch_provisioning_ack_generation"],
+                    "ack_digest": phone_state["watch_provisioning_ack_digest"],
+                })
+            previous_generation, previous_digest = generation, digest
         args.results_dir.mkdir(parents=True, exist_ok=True)
         receipt = {
             "schema_version": 1,
@@ -206,6 +243,8 @@ def main() -> int:
             "transport": "WCSession.updateApplicationContext",
             "generated_at_epoch": int(time.time()),
         }
+        if window_checks:
+            receipt["alert_window_checks"] = window_checks
         (args.results_dir / "watch-provisioning-smoke.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(receipt, indent=2))
         return 0

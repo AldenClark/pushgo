@@ -138,6 +138,7 @@ let package = Package(
                 "Utilities/SearchQuerySemantics.swift",
                 "Utilities/UserInfoSanitizer.swift",
                 "Utilities/WatchLightQuantizer.swift",
+                "Utilities/WatchNotificationFreshness.swift",
             ],
             swiftSettings: [
                 .unsafeFlags([

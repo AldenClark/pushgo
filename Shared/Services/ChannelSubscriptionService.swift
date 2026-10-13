@@ -58,10 +58,12 @@ struct ChannelSubscriptionService {
     struct DeviceRegisterRequest: Encodable {
         let deviceKey: String?
         let platform: String
+        let watchAlertWindowMinutes: Int?
 
         enum CodingKeys: String, CodingKey {
             case deviceKey = "device_key"
             case platform
+            case watchAlertWindowMinutes = "watch_alert_window_minutes"
         }
     }
 
@@ -404,7 +406,8 @@ struct ChannelSubscriptionService {
         baseURL: URL,
         token: String?,
         platform: String,
-        existingDeviceKey: String?
+        existingDeviceKey: String?,
+        watchAlertWindowMinutes: Int? = nil
     ) async throws -> DeviceRegisterPayload {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
@@ -422,7 +425,10 @@ struct ChannelSubscriptionService {
         request.httpBody = try JSONEncoder().encode(
             DeviceRegisterRequest(
                 deviceKey: existingDeviceKey,
-                platform: platform
+                platform: platform,
+                watchAlertWindowMinutes: platform.uppercased() == "WATCHOS"
+                    ? watchAlertWindowMinutes.map { WatchNotificationFreshness.normalizedMinutes($0) }
+                    : nil
             )
         )
         let (data, response) = try await requestTransport(request)

@@ -6,8 +6,15 @@ import WatchConnectivity
 #endif
 
 enum WatchMode: String, Codable, Hashable, Sendable {
-    case mirror
     case standalone
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard raw == "standalone" || raw == "mirror" else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown Watch receiver configuration"))
+        }
+        self = .standalone
+    }
 }
 
 enum WatchReceiverState: String, Codable, Hashable, Sendable {
@@ -132,38 +139,12 @@ struct WatchLightThing: Codable, Hashable, Identifiable, Sendable {
 struct WatchControlContext: Codable, Hashable, Sendable {
     let mode: WatchMode
     let controlGeneration: Int64
-    let mirrorSnapshotGeneration: Int64
     let standaloneProvisioningGeneration: Int64
-    let pendingMirrorActionAckGeneration: Int64
 }
 
 enum WatchModeApplyStatus: String, Codable, Hashable, Sendable {
     case applied
     case failed
-}
-
-enum WatchModeSwitchStatus: String, Codable, Hashable, Sendable {
-    case idle
-    case switching
-    case confirmed
-    case timedOut = "timed_out"
-    case failed
-}
-
-struct WatchModeControlState: Codable, Hashable, Sendable {
-    var desiredMode: WatchMode
-    var effectiveMode: WatchMode
-    var switchStatus: WatchModeSwitchStatus
-    var lastConfirmedControlGeneration: Int64
-    var lastObservedReportedGeneration: Int64
-
-    static let initial = WatchModeControlState(
-        desiredMode: .standalone,
-        effectiveMode: .standalone,
-        switchStatus: .idle,
-        lastConfirmedControlGeneration: 0,
-        lastObservedReportedGeneration: 0
-    )
 }
 
 struct WatchEffectiveModeStatus: Codable, Hashable, Sendable {
@@ -184,39 +165,6 @@ struct WatchStandaloneReadinessStatus: Codable, Hashable, Sendable {
     let failureReason: String?
 }
 
-struct WatchMirrorSnapshot: Codable, Hashable, Sendable {
-    let generation: Int64
-    let mode: WatchMode
-    let messages: [WatchLightMessage]
-    let events: [WatchLightEvent]
-    let things: [WatchLightThing]
-    let exportedAt: Date
-    let contentDigest: String
-
-    static func contentDigest(
-        messages: [WatchLightMessage],
-        events: [WatchLightEvent],
-        things: [WatchLightThing]
-    ) -> String {
-        let input = WatchMirrorSnapshotDigestInput(
-            messages: messages,
-            events: events,
-            things: things
-        )
-        let encoder = WatchConnectivityWire.makeEncoder()
-        encoder.outputFormatting.insert(.sortedKeys)
-        let data = (try? encoder.encode(input)) ?? Data()
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-private struct WatchMirrorSnapshotDigestInput: Codable {
-    let messages: [WatchLightMessage]
-    let events: [WatchLightEvent]
-    let things: [WatchLightThing]
-}
-
 struct WatchStandaloneChannelCredential: Codable, Hashable, Identifiable, Sendable {
     let gateway: String
     let channelId: String
@@ -234,13 +182,37 @@ struct WatchStandaloneProvisioningSnapshot: Codable, Sendable {
     let notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?
     let channels: [WatchStandaloneChannelCredential]
     let contentDigest: String
+    let watchAlertWindowMinutes: Int
+
+    init(generation: Int64, mode: WatchMode, serverConfig: ServerConfig?, notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?, channels: [WatchStandaloneChannelCredential], contentDigest: String, watchAlertWindowMinutes: Int = 30) {
+        self.generation = generation
+        self.mode = .standalone
+        self.serverConfig = serverConfig
+        self.notificationKeyMaterial = notificationKeyMaterial
+        self.channels = channels
+        self.contentDigest = contentDigest
+        self.watchAlertWindowMinutes = WatchNotificationFreshness.normalizedMinutes(watchAlertWindowMinutes)
+    }
+
+    private enum CodingKeys: String, CodingKey { case generation, mode, serverConfig, notificationKeyMaterial, channels, contentDigest, watchAlertWindowMinutes }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(generation: try values.decode(Int64.self, forKey: .generation), mode: .standalone,
+            serverConfig: try values.decodeIfPresent(ServerConfig.self, forKey: .serverConfig),
+            notificationKeyMaterial: try values.decodeIfPresent(ServerConfig.NotificationKeyMaterial.self, forKey: .notificationKeyMaterial),
+            channels: try values.decode([WatchStandaloneChannelCredential].self, forKey: .channels),
+            contentDigest: try values.decode(String.self, forKey: .contentDigest),
+            watchAlertWindowMinutes: (try? values.decode(Int.self, forKey: .watchAlertWindowMinutes)) ?? 30)
+    }
 
     static func contentDigest(
         serverConfig: ServerConfig?,
         notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?,
-        channels: [WatchStandaloneChannelCredential]
+        channels: [WatchStandaloneChannelCredential],
+        watchAlertWindowMinutes: Int = 30
     ) -> String {
         let input = WatchStandaloneProvisioningDigestInput(
+            watchAlertWindowMinutes: WatchNotificationFreshness.normalizedMinutes(watchAlertWindowMinutes),
             serverConfig: serverConfig.map {
                 WatchStandaloneProvisioningDigestServerConfig(
                     baseURL: $0.normalizedBaseURL.absoluteString,
@@ -279,6 +251,7 @@ struct WatchStandaloneProvisioningSnapshot: Codable, Sendable {
 }
 
 private struct WatchStandaloneProvisioningDigestInput: Codable {
+    let watchAlertWindowMinutes: Int
     let serverConfig: WatchStandaloneProvisioningDigestServerConfig?
     let notificationKeyMaterial: WatchStandaloneProvisioningDigestKeyMaterial?
     let channels: [WatchStandaloneProvisioningDigestChannel]
@@ -302,45 +275,6 @@ private struct WatchStandaloneProvisioningDigestChannel: Codable {
     let password: String
 }
 
-enum WatchMirrorActionKind: String, Codable, Hashable, Sendable {
-    case read
-    case delete
-}
-
-struct WatchMirrorAction: Codable, Hashable, Identifiable, Sendable {
-    let actionId: String
-    let kind: WatchMirrorActionKind
-    let messageId: String
-    let issuedAt: Date
-
-    var id: String { actionId }
-}
-
-struct WatchMirrorActionBatch: Codable, Hashable, Sendable {
-    let batchId: String
-    let mode: WatchMode
-    let actions: [WatchMirrorAction]
-}
-
-struct WatchMirrorActionAck: Codable, Hashable, Sendable {
-    let ackGeneration: Int64
-    let ackedActionIds: [String]
-}
-
-struct WatchMirrorSnapshotAck: Codable, Hashable, Sendable {
-    let generation: Int64
-    let contentDigest: String
-    let appliedAt: Date
-}
-
-struct WatchMirrorSnapshotNack: Codable, Hashable, Sendable {
-    let generation: Int64
-    let contentDigest: String
-    let failedStage: String
-    let errorDescription: String
-    let reportedAt: Date
-}
-
 struct WatchStandaloneProvisioningAck: Codable, Hashable, Sendable {
     let generation: Int64
     let contentDigest: String
@@ -357,16 +291,9 @@ struct WatchStandaloneProvisioningNack: Codable, Hashable, Sendable {
 
 struct WatchSyncGenerationState: Codable, Hashable, Sendable {
     var controlGeneration: Int64
-    var mirrorSnapshotGeneration: Int64
     var standaloneProvisioningGeneration: Int64
-    var mirrorActionAckGeneration: Int64
 
-    static let zero = WatchSyncGenerationState(
-        controlGeneration: 0,
-        mirrorSnapshotGeneration: 0,
-        standaloneProvisioningGeneration: 0,
-        mirrorActionAckGeneration: 0
-    )
+    static let zero = WatchSyncGenerationState(controlGeneration: 0, standaloneProvisioningGeneration: 0)
 }
 
 enum WatchConnectivityPayloadKey: String, CaseIterable, Sendable {
@@ -642,6 +569,16 @@ struct WatchSyncManifest: Codable, Hashable, Sendable {
     }
 }
 
+extension WatchSyncManifest {
+    func retiringMirrorTransport() -> WatchSyncManifest {
+        WatchSyncManifest(schemaVersion: schemaVersion, mode: .standalone, controlGeneration: controlGeneration,
+            mirrorPackage: nil, standalonePackage: standalonePackage, effectiveModeStatus: effectiveModeStatus,
+            standaloneReadinessStatus: standaloneReadinessStatus, ackCursor: nil, mirrorSnapshotAck: nil,
+            standaloneProvisioningAck: standaloneProvisioningAck, inlineMirrorSnapshot: nil,
+            inlineStandaloneProvisioning: inlineStandaloneProvisioning)
+    }
+}
+
 struct WatchTransferPackageManifest: Codable, Hashable, Sendable {
     let schemaVersion: Int
     let packageID: String
@@ -678,11 +615,6 @@ struct WatchTransferPackageManifest: Codable, Hashable, Sendable {
     }
 }
 
-struct MirrorSnapshotPackage: Codable, Sendable {
-    let manifest: WatchTransferPackageManifest
-    let snapshot: WatchMirrorSnapshot
-}
-
 struct StandaloneProvisioningPackage: Codable, Sendable {
     let manifest: WatchTransferPackageManifest
     let snapshot: WatchStandaloneProvisioningSnapshot
@@ -698,6 +630,13 @@ enum WatchReliableEventKind: String, Codable, Hashable, Sendable {
     case standaloneProvisioningInline
     case standaloneProvisioningAck
     case standaloneProvisioningNack
+
+    var isRetiredMirrorEvent: Bool {
+        switch self {
+        case .mirrorActionBatch, .mirrorActionAck, .mirrorSnapshotInline, .mirrorSnapshotAck, .mirrorSnapshotNack: true
+        default: false
+        }
+    }
 }
 
 struct WatchEventEnvelope: Codable, Hashable, Sendable {
@@ -1117,7 +1056,7 @@ enum WatchConnectivityTransferPolicy {
         fileExists: Bool,
         now: Date = Date()
     ) -> Bool {
-        guard let metadata else { return false }
+        guard let metadata, metadata.kind != .mirrorSnapshot else { return false }
         guard fileExists else { return false }
         let expectedPackageID = expectedPackageID(for: metadata.kind, manifest: manifest)
         guard metadata.packageID == expectedPackageID else { return false }
@@ -1139,7 +1078,7 @@ enum WatchConnectivityTransferPolicy {
     private static func expectedPackageID(for kind: WatchPackageKind, manifest: WatchSyncManifest?) -> String? {
         switch kind {
         case .mirrorSnapshot:
-            return manifest?.mirrorPackage?.packageID
+            return nil
         case .standaloneProvisioning:
             return manifest?.standalonePackage?.packageID
         }
@@ -1155,7 +1094,6 @@ enum WatchConnectivityTransferPolicy {
     }
 }
 
-#if os(iOS) || os(watchOS)
 enum WatchConnectivityRole: String, Codable, Sendable {
     case phone
     case watch
@@ -1245,10 +1183,10 @@ actor WatchConnectivityRuntime {
     private let inboxURL: URL
     private var state: WatchConnectivityRuntimeState
 
-    init(role: WatchConnectivityRole, fileManager: FileManager = .default) {
+    init(role: WatchConnectivityRole, fileManager: FileManager = .default, baseDirectory: URL? = nil) {
         self.role = role
         self.fileManager = fileManager
-        let appSupportBase = Self.resolveBaseDirectory(fileManager: fileManager)
+        let appSupportBase = baseDirectory ?? Self.resolveBaseDirectory(fileManager: fileManager)
         let roleRootURL = appSupportBase
             .appendingPathComponent(Path.rootDirectoryName, isDirectory: true)
             .appendingPathComponent(role.rawValue, isDirectory: true)
@@ -1262,17 +1200,21 @@ actor WatchConnectivityRuntime {
         Self.ensureDirectory(outboxURL, fileManager: fileManager)
         Self.ensureDirectory(inboxURL, fileManager: fileManager)
 
-        if let decoded = Self.loadState(from: stateURL, fileManager: fileManager),
-           decoded.schemaVersion == WatchConnectivitySchema.currentVersion
+        if let decoded = Self.loadState(from: stateURL, fileManager: fileManager)
         {
             self.state = decoded
+            self.state.schemaVersion = WatchConnectivitySchema.currentVersion
+            self.state.pendingEvents.removeAll { $0.kind.isRetiredMirrorEvent }
+            self.state.currentMirrorPackageRef = nil
+            self.state.lastManifest = decoded.lastManifest?.retiringMirrorTransport()
+            self.state.lastReceivedManifest = decoded.lastReceivedManifest?.retiringMirrorTransport()
+            Self.persistState(self.state, to: stateURL, fileManager: fileManager)
         } else {
-            try? fileManager.removeItem(at: roleRootURL)
             Self.ensureDirectory(roleRootURL, fileManager: fileManager)
             Self.ensureDirectory(outboxURL, fileManager: fileManager)
             Self.ensureDirectory(inboxURL, fileManager: fileManager)
             self.state = WatchConnectivityRuntimeState.empty
-            self.state.pendingForcedReconfigure = true
+            self.state.pendingForcedReconfigure = false
             Self.persistState(self.state, to: stateURL, fileManager: fileManager)
         }
     }
@@ -1306,12 +1248,12 @@ actor WatchConnectivityRuntime {
             schemaVersion: WatchConnectivitySchema.currentVersion,
             mode: mode,
             controlGeneration: controlGeneration,
-            mirrorPackage: state.currentMirrorPackageRef,
+            mirrorPackage: nil,
             standalonePackage: state.currentStandalonePackageRef,
             effectiveModeStatus: effectiveModeStatus ?? state.lastManifest?.effectiveModeStatus,
             standaloneReadinessStatus: standaloneReadinessStatus ?? state.lastManifest?.standaloneReadinessStatus,
             ackCursor: ackCursor,
-            mirrorSnapshotAck: mirrorSnapshotAck ?? state.lastManifest?.mirrorSnapshotAck,
+            mirrorSnapshotAck: nil,
             standaloneProvisioningAck: standaloneProvisioningAck ?? state.lastManifest?.standaloneProvisioningAck,
             inlineMirrorSnapshot: nil,
             inlineStandaloneProvisioning: nil
@@ -1324,43 +1266,6 @@ actor WatchConnectivityRuntime {
     func storeReceivedManifest(_ manifest: WatchSyncManifest) {
         state.lastReceivedManifest = manifest
         persist()
-    }
-
-    func prepareMirrorSnapshotPackage(_ snapshot: WatchMirrorSnapshot) throws -> MirrorPackageRef {
-        let manifest = WatchTransferPackageManifest(
-            schemaVersion: WatchConnectivitySchema.currentVersion,
-            packageID: UUID().uuidString,
-            kind: .mirrorSnapshot,
-            generation: snapshot.generation,
-            createdAt: Date()
-        )
-        let package = MirrorSnapshotPackage(manifest: manifest, snapshot: snapshot)
-        let url = outboxFileURL(kind: manifest.kind, packageID: manifest.packageID)
-        try Self.writeJSON(package, to: url, fileManager: fileManager)
-        let ref = MirrorPackageRef(
-            packageID: manifest.packageID,
-            generation: manifest.generation,
-            createdAt: manifest.createdAt
-        )
-        state.currentMirrorPackageRef = ref
-        state.lastManifest = state.lastManifest.map {
-            WatchSyncManifest(
-                schemaVersion: $0.schemaVersion,
-                mode: $0.mode,
-                controlGeneration: $0.controlGeneration,
-                mirrorPackage: ref,
-                standalonePackage: $0.standalonePackage,
-                effectiveModeStatus: $0.effectiveModeStatus,
-                standaloneReadinessStatus: $0.standaloneReadinessStatus,
-                ackCursor: $0.ackCursor,
-                mirrorSnapshotAck: nil,
-                standaloneProvisioningAck: $0.standaloneProvisioningAck,
-                inlineMirrorSnapshot: nil,
-                inlineStandaloneProvisioning: nil
-            )
-        }
-        persist()
-        return ref
     }
 
     func prepareStandaloneProvisioningPackage(
@@ -1414,8 +1319,7 @@ actor WatchConnectivityRuntime {
         let fileURL: URL
         switch kind {
         case .mirrorSnapshot:
-            guard let ref = state.currentMirrorPackageRef else { return nil }
-            fileURL = outboxFileURL(for: ref)
+            return nil
         case .standaloneProvisioning:
             guard let ref = state.currentStandalonePackageRef else { return nil }
             fileURL = outboxFileURL(for: ref)
@@ -1461,10 +1365,6 @@ actor WatchConnectivityRuntime {
         }
     }
 
-    func decodeMirrorSnapshotPackage(at url: URL) throws -> MirrorSnapshotPackage {
-        try Self.decodeJSON(MirrorSnapshotPackage.self, from: url)
-    }
-
     func decodeStandaloneProvisioningPackage(at url: URL) throws -> StandaloneProvisioningPackage {
         try Self.decodeJSON(StandaloneProvisioningPackage.self, from: url)
     }
@@ -1474,6 +1374,7 @@ actor WatchConnectivityRuntime {
     }
 
     func enqueueReliableEvent(_ event: WatchEventEnvelope) {
+        guard !event.kind.isRetiredMirrorEvent else { return }
         state.pendingEvents.removeAll { $0.eventID == event.eventID }
         state.pendingEvents.append(event)
         state.pendingEvents.sort { $0.createdAt < $1.createdAt }
@@ -1490,6 +1391,7 @@ actor WatchConnectivityRuntime {
     }
 
     func acceptIncomingEvent(_ event: WatchEventEnvelope) -> Bool {
+        guard !event.kind.isRetiredMirrorEvent else { return false }
         guard event.schemaVersion == WatchConnectivitySchema.currentVersion else {
             return false
         }
@@ -1568,6 +1470,7 @@ actor WatchConnectivityRuntime {
     }
 }
 
+#if os(iOS) || os(watchOS)
 @MainActor
 final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
     private enum ActivationSnapshot: Sendable {
@@ -1588,7 +1491,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         var linkStateDidChange: (@MainActor (WatchLinkState) async -> Void)?
         var manifestDidReceive: (@MainActor (WatchSyncManifest) async -> Void)?
         var eventDidReceive: (@MainActor (WatchEventEnvelope) async -> Void)?
-        var mirrorPackageDidReceive: (@MainActor (MirrorSnapshotPackage) async -> Void)?
         var standalonePackageDidReceive: (@MainActor (StandaloneProvisioningPackage) async -> Void)?
         var latestManifestRequested: (@MainActor () async -> Void)?
 
@@ -1730,27 +1632,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         }
     }
 
-    func publishMirrorSnapshotAckManifest(
-        mode: WatchMode,
-        controlGeneration: Int64,
-        ack: WatchMirrorSnapshotAck
-    ) {
-        Task {
-            let manifest = await runtime.updateManifest(
-                mode: mode,
-                controlGeneration: controlGeneration,
-                effectiveModeStatus: nil,
-                ackCursor: nil,
-                mirrorSnapshotAck: AppliedPackageAckRef(
-                    generation: ack.generation,
-                    contentDigest: ack.contentDigest,
-                    appliedAt: ack.appliedAt
-                )
-            )
-            await self.publishManifestIfPossible(manifest)
-        }
-    }
-
     func publishStandaloneProvisioningAckManifest(
         mode: WatchMode,
         controlGeneration: Int64,
@@ -1769,29 +1650,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
                 )
             )
             await self.publishManifestIfPossible(manifest)
-        }
-    }
-
-    func prepareMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) {
-        Task {
-            let ref = try? await runtime.prepareMirrorSnapshotPackage(snapshot)
-            if let manifest = await runtime.currentManifest() {
-                await self.publishManifestIfPossible(manifest)
-            }
-            if let ref {
-                let package = MirrorSnapshotPackage(
-                    manifest: WatchTransferPackageManifest(
-                        schemaVersion: WatchConnectivitySchema.currentVersion,
-                        packageID: ref.packageID,
-                        kind: .mirrorSnapshot,
-                        generation: ref.generation,
-                        createdAt: ref.createdAt
-                    ),
-                    snapshot: snapshot
-                )
-                enqueueReliableMirrorSnapshotInlineIfNeeded(package)
-            }
-            await self.sendRefreshHintIfReachable()
         }
     }
 
@@ -1816,34 +1674,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
             }
             await self.sendRefreshHintIfReachable()
         }
-    }
-
-    func enqueueReliableMirrorActionBatch(_ batch: WatchMirrorActionBatch) {
-        guard let payload = WatchConnectivityWire.encode(batch) else { return }
-        enqueueReliableEvent(kind: .mirrorActionBatch, payload: payload)
-    }
-
-    func enqueueReliableMirrorActionAck(_ ack: WatchMirrorActionAck) {
-        guard let payload = WatchConnectivityWire.encode(ack) else { return }
-        enqueueReliableEvent(kind: .mirrorActionAck, payload: payload)
-    }
-
-    func enqueueReliableMirrorSnapshotAck(_ ack: WatchMirrorSnapshotAck) {
-        guard let payload = WatchConnectivityWire.encode(ack) else { return }
-        enqueueReliableEvent(kind: .mirrorSnapshotAck, payload: payload)
-    }
-
-    func enqueueReliableMirrorSnapshotInlineIfNeeded(_ package: MirrorSnapshotPackage) {
-        guard let payload = WatchConnectivityWire.encode(package) else { return }
-        guard payload.count <= reliableInlinePackageMaximumPayloadBytes else {
-            return
-        }
-        enqueueReliableEvent(kind: .mirrorSnapshotInline, payload: payload)
-    }
-
-    func enqueueReliableMirrorSnapshotNack(_ nack: WatchMirrorSnapshotNack) {
-        guard let payload = WatchConnectivityWire.encode(nack) else { return }
-        enqueueReliableEvent(kind: .mirrorSnapshotNack, payload: payload)
     }
 
     func enqueueReliableStandaloneProvisioningAck(_ ack: WatchStandaloneProvisioningAck) {
@@ -1939,16 +1769,13 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
     }
 
     private func transportManifest(for manifest: WatchSyncManifest) async -> WatchSyncManifest {
-        let inlineMirrorSnapshot = await runtime.inlinePackageData(
-            for: .mirrorSnapshot,
-            maximumBytes: WatchConnectivityWire.contextSoftLimitBytes / 2
-        )
+
         let inlineStandaloneProvisioning = await runtime.inlinePackageData(
             for: .standaloneProvisioning,
             maximumBytes: WatchConnectivityWire.contextSoftLimitBytes / 2
         )
         let inlineManifest = manifest.withInlinePackages(
-            mirrorSnapshot: inlineMirrorSnapshot,
+            mirrorSnapshot: nil,
             standaloneProvisioning: inlineStandaloneProvisioning
         )
         guard applicationContextSizeBytes(for: inlineManifest.applicationContext()) <= WatchConnectivityWire.contextSoftLimitBytes else {
@@ -1985,6 +1812,9 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
 
     private func flushPendingReliableEvents() async {
         guard let session else { return }
+        for transfer in session.outstandingUserInfoTransfers {
+            if WatchEventEnvelope.fromUserInfo(transfer.userInfo)?.kind.isRetiredMirrorEvent == true { transfer.cancel() }
+        }
         guard canTransmitToCompanion(using: session) else {
             let cancelled = Self.cancelOutstandingOutboundTransfersIfNeeded(
                 session: session,
@@ -2039,6 +1869,9 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
             }
         }
         guard let session else { return }
+        for transfer in session.outstandingUserInfoTransfers {
+            if WatchEventEnvelope.fromUserInfo(transfer.userInfo)?.kind.isRetiredMirrorEvent == true { transfer.cancel() }
+        }
         guard canTransmitToCompanion(using: session) else {
             let cancelled = Self.cancelOutstandingOutboundTransfersIfNeeded(
                 session: session,
@@ -2055,13 +1888,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         let manifest = await runtime.currentManifest()
         let activePackageIDs = retainCurrentOutstandingTransfers(session: session, manifest: manifest)
 
-        if let mirrorPackage = manifest?.mirrorPackage {
-            await enqueueFileTransferIfNeeded(
-                kind: .mirrorSnapshot,
-                packageID: mirrorPackage.packageID,
-                activePackageIDs: activePackageIDs
-            )
-        }
 
         if let standalonePackage = manifest?.standalonePackage {
             await enqueueFileTransferIfNeeded(
@@ -2074,7 +1900,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         await runtime.pruneOutbox(
             activePackageIDs: activePackageIDs.union(
                 [
-                    manifest?.mirrorPackage?.packageID,
                     manifest?.standalonePackage?.packageID,
                 ].compactMap { $0 }
             )
@@ -2088,6 +1913,9 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         activePackageIDs: Set<String>
     ) async {
         guard let session else { return }
+        for transfer in session.outstandingUserInfoTransfers {
+            if WatchEventEnvelope.fromUserInfo(transfer.userInfo)?.kind.isRetiredMirrorEvent == true { transfer.cancel() }
+        }
         guard canTransmitToCompanion(using: session) else { return }
         guard !activePackageIDs.contains(packageID) else { return }
 
@@ -2112,26 +1940,7 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
 
         switch kind {
         case .mirrorSnapshot:
-            guard let currentRef = await runtime.currentManifest()?.mirrorPackage else { return }
-            let metadata = WatchTransferPackageManifest(
-                schemaVersion: WatchConnectivitySchema.currentVersion,
-                packageID: currentRef.packageID,
-                kind: kind,
-                generation: currentRef.generation,
-                createdAt: currentRef.createdAt
-            )
-            let sourceURL = await runtime.outboxFileURL(for: currentRef)
-            guard let transferURL = makeTransferFileURLIfNeeded(sourceURL, packageID: currentRef.packageID) else {
-                return
-            }
-            noteObservation(
-                "file_transfer.enqueued",
-                details: "kind=\(kind.rawValue) packageID=\(currentRef.packageID)"
-            )
-            session.transferFile(
-                transferURL,
-                metadata: metadata.metadataDictionary()
-            )
+            return
         case .standaloneProvisioning:
             guard let currentRef = await runtime.currentManifest()?.standalonePackage else { return }
             let metadata = WatchTransferPackageManifest(
@@ -2485,19 +2294,6 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
     }
 
     private func handleInlinePackagesIfPresent(in manifest: WatchSyncManifest) async {
-        if let inlineMirrorSnapshot = manifest.inlineMirrorSnapshot,
-           let package = WatchConnectivityWire.decode(MirrorSnapshotPackage.self, from: inlineMirrorSnapshot),
-           package.manifest.packageID == manifest.mirrorPackage?.packageID
-        {
-            noteObservation(
-                "manifest.inline_mirror.received",
-                details: "packageID=\(package.manifest.packageID) generation=\(package.manifest.generation)"
-            )
-            if let handler = handlers.mirrorPackageDidReceive {
-                await handler(package)
-            }
-        }
-
         if let inlineStandaloneProvisioning = manifest.inlineStandaloneProvisioning,
            let package = WatchConnectivityWire.decode(StandaloneProvisioningPackage.self, from: inlineStandaloneProvisioning),
            package.manifest.packageID == manifest.standalonePackage?.packageID
@@ -2513,6 +2309,7 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
     }
 
     private func handleIncomingFile(fileURL: URL, metadata: WatchTransferPackageManifest) async {
+        guard metadata.kind != .mirrorSnapshot else { removeDeferredIncomingFileIfNeeded(fileURL); return }
         defer {
             removeDeferredIncomingFileIfNeeded(fileURL)
         }
@@ -2528,16 +2325,7 @@ final class WatchConnectivityCoordinator: NSObject, WCSessionDelegate {
         }
         switch metadata.kind {
         case .mirrorSnapshot:
-            do {
-                let package = try await runtime.decodeMirrorSnapshotPackage(at: stagedURL)
-                if let handler = handlers.mirrorPackageDidReceive {
-                    await handler(package)
-                }
-            } catch {
-                recordLinkStateError(
-                    "watch connectivity mirror package decode failed (packageID: \(metadata.packageID)): \(error.localizedDescription)"
-                )
-            }
+            break
         case .standaloneProvisioning:
             do {
                 let package = try await runtime.decodeStandaloneProvisioningPackage(at: stagedURL)

@@ -78,7 +78,7 @@ enum WatchQualityRuntime {
                 'Persisted before the upgrade.',
                 'normal',
                 1788000120,
-                0,
+                1,
                 'message'
             );
 
@@ -119,6 +119,11 @@ enum WatchQualityRuntime {
                 '{"region":"legacy-eu","version":"17"}',
                 1788000120
             );
+
+            CREATE TABLE watch_mirror_action_queue (action_id TEXT PRIMARY KEY, kind TEXT, message_id TEXT, issued_at REAL);
+            INSERT INTO watch_mirror_action_queue VALUES ('legacy-delete', 'delete', 'quality-watch-legacy-message', 1788000120);
+            CREATE TABLE watch_delivery_records (gateway_key TEXT, delivery_id TEXT, message_id TEXT, ingress_source TEXT, persisted_at REAL, server_ack_state TEXT);
+            INSERT INTO watch_delivery_records VALUES ('quality-migration-gateway', 'legacy-pending-ack', 'quality-watch-legacy-message', 'watch_apns', 1788000120, 'pending');
 
             CREATE TABLE app_settings (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -223,6 +228,27 @@ enum WatchQualityRuntime {
             return
         }
 
+        if scenario == "watch.migration" {
+            guard let retained = try await environment.dataStore.loadWatchLightMessage(messageId: "quality-watch-legacy-message"), retained.isRead,
+                  try await environment.dataStore.loadWatchDeliveryRecords().contains(where: { $0.deliveryId == "legacy-pending-ack" && $0.serverAckState == .pending }) else {
+                throw WatchQualityRuntimeError.legacyStorePreparationFailed("Upgrade lost content, local read state, or pending Gateway ACK")
+            }
+            let directory = try AppConstants.appLocalDatabaseDirectory(fileManager: .default, appGroupIdentifier: AppConstants.appGroupIdentifier)
+            var db: OpaquePointer?
+            guard sqlite3_open_v2(directory.appendingPathComponent(AppConstants.databaseStoreFilename).path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+                throw WatchQualityRuntimeError.legacyStorePreparationFailed("Cannot inspect upgraded queue")
+            }
+            defer { sqlite3_close(db) }
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT count(*) FROM sqlite_master WHERE name = 'watch_mirror_action_queue';", -1, &statement, nil) == SQLITE_OK else {
+                throw WatchQualityRuntimeError.legacyStorePreparationFailed("Cannot inspect retired queue")
+            }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW, sqlite3_column_int(statement, 0) == 0 else {
+                throw WatchQualityRuntimeError.legacyStorePreparationFailed("Obsolete actions remain executable after upgrade")
+            }
+        }
+
         let defaults = UserDefaults.standard
         if defaults.string(forKey: preparedSessionDefaultsKey) != sessionID {
             if scenario != "watch.migration" {
@@ -230,7 +256,9 @@ enum WatchQualityRuntime {
             }
             try await prepareStandardImage()
             let snapshot = standardSnapshot()
-            try await environment.dataStore.mergeWatchMirrorSnapshot(snapshot)
+            for message in snapshot.messages { try await environment.dataStore.upsertWatchLightPayload(.message(message)) }
+            for event in snapshot.events { try await environment.dataStore.upsertWatchLightPayload(.event(event)) }
+            for thing in snapshot.things { try await environment.dataStore.upsertWatchLightPayload(.thing(thing)) }
             defaults.set(sessionID, forKey: preparedSessionDefaultsKey)
         }
 
@@ -396,38 +424,49 @@ enum WatchQualityRuntime {
             throw WatchQualityRuntimeError.gatewayRouteInvariant("new route or stale writer escaped fence")
         }
 
-        await environment.qualityChangeMode(.mirror)
+        let controlledNow = Date(timeIntervalSince1970: 1_800_000_000)
+        guard AppEnvironment.canReuseDeviceRegistration(lastRegisteredAt: controlledNow, registeredWindowMinutes: 5, currentWindowMinutes: 5, interval: 45, now: controlledNow.addingTimeInterval(1)),
+              !AppEnvironment.canReuseDeviceRegistration(lastRegisteredAt: controlledNow, registeredWindowMinutes: 5, currentWindowMinutes: 15, interval: 45, now: controlledNow.addingTimeInterval(1)),
+              !AppEnvironment.canReuseDeviceRegistration(lastRegisteredAt: controlledNow, registeredWindowMinutes: nil, currentWindowMinutes: 30, interval: 45, now: controlledNow.addingTimeInterval(1)),
+              !AppEnvironment.canReuseDeviceRegistration(lastRegisteredAt: controlledNow, registeredWindowMinutes: 5, currentWindowMinutes: 5, interval: 45, now: controlledNow.addingTimeInterval(45)) else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("registration cache ignored window identity or interval")
+        }
+        await environment.applyStandaloneProvisioningFromPhone(provisioningSnapshot(generation: 3, config: a, watchAlertWindowMinutes: 5))
         await environment.waitForQualityGatewayOperations()
-        let mirrorCleanups = try await environment.dataStore.pendingWatchGatewayRouteCleanups()
-        guard mirrorCleanups.contains(where: {
-            $0.baseURL == a.normalizedBaseURL && $0.deviceKey == newKey
-        }) else {
-            throw WatchQualityRuntimeError.gatewayRouteInvariant("mirror transition did not journal route")
+        guard let fiveMinuteKey = await environment.qualityEnsureDeviceKey(config: a),
+              QualityWatchGatewayTransport.probe.hasRegistration(windowMinutes: 5, on: a.baseURL.host) else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("five minute window was not registered")
         }
-        await environment.qualityChangeMode(.standalone)
-        guard let resumedKey = await environment.qualityEnsureDeviceKey(config: a),
-              resumedKey != oldKey, resumedKey != newKey
-        else {
-            throw WatchQualityRuntimeError.gatewayRouteInvariant("standalone resumed with retired route key")
+        let fiveMinuteRequestCount = QualityWatchGatewayTransport.probe.count(path: ChannelSubscriptionService.deviceRegisterPath, host: a.baseURL.host, deviceKey: nil)
+        guard await environment.qualityEnsureDeviceKey(config: a) == fiveMinuteKey,
+              QualityWatchGatewayTransport.probe.count(path: ChannelSubscriptionService.deviceRegisterPath, host: a.baseURL.host, deviceKey: nil) == fiveMinuteRequestCount else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("confirmed same-window registration was not cached")
         }
-        await environment.qualitySyncRoute(config: a)
-        guard QualityWatchGatewayTransport.probe.count(
-            path: ChannelSubscriptionService.deviceChannelDeletePath,
-            host: a.baseURL.host,
-            deviceKey: resumedKey
-        ) == 0 else {
-            throw WatchQualityRuntimeError.gatewayRouteInvariant("cleanup deleted resumed route")
+        QualityWatchGatewayTransport.probe.failRegistration(windowMinutes: 15)
+        await environment.applyStandaloneProvisioningFromPhone(provisioningSnapshot(generation: 4, config: a, watchAlertWindowMinutes: 15))
+        await environment.waitForQualityGatewayOperations()
+        let failedKey = await environment.qualityEnsureDeviceKey(config: a)
+        guard failedKey == nil, !environment.standaloneReady,
+              await environment.dataStore.cachedDeviceKey(for: "watchos") == fiveMinuteKey,
+              QualityWatchGatewayTransport.probe.hasRegistration(windowMinutes: 15, on: a.baseURL.host),
+              QualityWatchGatewayTransport.probe.count(path: ChannelSubscriptionService.deviceRegisterPath, host: a.baseURL.host, deviceKey: nil) > fiveMinuteRequestCount else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("changed window skipped registration or failed registration claimed readiness")
         }
+        QualityWatchGatewayTransport.probe.failRegistration(windowMinutes: nil)
+
         return [
             "active_gateway": (try await environment.dataStore.loadWatchProvisioningServerConfig())?.gatewayKey ?? "",
             "provisioning_generation": (await environment.dataStore.loadWatchProvisioningState())?.generation ?? 0,
             "old_device_key": oldKey,
             "returned_device_key": newKey,
-            "resumed_device_key": resumedKey,
+            "resumed_device_key": newKey,
+            "alert_window_cache_matrix": "passed",
+            "five_minute_registration_confirmed": true,
+            "fifteen_minute_registration_failure_preserved_old_key": true,
+            "failed_window_standalone_ready": environment.standaloneReady,
             "old_cleanup_last_succeeded_at": recovered.first(where: {
                 $0.baseURL == a.normalizedBaseURL && $0.deviceKey == oldKey
             })?.lastSucceededAt?.timeIntervalSince1970 ?? 0,
-            "mirror_cleanup_journaled": true,
             "stale_gateway_upsert_count": QualityWatchGatewayTransport.probe.count(
                 path: ChannelSubscriptionService.deviceRoutePath,
                 host: b.baseURL.host, deviceKey: nil
@@ -538,7 +577,8 @@ enum WatchQualityRuntime {
     private static func provisioningSnapshot(
         generation: Int64,
         config: ServerConfig,
-        channels: [WatchStandaloneChannelCredential] = []
+        channels: [WatchStandaloneChannelCredential] = [],
+        watchAlertWindowMinutes: Int = 30
     ) -> WatchStandaloneProvisioningSnapshot {
         WatchStandaloneProvisioningSnapshot(
             generation: generation,
@@ -547,12 +587,14 @@ enum WatchQualityRuntime {
             notificationKeyMaterial: nil,
             channels: channels,
             contentDigest: WatchStandaloneProvisioningSnapshot.contentDigest(
-                serverConfig: config, notificationKeyMaterial: nil, channels: channels
-            )
+                serverConfig: config, notificationKeyMaterial: nil, channels: channels,
+                watchAlertWindowMinutes: watchAlertWindowMinutes
+            ),
+            watchAlertWindowMinutes: watchAlertWindowMinutes
         )
     }
 
-    private static func standardSnapshot() -> WatchMirrorSnapshot {
+    private static func standardSnapshot() -> (messages: [WatchLightMessage], events: [WatchLightEvent], things: [WatchLightThing]) {
         let receivedAt = Date(timeIntervalSince1970: 1_788_000_000)
         let messages = [
             WatchLightMessage(
@@ -605,19 +647,7 @@ enum WatchQualityRuntime {
                 updatedAt: receivedAt.addingTimeInterval(-180)
             ),
         ]
-        return WatchMirrorSnapshot(
-            generation: 1,
-            mode: .standalone,
-            messages: messages,
-            events: events,
-            things: things,
-            exportedAt: receivedAt,
-            contentDigest: WatchMirrorSnapshot.contentDigest(
-                messages: messages,
-                events: events,
-                things: things
-            )
-        )
+        return (messages, events, things)
     }
 
     private static func normalizedEnvironmentValue(_ key: String) -> String? {
@@ -671,6 +701,7 @@ private enum QualityWatchGatewayTransport {
         let host: String?
         let deviceKey: String?
         let freshRegistration: Bool
+        let windowMinutes: Int?
     }
 
     final class Probe: @unchecked Sendable {
@@ -679,6 +710,7 @@ private enum QualityWatchGatewayTransport {
         private var oldKey = ""
         private var failOldDelete = false
         private var nextKey = 0
+        private var failedRegistrationWindowMinutes: Int?
 
         func configure(oldKey: String, failOldDelete: Bool) {
             lock.lock()
@@ -687,6 +719,13 @@ private enum QualityWatchGatewayTransport {
             self.oldKey = oldKey
             self.failOldDelete = failOldDelete
             nextKey = 0
+            failedRegistrationWindowMinutes = nil
+        }
+
+        func failRegistration(windowMinutes: Int?) {
+            lock.lock()
+            defer { lock.unlock() }
+            failedRegistrationWindowMinutes = windowMinutes
         }
 
         func record(_ request: URLRequest) -> (status: Int, payload: [String: Any]) {
@@ -719,13 +758,17 @@ private enum QualityWatchGatewayTransport {
                 path: path,
                 host: request.url?.host,
                 deviceKey: key,
-                freshRegistration: freshRegistration
+                freshRegistration: freshRegistration,
+                windowMinutes: body["watch_alert_window_minutes"] as? Int
             ))
             if path == ChannelSubscriptionService.deviceChannelDeletePath,
                key == oldKey, failOldDelete {
                 return (503, ["success": false, "error": "temporary failure"])
             }
             if path == ChannelSubscriptionService.deviceRegisterPath {
+                if let failedRegistrationWindowMinutes, body["watch_alert_window_minutes"] as? Int == failedRegistrationWindowMinutes {
+                    return (503, ["success": false, "error": "injected window registration failure"])
+                }
                 nextKey += 1
                 return (200, ["success": true, "data": ["device_key": "quality-watch-new-\(nextKey)"]])
             }
@@ -747,6 +790,12 @@ private enum QualityWatchGatewayTransport {
             }.count
         }
 
+        func hasRegistration(windowMinutes: Int, on host: String?) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return requests.contains { $0.path == ChannelSubscriptionService.deviceRegisterPath && $0.host == host && $0.windowMinutes == windowMinutes }
+        }
+
         func hasFreshRegistration(on host: String?) -> Bool {
             lock.lock()
             defer { lock.unlock() }
@@ -762,6 +811,7 @@ private enum QualityWatchGatewayTransport {
                     "host": $0.host ?? "",
                     "device_key": ($0.deviceKey as Any?) ?? NSNull(),
                     "fresh_registration": $0.freshRegistration,
+                    "watch_alert_window_minutes": ($0.windowMinutes as Any?) ?? NSNull(),
                 ]
             }
         }

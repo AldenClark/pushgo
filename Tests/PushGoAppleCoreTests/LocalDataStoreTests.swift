@@ -462,53 +462,14 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func watchModePersistsAcrossStoreReload() async throws {
-        await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
-            #expect(await store.loadWatchMode() == .standalone)
-
-            await store.saveWatchMode(.standalone)
-
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
-            #expect(await reloaded.loadWatchMode() == .standalone)
-        }
-    }
-
-    @Test
-    func watchModeControlStatePersistsAcrossStoreReload() async throws {
-        await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
-            let state = WatchModeControlPersistenceState(
-                desiredMode: .standalone,
-                effectiveMode: .mirror,
-                standaloneReady: false,
-                switchStatus: .switching,
-                lastConfirmedControlGeneration: 9,
-                lastObservedReportedGeneration: 7
-            )
-
-            await store.saveWatchModeControlState(state)
-
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
-            let restored = await reloaded.loadWatchModeControlState()
-
-            #expect(restored == state)
-            #expect(restored.standaloneReady == false)
-        }
-    }
-
-    @Test
     func watchPublicationStatePersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let publicationState = WatchPublicationState(
                 syncGenerations: WatchSyncGenerationState(
                     controlGeneration: 11,
-                    mirrorSnapshotGeneration: 22,
-                    standaloneProvisioningGeneration: 33,
-                    mirrorActionAckGeneration: 44
+                    standaloneProvisioningGeneration: 33
                 ),
-                mirrorSnapshotContentDigest: "mirror-digest-22",
                 standaloneProvisioningContentDigest: "standalone-digest-33"
             )
 
@@ -588,11 +549,8 @@ struct LocalDataStoreTests {
             let publicationState = WatchPublicationState(
                 syncGenerations: WatchSyncGenerationState(
                     controlGeneration: 10,
-                    mirrorSnapshotGeneration: 20,
-                    standaloneProvisioningGeneration: 30,
-                    mirrorActionAckGeneration: 40
+                    standaloneProvisioningGeneration: 30
                 ),
-                mirrorSnapshotContentDigest: "mirror-migrated-digest",
                 standaloneProvisioningContentDigest: "standalone-migrated-digest"
             )
 
@@ -811,7 +769,7 @@ struct LocalDataStoreTests {
 
     @Test
     func applyWatchStandaloneProvisioningReplacesChannelsAndAdvancesProvisioningState() async throws {
-        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.applyWatchStandaloneProvisioning(
                 WatchStandaloneProvisioningSnapshot(
@@ -881,7 +839,8 @@ struct LocalDataStoreTests {
                             updatedAt: Date(timeIntervalSince1970: 1_742_200_101)
                         ),
                     ],
-                    contentDigest: "digest-10"
+                    contentDigest: "digest-10",
+                    watchAlertWindowMinutes: 15
                 ),
                 sourceControlGeneration: 6
             )
@@ -895,6 +854,12 @@ struct LocalDataStoreTests {
             let credentials = try await store.activeChannelCredentials(gateway: "https://sandbox.pushgo.dev")
 
             #expect(config?.token == "gateway-token-2")
+            #expect(await store.loadWatchAlertWindowMinutes() == 15)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(await reopened.loadWatchAlertWindowMinutes() == 15)
+            #expect(AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+                .integer(forKey: AppConstants.watchAlertWindowMinutesDefaultsKey) == 15)
             #expect(state?.generation == 10)
             #expect(state?.contentDigest == "digest-10")
             #expect(state?.sourceControlGeneration == 6)
@@ -905,114 +870,98 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func watchMirrorSnapshotMergesIntoUnifiedLightTablesAndKeepsMirrorQueue() async throws {
-        try await withIsolatedLocalDataStore { store, _ in
-            try await store.upsertWatchLightPayload(
-                .message(
-                    WatchLightMessage(
-                        messageId: "msg-existing",
-                        title: "Existing title",
-                        body: "Existing body",
-                        imageURL: nil,
-                        url: nil,
-                        severity: "normal",
-                        receivedAt: Date(timeIntervalSince1970: 10),
-                        isRead: true,
-                        entityType: "message",
-                        entityId: "msg-existing",
-                        notificationRequestId: "req-existing"
-                    )
-                )
-            )
-            try await store.upsertWatchLightPayload(
-                .event(
-                    WatchLightEvent(
-                        eventId: "evt-existing",
-                        title: "Existing event",
-                        summary: nil,
-                        state: "OPEN",
-                        severity: "high",
-                        decryptionState: nil,
-                        imageURL: nil,
-                        updatedAt: Date(timeIntervalSince1970: 11)
-                    )
-                )
-            )
-            try await store.upsertWatchLightPayload(
-                .thing(
-                    WatchLightThing(
-                        thingId: "thing-existing",
-                        title: "Existing thing",
-                        summary: nil,
-                        attrsJSON: nil,
-                        decryptionState: nil,
-                        imageURL: nil,
-                        updatedAt: Date(timeIntervalSince1970: 12)
-                    )
-                )
-            )
-            try await store.enqueueWatchMirrorAction(
-                WatchMirrorAction(
-                    actionId: "action-1",
-                    kind: .read,
-                    messageId: "msg-queued",
-                    issuedAt: Date()
-                )
-            )
+    func watchAlertWindowDefaultsNormalizesAndPersistsAcrossReload() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(await store.loadWatchAlertWindowMinutes() == 30)
+            for minutes in [5, 15, 30, 60] {
+                try await store.saveWatchAlertWindowMinutes(minutes)
+                LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+                let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+                #expect(await reopened.loadWatchAlertWindowMinutes() == minutes)
+                #expect(AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+                    .integer(forKey: AppConstants.watchAlertWindowMinutesDefaultsKey) == minutes)
+            }
+            try await store.saveWatchAlertWindowMinutes(7)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(await reopened.loadWatchAlertWindowMinutes() == 30)
+            let directory = try AppConstants.appLocalDatabaseDirectory(
+                fileManager: .default, appGroupIdentifier: appGroupIdentifier)
+            let queue = try DatabaseQueue(path: directory.appendingPathComponent(AppConstants.databaseStoreFilename).path)
+            try await queue.write { db in
+                try db.execute(sql: "UPDATE app_settings SET watch_alert_window_minutes = -1;")
+            }
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let invalidPersisted = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(await invalidPersisted.loadWatchAlertWindowMinutes() == 30)
+        }
+    }
 
-            try await store.mergeWatchMirrorSnapshot(
-                WatchMirrorSnapshot(
-                    generation: 1,
-                    mode: .mirror,
-                    messages: [
-                        WatchLightMessage(
-                            messageId: "msg-1",
-                            title: "Title 1",
-                            body: "Body 1",
-                            imageURL: nil,
-                            url: nil,
-                            severity: "high",
-                            receivedAt: Date(timeIntervalSince1970: 1),
-                            isRead: false,
-                            entityType: "message",
-                            entityId: "msg-1",
-                            notificationRequestId: "req-1"
-                        ),
-                    ],
-                    events: [
-                        WatchLightEvent(
-                            eventId: "evt-1",
-                            title: "Event 1",
-                            summary: "Summary",
-                            state: "OPEN",
-                            severity: "critical",
-                            decryptionState: nil,
-                            imageURL: nil,
-                            updatedAt: Date(timeIntervalSince1970: 2)
-                        ),
-                    ],
-                    things: [
-                        WatchLightThing(
-                            thingId: "thing-1",
-                            title: "Thing 1",
-                            summary: "Thing summary",
-                            attrsJSON: "{\"role\":\"db\"}",
-                            decryptionState: nil,
-                            imageURL: nil,
-                            updatedAt: Date(timeIntervalSince1970: 3)
-                        ),
-                    ],
-                    exportedAt: Date(timeIntervalSince1970: 4),
-                    contentDigest: "mirror-digest-1"
-                )
-            )
-
-            #expect(Set(try await store.loadWatchLightMessages().map(\.messageId)) == ["msg-1", "msg-existing"])
-            #expect(Set(try await store.loadWatchLightEvents().map(\.eventId)) == ["evt-1", "evt-existing"])
-            #expect(Set(try await store.loadWatchLightThings().map(\.thingId)) == ["thing-1", "thing-existing"])
-            #expect(try await store.loadWatchLightEvent(eventId: "evt-1")?.severity == "critical")
-            #expect(try await store.loadWatchLightThing(thingId: "thing-1")?.attrsJSON == "{\"role\":\"db\"}")
-            #expect(try await store.loadWatchMirrorActions().map(\.actionId) == ["action-1"])
+    @Test
+    func watchStandaloneUpgradeDiscardsOldActionsAndKeepsContentReadStateDeliveryAndProvisioning() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            // Establish the canonical database, then construct the old v26
+            // SQLite shape directly. No retired mirror API participates.
+            do {
+                let bootstrap = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+                try await bootstrap.saveWatchAlertWindowMinutes(30)
+            }
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let directory = try AppConstants.appLocalDatabaseDirectory(
+                fileManager: .default, appGroupIdentifier: appGroupIdentifier)
+            let queue = try DatabaseQueue(path: directory.appendingPathComponent(AppConstants.databaseStoreFilename).path)
+            try await queue.write { db in
+                try db.execute(sql: """
+                    ALTER TABLE app_settings DROP COLUMN watch_alert_window_minutes;
+                    DELETE FROM grdb_migrations WHERE identifier = 'v27_watch_standalone_alert_window';
+                    CREATE TABLE watch_mirror_action_queue (
+                        action_id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL,
+                        message_id TEXT NOT NULL, issued_at REAL NOT NULL);
+                    INSERT INTO watch_mirror_action_queue VALUES
+                        ('old-read', 'markRead', 'retained-message', 1800000000000),
+                        ('old-delete', 'delete', 'retained-message', 1800000000001);
+                    INSERT INTO watch_light_messages (
+                        message_id, title, body, received_at, is_read, entity_type, entity_id
+                    ) VALUES ('retained-message', 'Existing content', 'Keep this body', 1800000000000, 1, 'message', 'retained-message');
+                    INSERT INTO watch_light_events (event_id, title, updated_at)
+                        VALUES ('retained-event', 'Existing event', 1800000000000);
+                    INSERT INTO watch_light_things (thing_id, title, updated_at)
+                        VALUES ('retained-thing', 'Existing thing', 1800000000000);
+                    INSERT INTO watch_delivery_records (
+                        gateway_key, delivery_id, message_id, entity_type, entity_id,
+                        ingress_source, persisted_at, server_ack_state
+                    ) VALUES ('https://sandbox.pushgo.dev', 'pending-delivery', 'retained-message',
+                        'message', 'retained-message', 'watch_pull', 1800000000000, 'pending');
+                    UPDATE app_settings SET watch_mode_raw_value = 'mirror',
+                        watch_provisioning_schema_version = 1, watch_provisioning_generation = 19,
+                        watch_provisioning_content_digest = 'existing-provisioning',
+                        watch_provisioning_applied_at = 1800000000000,
+                        watch_provisioning_mode_raw_value = 'standalone',
+                        watch_provisioning_source_control_generation = 8;
+                    """)
+            }
+            let upgraded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(await upgraded.loadWatchAlertWindowMinutes() == 30)
+            let message = try #require(await upgraded.loadWatchLightMessage(messageId: "retained-message"))
+            #expect(message.title == "Existing content")
+            #expect(message.body == "Keep this body")
+            #expect(message.isRead)
+            #expect(try await upgraded.loadWatchLightEvent(eventId: "retained-event")?.title == "Existing event")
+            #expect(try await upgraded.loadWatchLightThing(thingId: "retained-thing")?.title == "Existing thing")
+            let records = try await upgraded.loadWatchDeliveryRecords()
+            #expect(records.count == 1)
+            #expect(records.first?.deliveryId == "pending-delivery")
+            #expect(records.first?.serverAckState == .pending)
+            #expect(await upgraded.loadWatchProvisioningState()?.generation == 19)
+            let retiredQueueExists = try await queue.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_master WHERE name = 'watch_mirror_action_queue';")
+            }
+            #expect(retiredQueueExists == 0)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            #expect(try await reopened.loadWatchLightMessage(messageId: "retained-message")?.isRead == true)
+            #expect(await reopened.loadWatchProvisioningState()?.contentDigest == "existing-provisioning")
         }
     }
 

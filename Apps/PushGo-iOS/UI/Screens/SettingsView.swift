@@ -204,6 +204,10 @@ struct SettingsView: View {
                 .listRowInsets(rowInsets)
                 .listRowBackground(Color.clear)
 
+            watchAlertWindowRow
+                .listRowInsets(rowInsets)
+                .listRowBackground(Color.clear)
+
             DataPageToggleGroupRow(
                 iconName: "square.3.layers.3d.top.filled",
                 title: "enable_data_pages",
@@ -420,7 +424,7 @@ struct SettingsView: View {
                     refreshViewModelState()
                 }
             } label: {
-                if viewModel.isSwitchingWatchMode {
+                if viewModel.isResyncingWatchReceiver {
                     ProgressView()
                         .controlSize(.small)
                 } else {
@@ -429,10 +433,47 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.bordered)
-            .disabled(!viewModel.isWatchCompanionAvailable || viewModel.isSwitchingWatchMode)
+            .disabled(!viewModel.isWatchCompanionAvailable || viewModel.isResyncingWatchReceiver)
             .accessibilityIdentifier("button.settings.watch_receiver_resync")
         }
         .accessibilityIdentifier("row.settings.watch_receiver")
+    }
+
+    private var watchAlertWindowRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AppIconTile(systemName: "bell.badge")
+            VStack(alignment: .leading, spacing: 8) {
+                Text(localizationManager.localized("watch_alert_window_title"))
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker(
+                    localizationManager.localized("watch_alert_window_title"),
+                    selection: Binding(
+                        get: { viewModel.watchAlertWindowMinutes },
+                        set: { minutes in
+                            Task { await viewModel.updateWatchAlertWindowMinutes(minutes) }
+                        }
+                    )
+                ) {
+                    ForEach(WatchNotificationFreshness.allowedMinutes, id: \.self) { minutes in
+                        Text(String(format: localizationManager.localized("watch_alert_window_minutes"), minutes))
+                            .tag(minutes)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(viewModel.isSavingWatchAlertWindow)
+                .accessibilityIdentifier("action.settings.watch_alert_window")
+                Text(localizationManager.localized("watch_alert_window_detail"))
+                    .font(.footnote)
+                    .foregroundStyle(Color.appTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("row.settings.watch_alert_window")
     }
 
     private func cardHeader<Trailing: View>(
@@ -567,10 +608,7 @@ struct SettingsView: View {
 
     private var watchStateRefreshSignature: String {
         [
-            environment.watchMode.rawValue,
-            environment.effectiveWatchMode.rawValue,
-            environment.standaloneReady ? "1" : "0",
-            environment.watchModeSwitchStatus.rawValue,
+            environment.watchReceiverState.rawValue,
             environment.isWatchCompanionAvailable ? "1" : "0",
         ].joined(separator: "|")
     }

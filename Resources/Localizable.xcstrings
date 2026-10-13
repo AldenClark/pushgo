@@ -9936,19 +9936,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple Watch can receive PushGo notifications directly; iPhone is only used to sync receiver setup."
+            "value" : "Watch receives independently when configured and when the system and network allow. Some notification bodies finish loading when you open the app."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple Watch 可直接接收 PushGo 通知；iPhone 仅用于同步接收端配置。"
+            "value" : "配置有效且系统和网络允许时，手表独立收件。部分通知正文会在打开 App 后补全。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple Watch 可直接接收 PushGo 通知；iPhone 僅用於同步接收端配置。"
+            "value" : "設定有效且系統和網絡允許時，手錶獨立收件。部分通知內文會在開啟 App 後補全。"
           }
         }
       }
@@ -10294,6 +10294,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "設定"
+          }
+        }
+      }
+    },
+    "watch_alert_window_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message reminder window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息提醒时效"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訊息提醒時效"
+          }
+        }
+      }
+    },
+    "watch_alert_window_minutes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d min"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 分钟"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 分鐘"
+          }
+        }
+      }
+    },
+    "watch_alert_window_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limits Watch reminders without affecting iPhone delivery. After syncing, applies to new deliveries. System notifications already delivered may not reflect later changes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制手表提醒时效，不影响手机接收。同步后用于新投递；已送达的系统通知可能不受后来设置变更影响。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制手錶提醒時效，不影響 iPhone 接收。同步後用於新投遞；已送達的系統通知可能不受後來設定變更影響。"
           }
         }
       }

@@ -479,8 +479,9 @@ final class PushGo_iOSUITests: XCTestCase {
                 "accessibility",
                 (
                     "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
+                    "testWatchReminderWindowUsesRealPickerAndPersistsAtLargeText",
                 ),
-                36,
+                38,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
@@ -508,6 +509,10 @@ final class PushGo_iOSUITests: XCTestCase {
                 self.assertEqual(
                     len(methods),
                     len(plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile]),
+                )
+                self.assertTrue(
+                    set(plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile])
+                    .isdisjoint(plan["required_ui_test_profile_scopes"][impact["platform"]].get("default", []))
                 )
                 self.assertEqual(
                     set(methods),
@@ -578,6 +583,11 @@ final class PushGo_iOSUITests: XCTestCase {
         self.assertIn("impact plan contains unresolved selection blockers", orchestrator)
         self.assertIn('scope.count("/") != 2', orchestrator)
         self.assertIn('plan.get("required_ui_test_profile_scopes", {})', orchestrator)
+        self.assertIn(
+            'TEST_SCOPES="$scope_list" \\\n              QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \\\n              run_accessibility_localization',
+            orchestrator,
+        )
+        self.assertIn('TEST_SCOPES="${TEST_SCOPES:-$accessibility_ui_scope}"', orchestrator)
         self.assertIn("run_accessibility_localization", orchestrator)
         self.assertIn("run_macos_system_notification", orchestrator)
         self.assertIn('"$repo_root/scripts/run_ios_ui_tests.sh"', orchestrator)
@@ -661,6 +671,18 @@ final class PushGo_iOSUITests: XCTestCase {
         self.assertTrue({"messages", "events", "things", "ingress-recovery"}.issubset(plan["impacted_capabilities"]))
         self.assertEqual(["apple-store-migration-reopen"], plan["required_checks"])
         self.assertTrue(plan["known_evidence_gaps"])
+
+    def test_watch_freshness_helper_selects_watch_ingress_consumer_without_unrelated_system_routes(self):
+        plan = self.plan("Shared/Utilities/WatchNotificationFreshness.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual([], plan["unmapped_product_paths"])
+        self.assertEqual(["watch"], plan["selected_rule_ids"])
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("watch-messages-events-things", plan["impacted_capabilities"])
+        self.assertNotIn("apple-macos-system-notification", plan["required_checks"])
+        self.assertTrue(any("standalone only" in gap for gap in plan["known_evidence_gaps"]))
+        self.assertFalse(any("mixed-version commitment" in gap for gap in plan["known_evidence_gaps"]))
 
     def test_entity_screen_change_prefers_positive_pr_evidence(self):
         plan = self.plan("Apps/PushGo-macOS/UI/Screens/ThingSplitScreen.swift")

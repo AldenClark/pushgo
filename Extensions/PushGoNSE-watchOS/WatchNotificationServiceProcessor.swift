@@ -41,7 +41,8 @@ final class WatchNotificationServiceProcessor {
                 requestIdentifier: deliveryID
             )
             applyIngressPayloadIfNeeded(ingress, to: content)
-            return await contentPreparer.prepare(content, includeMediaAttachments: false)
+            let prepared = await contentPreparer.prepare(content, includeMediaAttachments: false)
+            return Self.applyFreshness(to: prepared)
         }
         let ingress = WatchNotificationIngressResolution.direct(
             payload: sanitizedPayload,
@@ -61,6 +62,30 @@ final class WatchNotificationServiceProcessor {
             DarwinNotificationPoster.post(name: AppConstants.notificationIngressChangedNotificationName)
         }
 
+        return Self.applyFreshness(to: content)
+    }
+
+    nonisolated static func applyFreshness(
+        to content: UNMutableNotificationContent,
+        now: Date = Date()
+    ) -> UNMutableNotificationContent {
+        let minutes = WatchNotificationFreshness.configuredMinutes(
+            defaults: AppConstants.sharedUserDefaults()
+        )
+        guard !WatchNotificationFreshness.shouldPresent(
+            payload: content.userInfo, configuredMinutes: minutes, now: now
+        ) else { return content }
+        // An NSE cannot cancel an APNs alert or guarantee that it never enters
+        // Notification Center. Mute the client-controlled interruption while
+        // retaining display content, ingress identity and ACK metadata.
+        content.sound = nil
+        content.interruptionLevel = .passive
+        content.relevanceScore = 0
+        if var aps = content.userInfo["aps"] as? [String: Any] {
+            aps.removeValue(forKey: "sound")
+            aps["interruption-level"] = "passive"
+            content.userInfo["aps"] = aps
+        }
         return content
     }
 

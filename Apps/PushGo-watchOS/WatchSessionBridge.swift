@@ -18,9 +18,6 @@ final class WatchSessionBridge {
                 eventDidReceive: { event in
                     await Self.handleIncomingEvent(event)
                 },
-                mirrorPackageDidReceive: { package in
-                    await AppEnvironment.shared.applyMirrorSnapshotFromPhone(package.snapshot)
-                },
                 standalonePackageDidReceive: { package in
                     await AppEnvironment.shared.applyStandaloneProvisioningFromPhone(package.snapshot)
                 },
@@ -49,20 +46,6 @@ final class WatchSessionBridge {
         coordinator.publishControlManifest(context)
     }
 
-    func publishEffectiveModeStatusManifest(
-        _ status: WatchEffectiveModeStatus,
-        mode: WatchMode,
-        controlGeneration: Int64,
-        standaloneReadinessStatus: WatchStandaloneReadinessStatus? = nil
-    ) {
-        coordinator.publishEffectiveModeStatusManifest(
-            mode: mode,
-            controlGeneration: controlGeneration,
-            effectiveModeStatus: status,
-            standaloneReadinessStatus: standaloneReadinessStatus
-        )
-    }
-
     func publishStandaloneReadinessStatusManifest(
         _ status: WatchStandaloneReadinessStatus,
         mode: WatchMode,
@@ -72,18 +55,6 @@ final class WatchSessionBridge {
             mode: mode,
             controlGeneration: controlGeneration,
             standaloneReadinessStatus: status
-        )
-    }
-
-    func publishMirrorSnapshotAckManifest(
-        _ ack: WatchMirrorSnapshotAck,
-        mode: WatchMode,
-        controlGeneration: Int64
-    ) {
-        coordinator.publishMirrorSnapshotAckManifest(
-            mode: mode,
-            controlGeneration: controlGeneration,
-            ack: ack
         )
     }
 
@@ -97,18 +68,6 @@ final class WatchSessionBridge {
             controlGeneration: controlGeneration,
             ack: ack
         )
-    }
-
-    func sendMirrorActionBatch(_ batch: WatchMirrorActionBatch) {
-        coordinator.enqueueReliableMirrorActionBatch(batch)
-    }
-
-    func sendMirrorSnapshotAck(_ ack: WatchMirrorSnapshotAck) {
-        coordinator.enqueueReliableMirrorSnapshotAck(ack)
-    }
-
-    func sendMirrorSnapshotNack(_ nack: WatchMirrorSnapshotNack) {
-        coordinator.enqueueReliableMirrorSnapshotNack(nack)
     }
 
     func sendStandaloneProvisioningAck(_ ack: WatchStandaloneProvisioningAck) {
@@ -125,22 +84,12 @@ final class WatchSessionBridge {
 
     private static func handleIncomingEvent(_ event: WatchEventEnvelope) async {
         switch event.kind {
-        case .mirrorActionAck:
-            guard let ack = WatchConnectivityWire.decode(WatchMirrorActionAck.self, from: event.payload) else {
-                return
-            }
-            await AppEnvironment.shared.applyWatchMirrorActionAckFromPhone(ack)
-        case .mirrorSnapshotInline:
-            guard let package = WatchConnectivityWire.decode(MirrorSnapshotPackage.self, from: event.payload) else {
-                return
-            }
-            await AppEnvironment.shared.applyMirrorSnapshotFromPhone(package.snapshot)
         case .standaloneProvisioningInline:
             guard let package = WatchConnectivityWire.decode(StandaloneProvisioningPackage.self, from: event.payload) else {
                 return
             }
             await AppEnvironment.shared.applyStandaloneProvisioningFromPhone(package.snapshot)
-        case .mirrorActionBatch, .mirrorSnapshotAck, .mirrorSnapshotNack, .pushTokenUpdate, .standaloneProvisioningAck, .standaloneProvisioningNack:
+        case .mirrorActionAck, .mirrorSnapshotInline, .mirrorActionBatch, .mirrorSnapshotAck, .mirrorSnapshotNack, .pushTokenUpdate, .standaloneProvisioningAck, .standaloneProvisioningNack:
             break
         }
     }

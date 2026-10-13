@@ -280,6 +280,7 @@ private struct PushGoAutomationRequest: Decodable {
         let body: String?
         let key: String?
         let encoding: String?
+        let value: String?
 
         private enum CodingKeys: String, CodingKey {
             case tab
@@ -297,6 +298,7 @@ private struct PushGoAutomationRequest: Decodable {
             case body
             case key
             case encoding
+            case value
         }
     }
 
@@ -1048,7 +1050,9 @@ final class PushGoAutomationRuntime {
             case "watch.resync_receiver":
                 try await resyncWatchReceiver(environment: environment)
             case "watch.provisioning_acceptance":
-                try await verifyWatchProvisioningAcceptance(environment: environment)
+                try await verifyWatchProvisioningAcceptance(request: request, environment: environment)
+            case "watch.receipt_state_regression":
+                try await verifyWatchReceiptStateRegression(environment: environment)
             case "gateway.set_server":
                 try await updateGatewayConfig(request: request, environment: environment)
             case "notification.open":
@@ -3482,22 +3486,7 @@ final class PushGoAutomationRuntime {
 
     private func watchReceiverStateIdentifier(environment: AppEnvironment) -> String? {
         #if os(iOS)
-        if !environment.isWatchCompanionAvailable {
-            return WatchReceiverState.offline.rawValue
-        }
-        if environment.watchModeSwitchStatus == .switching {
-            return WatchReceiverState.provisioning.rawValue
-        }
-        if environment.watchModeSwitchStatus == .failed || environment.watchModeSwitchStatus == .timedOut {
-            return WatchReceiverState.degraded.rawValue
-        }
-        if environment.effectiveWatchMode == .standalone, environment.standaloneReady {
-            return WatchReceiverState.ready.rawValue
-        }
-        if environment.effectiveWatchMode == .standalone {
-            return WatchReceiverState.degraded.rawValue
-        }
-        return WatchReceiverState.unprovisioned.rawValue
+        environment.watchReceiverState.rawValue
         #else
         nil
         #endif
@@ -3527,8 +3516,88 @@ final class PushGoAutomationRuntime {
         #endif
     }
 
-    private func verifyWatchProvisioningAcceptance(environment: AppEnvironment) async throws {
+    private func verifyWatchReceiptStateRegression(environment: AppEnvironment) async throws {
         #if os(iOS)
+        let controller = WatchSyncController(
+            dataStore: environment.dataStore,
+            regressionPublication: WatchPublicationState(
+                syncGenerations: WatchSyncGenerationState(controlGeneration: 7, standaloneProvisioningGeneration: 15),
+                standaloneProvisioningContentDigest: "current-config"
+            )
+        )
+        let instant = Date(timeIntervalSince1970: 1_800_000_000)
+        func readiness(_ ready: Bool, generation: Int64 = 15, control: Int64 = 7, offset: Double = 0) -> WatchStandaloneReadinessStatus {
+            WatchStandaloneReadinessStatus(
+                effectiveMode: .standalone, standaloneReady: ready,
+                sourceControlGeneration: control, provisioningGeneration: generation,
+                reportedAt: instant.addingTimeInterval(offset),
+                failureReason: ready ? nil : "gateway_registration_failed"
+            )
+        }
+        func require(_ condition: Bool, _ step: String) throws {
+            guard condition else { throw PushGoAutomationError.invalidArgument("watch_receipt_state_\(step)") }
+        }
+        let ack = WatchStandaloneProvisioningAck(generation: 15, contentDigest: "current-config", appliedAt: instant)
+        await controller.handleWatchStandaloneProvisioningAck(ack)
+        try require(controller.watchReceiverState == .unprovisioned && !controller.standaloneReady, "ack_is_not_readiness")
+        let manifest = WatchSyncManifest(
+            schemaVersion: WatchConnectivitySchema.currentVersion, mode: .standalone,
+            controlGeneration: 7, mirrorPackage: nil, standalonePackage: nil,
+            standaloneReadinessStatus: readiness(false), ackCursor: nil, mirrorSnapshotAck: nil,
+            standaloneProvisioningAck: AppliedPackageAckRef(generation: 15, contentDigest: "current-config", appliedAt: instant),
+            inlineMirrorSnapshot: nil, inlineStandaloneProvisioning: nil
+        )
+        // Use the production receiver's ordering, including both fields in one manifest.
+        await WatchTokenReceiver.handleIncomingManifest(manifest, controller: controller)
+        try require(controller.watchReceiverState == .degraded && !controller.standaloneReady, "failure_and_ack")
+        try require(controller.standaloneProvisioningAutomationStatus.isAcknowledged, "matching_ack_recorded")
+        await WatchTokenReceiver.handleIncomingManifest(manifest, controller: controller)
+        try require(controller.watchReceiverState == .degraded && !controller.standaloneReady, "duplicate_false")
+        await controller.handleWatchStandaloneReadinessStatus(readiness(true, offset: 1))
+        try require(controller.watchReceiverState == .ready && controller.standaloneReady, "recovered_ready")
+        await controller.handleWatchStandaloneProvisioningAck(ack)
+        try require(controller.watchReceiverState == .ready, "duplicate_ack_after_ready")
+        // Newer timestamps cannot make another configuration authoritative.
+        for generation: Int64 in [14, 16] {
+            await controller.handleWatchStandaloneReadinessStatus(readiness(false, generation: generation, offset: 9))
+            await controller.handleWatchStandaloneProvisioningAck(.init(generation: generation, contentDigest: "current-config", appliedAt: instant))
+            await controller.handleWatchStandaloneProvisioningNack(.init(generation: generation, contentDigest: "current-config", failedStage: "commit", errorDescription: "late", reportedAt: instant.addingTimeInterval(9)))
+            try require(controller.watchReceiverState == .ready && controller.standaloneReady, "foreign_generation_\(generation)")
+            try require(controller.standaloneProvisioningAutomationStatus.isAcknowledged, "foreign_ack_\(generation)")
+        }
+        await controller.handleWatchStandaloneReadinessStatus(readiness(false, control: 6, offset: 9))
+        await controller.handleWatchStandaloneReadinessStatus(readiness(false))
+        await controller.handleWatchStandaloneProvisioningAck(.init(generation: 15, contentDigest: "wrong-config", appliedAt: instant))
+        try require(controller.watchReceiverState == .ready && controller.standaloneReady, "stale_control_or_time")
+        try require(controller.standaloneProvisioningAutomationStatus.isAcknowledged, "wrong_digest")
+        await controller.handleWatchStandaloneProvisioningNack(.init(generation: 15, contentDigest: "current-config", failedStage: "commit", errorDescription: "current", reportedAt: instant.addingTimeInterval(2)))
+        try require(controller.watchReceiverState == .degraded && !controller.standaloneReady, "current_nack")
+        await controller.handleWatchStandaloneReadinessStatus(readiness(true, offset: 1))
+        try require(controller.watchReceiverState == .degraded && !controller.standaloneReady, "ready_before_nack")
+        await controller.handleWatchStandaloneReadinessStatus(readiness(true, offset: 3))
+        try require(controller.watchReceiverState == .ready && controller.standaloneReady, "recovered_after_nack")
+        writeEvent(type: "watch.receipt_state_verified", command: "watch.receipt_state_regression", details: [
+            "receiver_state": controller.watchReceiverState.rawValue,
+            "ack_generation": String(controller.standaloneProvisioningAutomationStatus.acknowledgedGeneration ?? 0),
+            "checks": "ack_only,failure_and_ack,duplicate_false,recovered_ready,foreign_generation,stale_time,wrong_digest,current_nack,recovery"
+        ])
+        #else
+        throw PushGoAutomationError.unsupportedCommand("watch.receipt_state_regression")
+        #endif
+    }
+
+    private func verifyWatchProvisioningAcceptance(request: PushGoAutomationRequest, environment: AppEnvironment) async throws {
+        #if os(iOS)
+        let previousStatus = environment.watchProvisioningAutomationStatus()
+        let previousMinutes = await environment.dataStore.loadWatchAlertWindowMinutes()
+        var windowChanged = false
+        if let value = request.args?.value {
+            guard let minutes = Int(value), WatchNotificationFreshness.allowedMinutes.contains(minutes) else {
+                throw PushGoAutomationError.invalidArgument("watch_alert_window_minutes")
+            }
+            windowChanged = minutes != previousMinutes
+            try await environment.dataStore.saveWatchAlertWindowMinutes(minutes)
+        }
         let companionAvailable = await waitForAutomationState(environment: environment, timeout: 20.0) {
             $0.watchCompanionAvailable
         }
@@ -3542,6 +3611,10 @@ final class PushGoAutomationRuntime {
                   let digest = state.watchProvisioningDigest,
                   !digest.isEmpty
             else { return false }
+            if windowChanged,
+               (generation <= previousStatus.generation || digest == previousStatus.digest) {
+                return false
+            }
             return state.watchProvisioningAckGeneration == generation
                 && state.watchProvisioningAckDigest == digest
         }

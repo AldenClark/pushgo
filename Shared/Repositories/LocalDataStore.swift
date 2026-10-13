@@ -97,6 +97,7 @@ struct AppSettingsSnapshot: Hashable, Sendable {
     var eventPageEnabled: Bool?
     var thingPageEnabled: Bool?
     var pushTokenData: Data?
+    var watchAlertWindowMinutes: Int? = nil
     var watchModeRawValue: String? = nil
     var watchEffectiveModeRawValue: String? = nil
     var watchStandaloneReady: Bool? = nil
@@ -150,31 +151,11 @@ struct AppSettingsSnapshot: Hashable, Sendable {
 
 struct WatchPublicationState: Hashable, Sendable {
     var syncGenerations: WatchSyncGenerationState
-    var mirrorSnapshotContentDigest: String?
     var standaloneProvisioningContentDigest: String?
 
     static let empty = WatchPublicationState(
         syncGenerations: .zero,
-        mirrorSnapshotContentDigest: nil,
         standaloneProvisioningContentDigest: nil
-    )
-}
-
-struct WatchModeControlPersistenceState: Hashable, Sendable {
-    var desiredMode: WatchMode
-    var effectiveMode: WatchMode
-    var standaloneReady: Bool
-    var switchStatus: WatchModeSwitchStatus
-    var lastConfirmedControlGeneration: Int64
-    var lastObservedReportedGeneration: Int64
-
-    static let initial = WatchModeControlPersistenceState(
-        desiredMode: .standalone,
-        effectiveMode: .standalone,
-        standaloneReady: false,
-        switchStatus: .idle,
-        lastConfirmedControlGeneration: 0,
-        lastObservedReportedGeneration: 0
     )
 }
 
@@ -1752,73 +1733,6 @@ actor LocalDataStore {
         await refreshSystemSurfaceSnapshot()
     }
 
-    func loadWatchMode() async -> WatchMode {
-        guard let backend else { return .standalone }
-        guard let settings = try? await backend.loadAppSettings(),
-              let rawValue = settings.watchModeRawValue,
-              let mode = WatchMode(rawValue: rawValue)
-        else {
-            return .standalone
-        }
-        return mode
-    }
-
-    func saveWatchMode(_ mode: WatchMode) async {
-        guard let backend else { return }
-        var settings = (try? await backend.loadAppSettings()) ?? .empty
-        settings.watchModeRawValue = mode.rawValue
-        try? await backend.saveAppSettings(settings)
-    }
-
-    func loadWatchModeControlState() async -> WatchModeControlPersistenceState {
-        guard let backend,
-              let settings = try? await backend.loadAppSettings()
-        else {
-            return .initial
-        }
-        let desiredMode = settings.watchModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? .standalone
-        let effectiveMode = settings.watchEffectiveModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? desiredMode
-        let standaloneReady = settings.watchStandaloneReady ?? false
-        let switchStatus = settings.watchModeSwitchStatusRawValue
-            .flatMap { WatchModeSwitchStatus(rawValue: $0) }
-            ?? .idle
-        return WatchModeControlPersistenceState(
-            desiredMode: desiredMode,
-            effectiveMode: effectiveMode,
-            standaloneReady: standaloneReady,
-            switchStatus: switchStatus,
-            lastConfirmedControlGeneration: settings.watchLastConfirmedControlGeneration ?? 0,
-            lastObservedReportedGeneration: settings.watchLastObservedReportedGeneration ?? 0
-        )
-    }
-
-    func saveWatchModeControlState(_ state: WatchModeControlPersistenceState) async {
-        guard let backend else { return }
-        var settings = (try? await backend.loadAppSettings()) ?? .empty
-        settings.watchModeRawValue = state.desiredMode.rawValue
-        settings.watchEffectiveModeRawValue = state.effectiveMode.rawValue
-        settings.watchStandaloneReady = state.standaloneReady
-        settings.watchModeSwitchStatusRawValue = state.switchStatus.rawValue
-        settings.watchLastConfirmedControlGeneration = state.lastConfirmedControlGeneration
-        settings.watchLastObservedReportedGeneration = state.lastObservedReportedGeneration
-        try? await backend.saveAppSettings(settings)
-    }
-
-    func loadWatchSyncGenerationState() async -> WatchSyncGenerationState {
-        let publicationState = await loadWatchPublicationState()
-        return publicationState.syncGenerations
-    }
-
-    func saveWatchSyncGenerationState(_ state: WatchSyncGenerationState) async {
-        guard let backend else { return }
-        var settings = (try? await backend.loadAppSettings()) ?? .empty
-        settings.watchControlGeneration = state.controlGeneration
-        settings.watchMirrorSnapshotGeneration = state.mirrorSnapshotGeneration
-        settings.watchStandaloneProvisioningGeneration = state.standaloneProvisioningGeneration
-        settings.watchMirrorActionAckGeneration = state.mirrorActionAckGeneration
-        try? await backend.saveAppSettings(settings)
-    }
-
     func loadWatchPublicationState() async -> WatchPublicationState {
         guard let backend,
               let settings = try? await backend.loadAppSettings()
@@ -1828,11 +1742,8 @@ actor LocalDataStore {
         return WatchPublicationState(
             syncGenerations: WatchSyncGenerationState(
                 controlGeneration: settings.watchControlGeneration ?? 0,
-                mirrorSnapshotGeneration: settings.watchMirrorSnapshotGeneration ?? 0,
-                standaloneProvisioningGeneration: settings.watchStandaloneProvisioningGeneration ?? 0,
-                mirrorActionAckGeneration: settings.watchMirrorActionAckGeneration ?? 0
+                standaloneProvisioningGeneration: settings.watchStandaloneProvisioningGeneration ?? 0
             ),
-            mirrorSnapshotContentDigest: settings.watchMirrorSnapshotContentDigest,
             standaloneProvisioningContentDigest: settings.watchStandaloneProvisioningContentDigest
         )
     }
@@ -1841,10 +1752,7 @@ actor LocalDataStore {
         guard let backend else { return }
         var settings = (try? await backend.loadAppSettings()) ?? .empty
         settings.watchControlGeneration = state.syncGenerations.controlGeneration
-        settings.watchMirrorSnapshotGeneration = state.syncGenerations.mirrorSnapshotGeneration
         settings.watchStandaloneProvisioningGeneration = state.syncGenerations.standaloneProvisioningGeneration
-        settings.watchMirrorActionAckGeneration = state.syncGenerations.mirrorActionAckGeneration
-        settings.watchMirrorSnapshotContentDigest = state.mirrorSnapshotContentDigest
         settings.watchStandaloneProvisioningContentDigest = state.standaloneProvisioningContentDigest
         try? await backend.saveAppSettings(settings)
     }
@@ -1890,17 +1798,38 @@ actor LocalDataStore {
         _ snapshot: WatchStandaloneProvisioningSnapshot,
         sourceControlGeneration: Int64
     ) async throws -> WatchProvisioningState {
-        try await performBackendWrite { backend in
+        let state = try await performBackendWrite { backend in
             try await backend.applyWatchStandaloneProvisioning(
                 snapshot,
                 sourceControlGeneration: sourceControlGeneration
             )
         }
+        // The extension reads this mirror only after the database transaction commits.
+        AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier).set(
+            WatchNotificationFreshness.normalizedMinutes(snapshot.watchAlertWindowMinutes),
+            forKey: AppConstants.watchAlertWindowMinutesDefaultsKey
+        )
+        return state
     }
 
-    func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
+    func loadWatchAlertWindowMinutes() async -> Int {
+        let settings = try? await backend?.loadAppSettings()
+        let minutes = WatchNotificationFreshness.normalizedMinutes(settings?.watchAlertWindowMinutes)
+        AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier).set(
+            minutes, forKey: AppConstants.watchAlertWindowMinutesDefaultsKey
+        )
+        return minutes
+    }
+
+    func saveWatchAlertWindowMinutes(_ minutes: Int) async throws {
         let backend = try requireBackend()
-        try await backend.mergeWatchMirrorSnapshot(snapshot)
+        var settings = try await backend.loadAppSettings() ?? .empty
+        let normalized = WatchNotificationFreshness.normalizedMinutes(minutes)
+        settings.watchAlertWindowMinutes = normalized
+        try await backend.saveAppSettings(settings)
+        AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier).set(
+            normalized, forKey: AppConstants.watchAlertWindowMinutesDefaultsKey
+        )
     }
 
     func clearWatchLightStore() async throws {
@@ -1966,21 +1895,6 @@ actor LocalDataStore {
     func deleteWatchLightMessage(messageId: String) async throws {
         let backend = try requireBackend()
         try await backend.deleteWatchLightMessage(messageId: messageId)
-    }
-
-    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) async throws {
-        let backend = try requireBackend()
-        try await backend.enqueueWatchMirrorAction(action)
-    }
-
-    func loadWatchMirrorActions() async throws -> [WatchMirrorAction] {
-        let backend = try requireBackend()
-        return try await backend.loadWatchMirrorActions()
-    }
-
-    func deleteWatchMirrorActions(actionIds: [String]) async throws {
-        let backend = try requireBackend()
-        try await backend.deleteWatchMirrorActions(actionIds: actionIds)
     }
 
     func loadMessages() async throws -> [PushMessage] {
@@ -4154,31 +4068,6 @@ private struct GRDBWatchLightThingRecord {
     }
 }
 
-private struct GRDBWatchMirrorActionRecord {
-    let actionId: String
-    let kind: String
-    let messageId: String
-    let issuedAt: Date
-
-    init(row: Row) {
-        actionId = row["action_id"]
-        kind = row["kind"]
-        messageId = row["message_id"]
-        let issuedAtEpoch: Double = row["issued_at"]
-        issuedAt = GRDBStore.dateFromStoredEpoch(issuedAtEpoch)
-    }
-
-    func toModel() -> WatchMirrorAction? {
-        guard let kind = WatchMirrorActionKind(rawValue: kind) else { return nil }
-        return WatchMirrorAction(
-            actionId: actionId,
-            kind: kind,
-            messageId: messageId,
-            issuedAt: issuedAt
-        )
-    }
-}
-
 private actor GRDBStore {
     private static let maxCursorUUID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
     private static let sqliteBusyTimeoutSeconds: TimeInterval = 5
@@ -5472,6 +5361,12 @@ private actor GRDBStore {
                     ON canonical_derived_work(state, next_attempt_epoch_ms, lease_until_epoch_ms, created_at_epoch_ms);
                 """)
         }
+        migrator.registerMigration("v27_watch_standalone_alert_window") { db in
+            try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN watch_alert_window_minutes INTEGER;")
+            // Unsynced phone mirror read/delete actions are explicitly retired.
+            // Keep local content/read state, provisioning and gateway delivery records.
+            try db.execute(sql: "DROP TABLE IF EXISTS watch_mirror_action_queue;")
+        }
 	        return migrator
 	    }()
 
@@ -6569,6 +6464,7 @@ private actor GRDBStore {
         let eventPageInt: Int64? = row["event_page_enabled"]
         let thingPageInt: Int64? = row["thing_page_enabled"]
         let pushTokenDataBase64: String? = row["push_token_data_base64"]
+        let watchAlertWindowMinutes: Int? = row["watch_alert_window_minutes"]
         let watchModeRawValue: String? = row["watch_mode_raw_value"]
         let watchEffectiveModeRawValue: String? = row["watch_effective_mode_raw_value"]
         let watchStandaloneReadyInt: Int64? = row["watch_standalone_ready"]
@@ -6597,6 +6493,7 @@ private actor GRDBStore {
             eventPageEnabled: eventPageInt.map { $0 != 0 },
             thingPageEnabled: thingPageInt.map { $0 != 0 },
             pushTokenData: pushTokenDataBase64.flatMap { Data(base64Encoded: $0) },
+            watchAlertWindowMinutes: watchAlertWindowMinutes,
             watchModeRawValue: watchModeRawValue,
             watchEffectiveModeRawValue: watchEffectiveModeRawValue,
             watchStandaloneReady: watchStandaloneReadyInt.map { $0 != 0 },
@@ -6627,7 +6524,7 @@ private actor GRDBStore {
         let sql = """
             INSERT INTO app_settings (
                 id, manual_key_encoding, launch_at_login_enabled, message_page_enabled,
-                event_page_enabled, thing_page_enabled, push_token_data_base64, watch_mode_raw_value,
+                event_page_enabled, thing_page_enabled, push_token_data_base64, watch_alert_window_minutes, watch_mode_raw_value,
                 watch_effective_mode_raw_value, watch_standalone_ready, watch_mode_switch_status_raw_value,
                 watch_last_confirmed_control_generation, watch_last_observed_reported_generation,
                 watch_control_generation, watch_mirror_snapshot_generation,
@@ -6646,6 +6543,7 @@ private actor GRDBStore {
                 \(Self.sqlOptionalBool(snapshot.eventPageEnabled)),
                 \(Self.sqlOptionalBool(snapshot.thingPageEnabled)),
                 \(Self.sqlOptionalText(pushTokenDataBase64)),
+                \(snapshot.watchAlertWindowMinutes.map(String.init) ?? "NULL"),
                 \(Self.sqlOptionalText(snapshot.watchModeRawValue)),
                 \(Self.sqlOptionalText(snapshot.watchEffectiveModeRawValue)),
                 \(Self.sqlOptionalBool(snapshot.watchStandaloneReady)),
@@ -6675,6 +6573,7 @@ private actor GRDBStore {
                 event_page_enabled = excluded.event_page_enabled,
                 thing_page_enabled = excluded.thing_page_enabled,
                 push_token_data_base64 = excluded.push_token_data_base64,
+                watch_alert_window_minutes = excluded.watch_alert_window_minutes,
                 watch_mode_raw_value = excluded.watch_mode_raw_value,
                 watch_effective_mode_raw_value = excluded.watch_effective_mode_raw_value,
                 watch_standalone_ready = excluded.watch_standalone_ready,
@@ -8052,6 +7951,7 @@ private actor GRDBStore {
 
         try write { db in
             var settings = try loadAppSettings(db) ?? .empty
+            settings.watchAlertWindowMinutes = WatchNotificationFreshness.normalizedMinutes(snapshot.watchAlertWindowMinutes)
             settings.watchProvisioningServerConfigData = try encodeWatchProvisioningServerConfig(normalizedConfig)
             settings.watchProvisioningSchemaVersion = provisioningState.schemaVersion
             settings.watchProvisioningGeneration = provisioningState.generation
@@ -8186,26 +8086,11 @@ private actor GRDBStore {
         }
     }
 
-    func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
-        try write { db in
-            for message in snapshot.messages {
-                try upsertWatchLightMessage(message, db: db)
-            }
-            for event in snapshot.events {
-                try upsertWatchLightEvent(event, db: db)
-            }
-            for thing in snapshot.things {
-                try upsertWatchLightThing(thing, db: db)
-            }
-        }
-    }
-
     func clearWatchLightStore() async throws {
         try write { db in
             try db.execute(sql: "DELETE FROM watch_light_messages;")
             try db.execute(sql: "DELETE FROM watch_light_events;")
             try db.execute(sql: "DELETE FROM watch_light_things;")
-            try db.execute(sql: "DELETE FROM watch_mirror_action_queue;")
             try db.execute(sql: "DELETE FROM watch_delivery_records;")
         }
     }
@@ -8443,55 +8328,6 @@ private actor GRDBStore {
                 sql: """
                     DELETE FROM watch_light_messages
                     WHERE message_id = \(Self.sqlQuoted(normalizedMessageId));
-                    """
-            )
-        }
-    }
-
-    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) async throws {
-        try write { db in
-            try db.execute(
-                sql: """
-                    INSERT INTO watch_mirror_action_queue (action_id, kind, message_id, issued_at)
-                    VALUES (
-                        \(Self.sqlQuoted(action.actionId)),
-                        \(Self.sqlQuoted(action.kind.rawValue)),
-                        \(Self.sqlQuoted(action.messageId)),
-                        \(Self.storedEpoch(action.issuedAt))
-                    )
-                    ON CONFLICT(action_id) DO UPDATE SET
-                        kind = excluded.kind,
-                        message_id = excluded.message_id,
-                        issued_at = excluded.issued_at;
-                    """
-            )
-        }
-    }
-
-    func loadWatchMirrorActions() async throws -> [WatchMirrorAction] {
-        try read { db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT * FROM watch_mirror_action_queue
-                    ORDER BY issued_at ASC, action_id ASC;
-                    """
-            )
-            return rows.compactMap { GRDBWatchMirrorActionRecord(row: $0).toModel() }
-        }
-    }
-
-    func deleteWatchMirrorActions(actionIds: [String]) async throws {
-        let normalized = actionIds
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !normalized.isEmpty else { return }
-        let quoted = normalized.map(Self.sqlQuoted).joined(separator: ", ")
-        try write { db in
-            try db.execute(
-                sql: """
-                    DELETE FROM watch_mirror_action_queue
-                    WHERE action_id IN (\(quoted));
                     """
             )
         }

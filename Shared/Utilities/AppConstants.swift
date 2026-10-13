@@ -1023,6 +1023,7 @@ enum AppConstants {
     static let notificationIngressChangedNotificationName = "io.ethan.pushgo.notification-ingress-changed"
     static let copyToastNotificationName = "io.ethan.pushgo.copy-toast"
     static let watchProvisioningServerConfigDefaultsKey = "io.ethan.pushgo.watch.provisioning.server_config.v1"
+    static let watchAlertWindowMinutesDefaultsKey = "io.ethan.pushgo.watch.alert_window_minutes.v1"
     static let notificationDefaultCategoryIdentifier = "PUSHGO_DEFAULT"
     static let notificationEntityReminderCategoryIdentifier = "PUSHGO_ENTITY_REMINDER"
     static let maxStoredMessages = 100_000

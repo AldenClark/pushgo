@@ -159,31 +159,37 @@
 		C0A1B2C3D4E5F60718293C22 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
 		C0A1B2C3D4E5F60718293C23 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
 		C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060801 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
 		C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060811 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
 		C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060821 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060825 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
 		C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060831 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060835 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
 		C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060841 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060845 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
 		C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		A13A1E010102030405060851 /* WatchNotificationFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A1E010102030405060701 /* WatchNotificationFreshness.swift */; };
 		C2492E8A9B92E26ABD448A9E /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		C2AD0D750D535F07437BA084 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
@@ -617,6 +623,7 @@
 		C0A1B2C3D4E5F60718293A73 /* ChannelPasswordValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelPasswordValidator.swift; sourceTree = "<group>"; };
 		C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStateCoordinator.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPayloadSemantics.swift; sourceTree = "<group>"; };
+		A13A1E010102030405060701 /* WatchNotificationFreshness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNotificationFreshness.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualNotificationKeyValidator.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuerySemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060704 /* ProjectionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionSemantics.swift; sourceTree = "<group>"; };
@@ -1172,6 +1179,7 @@
 				AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */,
 				C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */,
 				C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */,
+				A13A1E010102030405060701 /* WatchNotificationFreshness.swift */,
 				F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */,
 				D2A100000000000000000005 /* NotificationSoundResolver.swift */,
 				D2A100000000000000000006 /* NotificationSoundSharedState.swift */,
@@ -1780,6 +1788,7 @@
 				0AC200032F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift in Sources */,
 				0AC200002F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
 				C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060851 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B65 /* NotificationContextSnapshot.swift in Sources */,
 				8BE8D5A5AFDD413593953B18 /* PushGoMarkdownCore.swift in Sources */,
 				AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */,
@@ -1850,6 +1859,7 @@
 				F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
 				6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060811 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B61 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */,
@@ -1962,6 +1972,7 @@
 				F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,
 				278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060801 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B62 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */,
@@ -2045,6 +2056,7 @@
 				D2D100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
 				A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060821 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B63 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */,
@@ -2096,6 +2108,7 @@
 				D2E100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
 				A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060831 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B64 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */,
@@ -2150,6 +2163,7 @@
 				F6B2C3D4E5F60718293A4B66 /* ProviderIngressCoordinator.swift in Sources */,
 				F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */,
+				A13A1E010102030405060841 /* WatchNotificationFreshness.swift in Sources */,
 				F2B2C3D4E5F60718293A4B66 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */,

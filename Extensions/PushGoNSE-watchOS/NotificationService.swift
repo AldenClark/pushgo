@@ -27,6 +27,7 @@ final class NotificationService: UNNotificationServiceExtension {
         withContentHandler contentHandler: @escaping @Sendable (UNNotificationContent) -> Void
     ) {
         let copiedContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
+            .map { WatchNotificationServiceProcessor.applyFreshness(to: $0) }
         let previousTask: Task<Void, Never>?
         let currentGate: NotificationServiceDeliveryGate
         stateLock.lock()
@@ -73,6 +74,10 @@ final class NotificationService: UNNotificationServiceExtension {
         stateLock.unlock()
         pendingTask?.cancel()
         guard let handler, let fallback else { return }
-        if currentGate.tryMarkDelivered() { handler(fallback) }
+        if currentGate.tryMarkDelivered() {
+            let content = (fallback.mutableCopy() as? UNMutableNotificationContent)
+                .map { WatchNotificationServiceProcessor.applyFreshness(to: $0) }
+            handler(content ?? fallback)
+        }
     }
 }

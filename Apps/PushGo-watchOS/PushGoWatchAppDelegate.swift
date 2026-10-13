@@ -47,13 +47,6 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor in
-            if !AppEnvironment.shared.isStandaloneMode {
-                let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification(
-                    payload: notification.request.content.userInfo
-                )
-                completionHandler(shouldPresent ? [.banner, .list, .sound, .badge] : [])
-                return
-            }
             if await shouldDropDuplicateNotification(notification) {
                 completionHandler([])
                 return
@@ -102,32 +95,18 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
                 if entityTarget != nil {
                     removeDeliveredNotification(requestId: requestId)
                 } else if let lightMessage {
-                    if AppEnvironment.shared.isStandaloneMode {
                         _ = try? await AppEnvironment.shared.dataStore.markWatchLightMessageRead(
                             messageId: lightMessage.messageId
                         )
-                    } else {
-                        try? await AppEnvironment.shared.enqueueMirrorMessageAction(
-                            kind: .read,
-                            messageId: lightMessage.messageId
-                        )
-                    }
                     await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
                 } else {
                     removeDeliveredNotification(requestId: requestId)
                 }
             case PushGoNotificationActionPolicy.markReadActionIdentifier:
                 if let lightMessage {
-                    if AppEnvironment.shared.isStandaloneMode {
                         _ = try? await AppEnvironment.shared.dataStore.markWatchLightMessageRead(
                             messageId: lightMessage.messageId
                         )
-                    } else {
-                        try? await AppEnvironment.shared.enqueueMirrorMessageAction(
-                            kind: .read,
-                            messageId: lightMessage.messageId
-                        )
-                    }
                     removeDeliveredNotification(requestId: requestId)
                     await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
                 } else {
@@ -135,16 +114,9 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
                 }
             case PushGoNotificationActionPolicy.deleteMessageActionIdentifier:
                 if let lightMessage {
-                    if AppEnvironment.shared.isStandaloneMode {
                         try? await AppEnvironment.shared.dataStore.deleteWatchLightMessage(
                             messageId: lightMessage.messageId
                         )
-                    } else {
-                        try? await AppEnvironment.shared.enqueueMirrorMessageAction(
-                            kind: .delete,
-                            messageId: lightMessage.messageId
-                        )
-                    }
                     removeDeliveredNotification(requestId: requestId)
                     await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
                 } else {

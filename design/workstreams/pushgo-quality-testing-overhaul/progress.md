@@ -987,3 +987,33 @@ iOS 27.0 / PushGo Quality iPhone 的 `testThingLifecycleFiltersRelationsAndUnava
 `quality_changed.sh` 的 275 项脚本合同通过，影响计划 READY/pr；按本轮用户明确限定，采用上述定向 Store＋最少 UI，不扩累计 PR/Release、性能或设备矩阵。脚本日志里的故意 QoS FAILED_TEST_SYSTEM 是负控制测试输出，不是本批真实运行失败。schema/migration 未改，因此没有新增迁移/迁移失败选集；pending 删除及 SQLite FULL 属真实事务回滚证据。独立生产边界审查无发现，最终 diff 检查通过。macOS UI 阻断、NSE/runtime/真实 Provider/APNs/物理设备、完整 PR/Release、性能及旧二进制降级均未被推成通过。
 
 Apple 基线 `47f25fb7289fdf658357e940b2a79734fad1e42d` 保持不变；4 份源码/测试组合 SHA-256 `5aaab349fe430d1a32fcef57962a4d7bae7769250465fabf8ab03320f2aeecf3`，生产 LocalDataStore SHA-256 `90c5ff717de2f2b12295e9b4b13f94fb7fde55dc6dd7fa881dbe7ed55872403c`。逐文件输入和完整本批 patch、首次失败、13＋1 执行日志及原生 xcresult 见 `build/quality-results/apple-thing-child-lifecycle-20261013/`。修改仅为 1 份生产文件、3 份测试文件及本 progress/capability 记录，保留本地未提交/未推送/未发布；任务专用 iOS Simulator 已关闭。Watch 和其他六项未进入本批，完成后停止。
+
+
+### 2026-10-13 Watch standalone 退役 mirror 与提醒时效（本地待审）
+
+用户批准一次完整批次：Watch 是临时在线独立接收工具；旧未同步手机 read/delete 全部直接放弃。Apple baseline `736417e8`，Gateway baseline `3cf3a7a`。本批删除 mirror snapshot producer/投影/传输消费/merge、模式切换与回退、读删回写和专属队列/ACK/重试；旧 wire 判别字段仅过滤旧数据。SQLite迁移/启动清理只移除旧动作，保留消息、对象、本地读态、独立delivery ACK和provisioning。旧connectivity schema/坏状态不再整目录reset并连带清业务状态。Phone Relay、系统通知转发和持续后台在线均未新增或改变。
+
+手机增加5/15/30/60分钟Picker，默认30；复用provisioning digest/事务、ACK/NACK和重发。Gateway设备独立列在成功Watch注册后生效；每次新建durable Watch delivery按原首次sent_at冻结绝对deadline，已经物化但未发送的job也保持旧窗口。direct/wakeup一致，首发/重试/fallback及凭据等待后的APNs网络边界均检查；expiration正值兼顾发送方有效期，0仍为do-not-store。旧Gateway任务无字段按原accepted_at+30；客户端旧payload按有效原sent_at+本地窗口，缺失/异常/未来/冲突时间仅禁提醒。手机payload TTL/Pull保留/对象更新/显式ACK不变，静默Pull无新local提醒。
+
+独立复查关闭两个P2：新窗口不能被45秒注册缓存跳过（仅成功注册的相同窗口可复用，失败不报ready）；submission恢复不能用新hint改写既存Watch job窗口（从leased durable row取payload/identity，匹配outcome仍收敛）。Gateway actual-claim定点回归先红后绿，5→60与60→5均保护原deadline。新UI在accessibility5发现横排挤字及AppFormField固定48高度不适用，最终只用该行局部自然高度布局与独立AX容器；原生Picker选择在iOS27的精确label中，测试兼容精确value或精确label，不放宽选项/重开断言。
+
+本机证据：SwiftPM首批37个方法中35有效通过，2个新断言因Swift Testing宏将集合推为Void而失败；只修typedBool oracle并重验2/2，其余复用。后改的v17/v24真实迁移夹具另验2/2，累计39个独立方法义务完成。iOS27大字号真实设置30→5→relaunch5最终1/1，69.211s；WatchOS27核心Message/Event/Thing读删重开、旧动作退役保留内容/ACK、中断配置恢复、窗口5→15注册及503不ready四方法4/4，56.919/13.838/12.031/12.093s。两份xcresult严格EXECUTED，0failure/skip/expected failure/runtime warning。iOS初次残留旧mode属性构建失败、一次新增automation非可选值??编译失败、三份UI失败及原始录屏/AX均保留，不改写。Gateway Watch9/9、迁移10/10、Clippy通过；PG/MySQL仅编译未执行真实库。
+
+275脚本合同在Python3.14通过；首轮误用3.9的工具链错误和过时profile/迁移列表失败保留。最小对齐实际UI选集后accessibility 2项/ordinary35项，保持互斥；新helper精确归现有Watch影响规则，最终working-tree影响计划READY/推荐Release。本用户明确限定定点验证，未运行其累计Release/性能矩阵。新增映射单测和最终本地化/diff检查通过。当前证据根为`build/quality-results/watch-standalone-expiry-20261013/`，Gateway同名目录含复查红绿日志；其首轮日志仅在原工具回执，未假造磁盘原始日志。
+
+正式支持双端升级后的新版组合；服务端截止需要本批新版Gateway，不编造最低版本。已提交APNs期限不追溯改，已展示/已响通知不撤回，NSE不执行/超时可影响拦截，故不承诺绝无过期通知或持续在线。物理APNs、物理配对、完整旧版本矩阵、生产DB/签名/发布均NOT_RUN。Gateway受管v12新增migration被旧二进制拒绝，未声称可降级。所有修改留本地，无提交/推送/部署/发布。
+
+配对Simulator最终边界（本轮一次执行，无重试）：现有phone `194A0976-4465-4888-9E2F-E991AE65F4B1` / Watch `73F0AC93-041E-4ADE-9C43-B6D845D4715F` 均booted且simctl显示active connected，但phone WCSession停在activate.requested/not_activated，Watch activated/reachable。原20秒companion gate返回`watch_companion_not_available`，在5→15窗口配置发送前受阻；实际跨端新窗口传播/ACK/重开持久化本轮未证明。对应诊断和失败收据保留在paired-window及phone/watch-paired-link-diagnostics.json。限定diff复核确认激活/状态回调/availability函数未改，尚不能确定此次平台激活未完成的原因，不将其归为已证实产品缺陷或写成配对PASS。旧20261011配对PASS只保留历史效力。没有延长等待、清模拟器数据、改配对或重复求绿。
+
+
+### 2026-10-14 Watch 手机回执状态与配对传播定点收口（继续本批，本地未提交）
+
+本条更新上一条的当前配对状态，保留原始失败。实际回归在 WatchTokenReceiver 同 manifest 的 readiness→ACK 顺序：false 提前返回和 ACK 设置 provisioning 共同掩盖 Gateway 注册失败。本次 ACK 仅接受当前 generation/digest 并保存配置确认、停止对应重试；不更改 receiver state。readiness 使用已有 provisioning/control generation 与报告时间过滤，重复 false 仍写 degraded；旧/未来 generation 的 ACK/readiness/NACK 不覆盖当前。相同配置重发保留状态，新配置清空旧 readiness/回执/时间屏障，没有新增协调框架。
+
+新增原生单方法 `testWatchReceiptsPreservePhoneReadinessAcrossFailureAndRecovery` 调用实际手机 WatchTokenReceiver/WatchSyncController，直接断言 ACK 不能成为就绪、同 manifest 失败＋有效 ACK、重复 false、后来 ready、旧/未来 generation、旧 control/时间、错误 digest、当前 NACK 与恢复。真实 iOS27 Simulator 1/1，6.717秒，0failure/skip/expected failure/runtime warning；最终受测生产/回归文件哈希保存在 `phone-state-followup/native-inputs.json`，不将它表述为整套本批重验。
+
+原配对失败已从历史平台日志归因：00:02:13/15 wcd 查询 `com.apple.appconduitd.device-connection` 得到 NSCocoaError4099 / bootstrap lookup No such process，初始 installed-app setup 失败；00:05:14 AppConduit 可用，同一个最终手机 PID41596 完成 activation，随后 appInstalled/reachable 为YES。这是服务初始化阻塞证据，不归因于产品 callback，也不声称脚本多次启动造成它。新一轮仅普通boot原pair；wcd/appconduitd均运行，未改配对、未清数据、未延长原20s companion/30s ACK gate。
+
+新构建手机＋原生已验且源码未改的Watch产物，一次有界5→15配对配置验收PASS：两档均应用配置并得到一致generation/digest ACK；最后Watch普通重开后Store仍为15。配对脚本先清观察文件仍可能被旧进程最后一次写入，最终修为先显式终止旧进程，再删response/state并启动，实际Store保留。受影响impact＋脚本74项先通过，最终时序修复后只重验launcher5项通过。没有重跑已绿配对；离线系统日志证明最后旧PID24669于17:04:20.099Z退出，新PID25178于.131Z启动，保存的15分钟state于.465394Z写入，因而本次最终重开确属新进程，排除旧writer。脚本最后时序版本仅有定向5项合同，未伪称其再次完整执行配对。最终手机仍degraded且当前ACK匹配，符合placeholder Gateway未就绪而配置已落盘的合同；不虚称真实Gateway注册/APNs成功。
+
+证据 `build/quality-results/watch-standalone-expiry-20261013/phone-state-followup/`：原日志摘录/诊断、native xcresult、配对收据、final-state、tested-artifacts、脚本日志与影响计划。上一批Apple Core39项义务、Watch4/4、iOS大字号Picker1/1及Gateway9/9＋迁移10/10＋Clippy按未改受测输入分段复用；本轮未重复这些套件。当前impact plan READY/release仅记录累计影响，用户要求仅本次范围，直接执行受影响脚本与native配对检查，不运行全量quality_changed脚本/PR/Release/性能。真实APNs、物理Watch后台/配对、实库PG/MySQL迁移等旧限制继续NOT_RUN。所有使用的模拟器恢复关机，数据/配对保留；Apple/Gateway HEAD与index不变，继续本地未提交、无推送/部署/发布，停止等待复查。

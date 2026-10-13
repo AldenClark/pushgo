@@ -2126,6 +2126,68 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    // One bounded large-text journey proves the new picker is reachable,
+    // displays the default, saves a real choice and restores it after relaunch.
+    func testWatchReceiptsPreservePhoneReadinessAcrossFailureAndRecovery() {
+        let context = configuredLaunchContext(requestName: "watch.receipt_state_regression")
+        launch(context.app)
+        let response = waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { _ in true })
+        XCTAssertNotNil(response, "The real phone receiver/controller regression must execute.")
+        XCTAssertEqual(response?.ok, true, response?.error ?? "No controller regression response")
+        XCTAssertNotNil(waitForAutomationEvent(at: context.eventsURL, timeout: 2) { event in
+            guard event["type"] as? String == "watch.receipt_state_verified",
+                  let details = event["details"] as? [String: String] else { return false }
+            return details["receiver_state"] == "ready" && details["ack_generation"] == "15"
+        })
+    }
+
+    func testWatchReminderWindowUsesRealPickerAndPersistsAtLargeText() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-watch-window-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.ready")
+                .label.contains("dynamic type accessibility5"),
+            "This task must run with the real large-text SwiftUI environment."
+        )
+        openSettingsFromChannels(in: context.app)
+        let picker = scrollToHittableElement(
+            identifier: "action.settings.watch_alert_window", in: context.app
+        )
+        // A menu Picker exposes its exact selection in the native button label
+        // on iOS 27; other supported versions may provide the value attribute.
+        let defaultValue = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@ OR label == %@", "30 分钟", "消息提醒时效、30 分钟"), object: picker
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [defaultValue], timeout: 8), .completed)
+        tapWhenHittable(picker, timeout: 8, message: "The Watch reminder window must remain usable at large text.")
+        tapWhenHittable(context.app.buttons["5 分钟"], timeout: 8, message: "The five-minute option must be selectable.")
+        let selectedValue = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@ OR label == %@", "5 分钟", "消息提醒时效、5 分钟"), object: picker
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [selectedValue], timeout: 8), .completed)
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let restored = scrollToHittableElement(
+            identifier: "action.settings.watch_alert_window", in: context.app
+        )
+        let restoredValue = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@ OR label == %@", "5 分钟", "消息提醒时效、5 分钟"), object: restored
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [restoredValue], timeout: 8), .completed,
+            "Relaunch must restore the selected window from the production settings store."
+        )
+    }
+
     func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
         let context = configuredLaunchContext()
         let sessionID = "ios-settings-visibility-\(UUID().uuidString.lowercased())"

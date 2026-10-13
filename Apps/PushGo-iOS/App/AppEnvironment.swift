@@ -312,18 +312,7 @@ final class AppEnvironment {
     )
     @ObservationIgnored private(set) lazy var watchSyncController = WatchSyncController(
         dataStore: dataStore,
-        messageStateCoordinatorProvider: { [weak self] in
-            self?.messageStateCoordinator
-        },
-        serverConfigProvider: { [weak self] in
-            self?.serverConfig
-        },
-        runtimeErrorRecorder: { [weak self] error, source in
-            self?.recordAutomationRuntimeError(error, source: source, category: "watch")
-        },
-        runtimeMessageRecorder: { [weak self] message, source in
-            self?.recordAutomationRuntimeMessage(message, source: source, category: "watch")
-        }
+        serverConfigProvider: { [weak self] in self?.serverConfig }
     )
     @ObservationIgnored private(set) lazy var notificationIngressController = makeNotificationIngressController()
     @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
@@ -425,10 +414,8 @@ final class AppEnvironment {
         }
     )
 
-    var watchMode: WatchMode { watchSyncController.watchMode }
-    var effectiveWatchMode: WatchMode { watchSyncController.effectiveWatchMode }
+    var watchReceiverState: WatchReceiverState { watchSyncController.watchReceiverState }
     var standaloneReady: Bool { watchSyncController.standaloneReady }
-    var watchModeSwitchStatus: WatchModeSwitchStatus { watchSyncController.watchModeSwitchStatus }
     var isWatchCompanionAvailable: Bool { watchSyncController.isWatchCompanionAvailable }
 
     private init(
@@ -992,13 +979,11 @@ final class AppEnvironment {
             BadgeManager.syncAppBadge(unreadCount: counts.unread)
             clearDeliveredSystemNotifications()
             scheduleMessageListRefresh()
-            requestWatchMirrorSnapshotSync()
         } catch {
             totalMessageCount = 0
             unreadMessageCount = 0
             BadgeManager.syncAppBadge(unreadCount: 0)
             scheduleMessageListRefresh()
-            requestWatchMirrorSnapshotSync()
         }
     }
 
@@ -1181,9 +1166,7 @@ final class AppEnvironment {
 
         await dataStore.saveCachedPushToken(trimmed, for: platform)
 
-        if watchMode == .standalone {
-            requestWatchStandaloneProvisioningSync(immediate: true)
-        }
+        requestWatchStandaloneProvisioningSync(immediate: true)
     }
 
     private func scheduleCountsRefresh() {
@@ -1587,7 +1570,6 @@ final class AppEnvironment {
             return true
         case .persistedMain, .persistedPending:
             scheduleCountsRefresh()
-            requestWatchMirrorSnapshotSync()
             return true
         case .rejected:
             return false
@@ -2088,7 +2070,7 @@ final class AppEnvironment {
                 detail: "watch companion unavailable when resyncing receiver provisioning"
             )
         }
-        _ = try await watchSyncController.requestWatchModeChangeApplied(.standalone)
+        watchSyncController.requestWatchStandaloneProvisioningSync(immediate: true)
         requestWatchStandaloneProvisioningSync(immediate: true)
     }
 
@@ -2108,6 +2090,11 @@ final class AppEnvironment {
         await watchSyncController.handleWatchLatestManifestRequested()
     }
 
+    func updateWatchAlertWindowMinutes(_ minutes: Int) async throws {
+        try await dataStore.saveWatchAlertWindowMinutes(minutes)
+        watchSyncController.requestWatchStandaloneProvisioningSync(immediate: true)
+    }
+
     func handleWatchStandaloneProvisioningAck(_ ack: WatchStandaloneProvisioningAck) async {
         await watchSyncController.handleWatchStandaloneProvisioningAck(ack)
     }
@@ -2118,32 +2105,12 @@ final class AppEnvironment {
     }
     #endif
 
-    func handleWatchMirrorSnapshotAck(_ ack: WatchMirrorSnapshotAck) async {
-        await watchSyncController.handleWatchMirrorSnapshotAck(ack)
-    }
-
-    func handleWatchEffectiveModeStatus(_ status: WatchEffectiveModeStatus) async {
-        await watchSyncController.handleWatchEffectiveModeStatus(status)
-    }
-
     func handleWatchStandaloneReadinessStatus(_ status: WatchStandaloneReadinessStatus) async {
         await watchSyncController.handleWatchStandaloneReadinessStatus(status)
     }
 
-    func handleWatchMirrorSnapshotNack(_ nack: WatchMirrorSnapshotNack) async {
-        await watchSyncController.handleWatchMirrorSnapshotNack(nack)
-    }
-
     func handleWatchStandaloneProvisioningNack(_ nack: WatchStandaloneProvisioningNack) async {
         await watchSyncController.handleWatchStandaloneProvisioningNack(nack)
-    }
-
-    func applyWatchMirrorActionBatch(_ batch: WatchMirrorActionBatch) async {
-        await watchSyncController.applyWatchMirrorActionBatch(batch)
-    }
-
-    private func requestWatchMirrorSnapshotSync(immediate: Bool = false) {
-        watchSyncController.requestWatchMirrorSnapshotSync(immediate: immediate)
     }
 
     private func requestWatchStandaloneProvisioningSync(immediate: Bool) {

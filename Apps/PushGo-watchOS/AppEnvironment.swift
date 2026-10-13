@@ -37,6 +37,7 @@ final class AppEnvironment {
     @ObservationIgnored private var isMainWindowVisible = true
     @ObservationIgnored private var lastWakeupRouteSyncAt = Date.distantPast
     @ObservationIgnored private var lastWakeupDeviceRegisterAt = Date.distantPast
+    @ObservationIgnored private var lastRegisteredWatchAlertWindowMinutes: Int?
     @ObservationIgnored private var standaloneRuntimeReconcileTask: Task<Void, Never>?
     @ObservationIgnored private var gatewayOperationTail: Task<Void, Never>?
     @ObservationIgnored private var gatewayOperationID: UUID?
@@ -230,7 +231,7 @@ final class AppEnvironment {
         Task(priority: .utility) { @MainActor in
             await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.watchos")
         }
-        publishCurrentEffectiveModeStatus(noop: false)
+        publishCurrentStandaloneReadinessStatus()
         let store = dataStore
         Task(priority: .utility) {
             await store.warmCachesIfNeeded()
@@ -469,68 +470,16 @@ final class AppEnvironment {
         let context = WatchControlContext(
             mode: manifest.mode,
             controlGeneration: manifest.controlGeneration,
-            mirrorSnapshotGeneration: manifest.mirrorPackage?.generation ?? watchSyncGenerations.mirrorSnapshotGeneration,
-            standaloneProvisioningGeneration: manifest.standalonePackage?.generation ?? watchSyncGenerations.standaloneProvisioningGeneration,
-            pendingMirrorActionAckGeneration: watchSyncGenerations.mirrorActionAckGeneration
+            standaloneProvisioningGeneration: manifest.standalonePackage?.generation ?? watchSyncGenerations.standaloneProvisioningGeneration
         )
         await applyWatchControlContextFromPhone(context)
     }
 
     func applyWatchControlContextFromPhone(_ context: WatchControlContext) async {
         guard context.controlGeneration > watchSyncGenerations.controlGeneration else { return }
-        let receiverMode: WatchMode = .standalone
-        let previousMode = watchMode
-        if previousMode == receiverMode {
-            watchSyncGenerations.controlGeneration = context.controlGeneration
-            await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
-            publishCurrentEffectiveModeStatus(
-                sourceControlGeneration: context.controlGeneration,
-                noop: true
-            )
-            return
-        }
-        watchMode = receiverMode
         watchSyncGenerations.controlGeneration = context.controlGeneration
-        await dataStore.saveWatchMode(receiverMode)
         await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
-        await handleWatchModeTransition(from: previousMode, to: receiverMode)
-        publishCurrentEffectiveModeStatus(
-            sourceControlGeneration: context.controlGeneration,
-            noop: false
-        )
-    }
-
-    func applyMirrorSnapshotFromPhone(_ snapshot: WatchMirrorSnapshot) async {
-        guard watchMode == .mirror, snapshot.mode == .mirror else { return }
-        guard snapshot.generation > watchSyncGenerations.mirrorSnapshotGeneration else { return }
-        do {
-            try await dataStore.mergeWatchMirrorSnapshot(snapshot)
-            let pendingActions = try await dataStore.loadWatchMirrorActions()
-            for action in pendingActions {
-                switch action.kind {
-                case .read:
-                    _ = try await dataStore.markWatchLightMessageRead(messageId: action.messageId)
-                case .delete:
-                    try await dataStore.deleteWatchLightMessage(messageId: action.messageId)
-                }
-            }
-            watchSyncGenerations.mirrorSnapshotGeneration = snapshot.generation
-            await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
-            await refreshWatchLightCountsAndNotify()
-            publishMirrorSnapshotAck(
-                generation: snapshot.generation,
-                contentDigest: snapshot.contentDigest
-            )
-        } catch {
-            recordAutomationRuntimeError(error, source: "watch.apply_mirror_snapshot")
-            sendMirrorSnapshotNack(
-                generation: snapshot.generation,
-                contentDigest: snapshot.contentDigest,
-                failedStage: "merge_watch_mirror_snapshot",
-                errorDescription: error.localizedDescription
-            )
-            WatchSessionBridge.shared.requestLatestManifestIfReachable()
-        }
+        publishCurrentStandaloneReadinessStatus(sourceControlGeneration: context.controlGeneration)
     }
 
     func applyStandaloneProvisioningFromPhone(_ snapshot: WatchStandaloneProvisioningSnapshot) async {
@@ -576,6 +525,7 @@ final class AppEnvironment {
             }
 
             failedStage = "commit_provisioning"
+            let previousAlertWindowMinutes = await dataStore.loadWatchAlertWindowMinutes()
             let appliedState = try await dataStore.applyWatchStandaloneProvisioning(
                 snapshot,
                 sourceControlGeneration: watchSyncGenerations.controlGeneration
@@ -584,6 +534,9 @@ final class AppEnvironment {
             serverConfig = try await dataStore.loadWatchProvisioningServerConfig()?.normalized()
             if previousGateway != serverConfig?.gatewayKey {
                 lastWakeupRouteSyncAt = .distantPast
+                lastWakeupDeviceRegisterAt = .distantPast
+            }
+            if previousAlertWindowMinutes != snapshot.watchAlertWindowMinutes {
                 lastWakeupDeviceRegisterAt = .distantPast
             }
             await refreshChannelSubscriptions()
@@ -607,80 +560,9 @@ final class AppEnvironment {
         }
     }
 
-    func applyWatchMirrorActionAckFromPhone(_ ack: WatchMirrorActionAck) async {
-        do {
-            if !ack.ackedActionIds.isEmpty {
-                try await dataStore.deleteWatchMirrorActions(actionIds: ack.ackedActionIds)
-            }
-            watchSyncGenerations.mirrorActionAckGeneration = max(
-                watchSyncGenerations.mirrorActionAckGeneration,
-                ack.ackGeneration
-            )
-            await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
-        } catch {
-            recordAutomationRuntimeError(error, source: "watch.apply_mirror_action_ack")
-        }
-    }
-
-    func enqueueMirrorMessageAction(kind: WatchMirrorActionKind, messageId: String) async throws {
-        let action = WatchMirrorAction(
-            actionId: UUID().uuidString,
-            kind: kind,
-            messageId: messageId,
-            issuedAt: Date()
-        )
-        try await dataStore.enqueueWatchMirrorAction(action)
-        switch kind {
-        case .read:
-            _ = try await dataStore.markWatchLightMessageRead(messageId: messageId)
-        case .delete:
-            try await dataStore.deleteWatchLightMessage(messageId: messageId)
-        }
-        await refreshWatchLightCountsAndNotify()
-        await sendPendingMirrorActionsIfNeeded()
-    }
-
     func handleWatchSessionReachabilityChanged() async {
-        publishCurrentEffectiveModeStatus(noop: false)
-        if watchMode == .mirror {
-            await sendPendingMirrorActionsIfNeeded()
-        } else {
-            requestStandaloneRuntimeReconcile(reason: "watch_session_reachability")
-        }
-    }
-
-    private func sendPendingMirrorActionsIfNeeded() async {
-        guard watchMode == .mirror else { return }
-        let pending = (try? await dataStore.loadWatchMirrorActions()) ?? []
-        guard !pending.isEmpty else { return }
-        // Always send full pending action backlog so latest-only applicationContext remains lossless.
-        WatchSessionBridge.shared.sendMirrorActionBatch(
-            WatchMirrorActionBatch(
-                batchId: UUID().uuidString,
-                mode: .mirror,
-                actions: pending
-            )
-        )
-    }
-
-    private func handleWatchModeTransition(from previousMode: WatchMode, to nextMode: WatchMode) async {
-        guard previousMode != nextMode else { return }
-        await refreshChannelSubscriptions()
-        if previousMode == .standalone {
-            await deactivateStandaloneRuntime(reason: "watch_receiver_transition")
-        }
-        if nextMode == .standalone {
-            lastWakeupRouteSyncAt = .distantPast
-            lastWakeupDeviceRegisterAt = .distantPast
-            updateStandaloneReadiness(false, failureReason: nil, publish: false)
-            requestStandaloneRuntimeReconcile(
-                reason: "watch_receiver_transition",
-                presentDeniedPrompt: true
-            )
-        } else {
-            updateStandaloneReadiness(false, failureReason: nil, publish: false)
-            await sendPendingMirrorActionsIfNeeded()
-        }
+        publishCurrentStandaloneReadinessStatus()
+        requestStandaloneRuntimeReconcile(reason: "watch_session_reachability")
     }
 
     private func deactivateStandaloneRuntime(reason: String) async {
@@ -833,28 +715,6 @@ final class AppEnvironment {
         )
     }
 
-    private func publishCurrentEffectiveModeStatus(
-        sourceControlGeneration: Int64? = nil,
-        noop: Bool
-    ) {
-        let resolvedGeneration = sourceControlGeneration ?? watchSyncGenerations.controlGeneration
-        let status = WatchEffectiveModeStatus(
-            effectiveMode: watchMode,
-            sourceControlGeneration: resolvedGeneration,
-            appliedAt: Date(),
-            noop: noop,
-            status: .applied,
-            failureReason: nil
-        )
-        let readinessStatus = currentStandaloneReadinessStatus(sourceControlGeneration: resolvedGeneration)
-        WatchSessionBridge.shared.publishEffectiveModeStatusManifest(
-            status,
-            mode: watchMode,
-            controlGeneration: watchSyncGenerations.controlGeneration,
-            standaloneReadinessStatus: readinessStatus
-        )
-    }
-
     private func currentStandaloneReadinessStatus(
         sourceControlGeneration: Int64? = nil
     ) -> WatchStandaloneReadinessStatus {
@@ -892,35 +752,6 @@ final class AppEnvironment {
         standaloneReadinessFailureReason = resolvedReason
         guard publish, changed || sourceControlGeneration != nil else { return }
         publishCurrentStandaloneReadinessStatus(sourceControlGeneration: sourceControlGeneration)
-    }
-
-    private func publishMirrorSnapshotAck(generation: Int64, contentDigest: String) {
-        WatchSessionBridge.shared.publishMirrorSnapshotAckManifest(
-            WatchMirrorSnapshotAck(
-                generation: generation,
-                contentDigest: contentDigest,
-                appliedAt: Date()
-            ),
-            mode: watchMode,
-            controlGeneration: watchSyncGenerations.controlGeneration
-        )
-    }
-
-    private func sendMirrorSnapshotNack(
-        generation: Int64,
-        contentDigest: String,
-        failedStage: String,
-        errorDescription: String
-    ) {
-        WatchSessionBridge.shared.sendMirrorSnapshotNack(
-            WatchMirrorSnapshotNack(
-                generation: generation,
-                contentDigest: contentDigest,
-                failedStage: failedStage,
-                errorDescription: errorDescription,
-                reportedAt: Date()
-            )
-        )
     }
 
     private func sendStandaloneProvisioningNack(
@@ -980,7 +811,9 @@ final class AppEnvironment {
         case .persistent:
             break
         }
-        watchMode = await dataStore.loadWatchMode()
+        watchMode = .standalone
+        _ = await dataStore.loadWatchAlertWindowMinutes()
+        await dataStore.saveWatchMode(.standalone)
         watchSyncGenerations = await dataStore.loadWatchSyncGenerationState()
         do {
             serverConfig = try await dataStore.loadWatchProvisioningServerConfig()?.normalized()
@@ -989,9 +822,7 @@ final class AppEnvironment {
             recordAutomationRuntimeError(error, source: "storage.load_server_config", category: "storage")
             bootstrapErrors.append(localizationManager.localized("server_configuration_read_failed"))
         }
-        if await WatchSessionBridge.shared.consumeForcedReconfigureFlag() {
-            await resetWatchConnectivityStateForMigration(previousMode: watchMode)
-        }
+        _ = await WatchSessionBridge.shared.consumeForcedReconfigureFlag()
 
         do {
             let messages = try await dataStore.loadWatchLightMessages()
@@ -1015,27 +846,6 @@ final class AppEnvironment {
         if isStandaloneMode {
             requestStandaloneRuntimeReconcile(reason: "load_persisted_state", presentDeniedPrompt: true)
         }
-    }
-
-    private func resetWatchConnectivityStateForMigration(previousMode: WatchMode) async {
-        watchMode = .standalone
-        standaloneReady = false
-        standaloneReadinessFailureReason = nil
-        watchSyncGenerations = .zero
-        await dataStore.saveWatchMode(.standalone)
-        await dataStore.saveWatchSyncGenerationState(.zero)
-        cancelStandaloneRuntimeReconcile()
-        let pendingActions = (try? await dataStore.loadWatchMirrorActions()) ?? []
-        if !pendingActions.isEmpty {
-            try? await dataStore.deleteWatchMirrorActions(actionIds: pendingActions.map(\.actionId))
-        }
-        if previousMode == .standalone {
-            await deactivateStandaloneRuntime(reason: "watch_connectivity_migration")
-        }
-        await refreshChannelSubscriptions()
-        await refreshWatchLightCountsAndNotify()
-        publishCurrentEffectiveModeStatus(noop: false)
-        requestStandaloneRuntimeReconcile(reason: "watch_connectivity_migration")
     }
 
     func refreshPushAuthorization(
@@ -1435,7 +1245,7 @@ final class AppEnvironment {
         guard let payload else {
             return true
         }
-        return shouldPresentUserAlert(for: payload)
+        return WatchNotificationFreshness.shouldPresent(payload: payload, configuredMinutes: WatchNotificationFreshness.configuredMinutes(defaults: UserDefaults(suiteName: AppConstants.appGroupIdentifier) ?? .standard)) && shouldPresentUserAlert(for: payload)
     }
 
     private func ensureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
@@ -1467,8 +1277,15 @@ final class AppEnvironment {
         } else {
             isRetired = false
         }
+        let alertWindowMinutes = await dataStore.loadWatchAlertWindowMinutes()
+        let windowRegistrationConfirmed = lastRegisteredWatchAlertWindowMinutes == alertWindowMinutes
         if let existing, !isRetired,
-           Date().timeIntervalSince(lastWakeupDeviceRegisterAt) < privateWakeupDeviceRegisterInterval
+           Self.canReuseDeviceRegistration(
+               lastRegisteredAt: lastWakeupDeviceRegisterAt,
+               registeredWindowMinutes: lastRegisteredWatchAlertWindowMinutes,
+               currentWindowMinutes: alertWindowMinutes,
+               interval: privateWakeupDeviceRegisterInterval
+           )
         {
             return existing
         }
@@ -1476,14 +1293,14 @@ final class AppEnvironment {
             baseURL: config.baseURL,
             token: config.token,
             platform: platform,
-            existingDeviceKey: isRetired ? nil : existing
+            existingDeviceKey: isRetired ? nil : existing,
+            watchAlertWindowMinutes: alertWindowMinutes
         )
-        lastWakeupDeviceRegisterAt = Date()
         guard isCurrentGateway(config) else { return nil }
         guard let deviceKey = registered?.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
               !deviceKey.isEmpty,
               !isRetired || deviceKey != existing
-        else { return isRetired ? nil : existing }
+        else { return isRetired || !windowRegistrationConfirmed ? nil : existing }
         let saved = await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
         guard saved.didPersist else {
             recordAutomationRuntimeMessage(
@@ -1493,7 +1310,22 @@ final class AppEnvironment {
             )
             return nil
         }
+        lastWakeupDeviceRegisterAt = Date()
+        lastRegisteredWatchAlertWindowMinutes = alertWindowMinutes
         return deviceKey
+    }
+
+    // Keep the cache boundary explicit so native quality tests can challenge a
+    // window change inside the registration interval without waiting 45 seconds.
+    static func canReuseDeviceRegistration(
+        lastRegisteredAt: Date,
+        registeredWindowMinutes: Int?,
+        currentWindowMinutes: Int,
+        interval: TimeInterval,
+        now: Date = Date()
+    ) -> Bool {
+        registeredWindowMinutes == currentWindowMinutes
+            && now.timeIntervalSince(lastRegisteredAt) < interval
     }
 
     private func maintainDeviceKeyOnLaunch() async {
@@ -1689,13 +1521,6 @@ final class AppEnvironment {
 
     func qualitySyncRoute(config: ServerConfig) async {
         await syncProviderPullRoute(config: config, providerToken: "quality-provider-token")
-    }
-
-    func qualityChangeMode(_ mode: WatchMode) async {
-        let previous = watchMode
-        watchMode = mode
-        await dataStore.saveWatchMode(mode)
-        await handleWatchModeTransition(from: previous, to: mode)
     }
 
     func setQualityGatewayRouteResult(_ result: String) {

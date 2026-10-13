@@ -145,6 +145,7 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
     let channelCount: Int
     let watchProvisioningGeneration: Int64?
     let watchProvisioningDigest: String?
+    let watchAlertWindowMinutes: Int?
     let watchProvisioningGatewayBaseURL: String?
     let watchProvisioningTokenPresent: Bool
     let watchProvisioningChannelIDs: [String]
@@ -188,6 +189,7 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
         case channelCount = "channel_count"
         case watchProvisioningGeneration = "watch_provisioning_generation"
         case watchProvisioningDigest = "watch_provisioning_digest"
+        case watchAlertWindowMinutes = "watch_alert_window_minutes"
         case watchProvisioningGatewayBaseURL = "watch_provisioning_gateway_base_url"
         case watchProvisioningTokenPresent = "watch_provisioning_token_present"
         case watchProvisioningChannelIDs = "watch_provisioning_channel_ids"
@@ -490,6 +492,7 @@ final class PushGoWatchAutomationRuntime {
             channelCount: environment.channelSubscriptions.count,
             watchProvisioningGeneration: nil,
             watchProvisioningDigest: nil,
+            watchAlertWindowMinutes: nil,
             watchProvisioningGatewayBaseURL: nil,
             watchProvisioningTokenPresent: false,
             watchProvisioningChannelIDs: [],
@@ -645,6 +648,7 @@ final class PushGoWatchAutomationRuntime {
         let deviceKey = await environment.dataStore.cachedDeviceKey(for: platformIdentifier)
         let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
         let provisioningState = await environment.dataStore.loadWatchProvisioningState()
+        let watchAlertWindowMinutes = await environment.dataStore.loadWatchAlertWindowMinutes()
         let provisioningConfig = try? await environment.dataStore.loadWatchProvisioningServerConfig()?.normalized()
         let provisioningChannels = (try? await environment.dataStore.loadChannelSubscriptions(includeDeleted: false)) ?? []
         let ackPendingCount = 0
@@ -703,6 +707,7 @@ final class PushGoWatchAutomationRuntime {
             channelCount: environment.channelSubscriptions.count,
             watchProvisioningGeneration: provisioningState?.generation,
             watchProvisioningDigest: provisioningState?.contentDigest,
+            watchAlertWindowMinutes: watchAlertWindowMinutes,
             watchProvisioningGatewayBaseURL: provisioningConfig?.normalizedBaseURL.absoluteString,
             watchProvisioningTokenPresent: normalizedIdentifier(provisioningConfig?.token) != nil,
             watchProvisioningChannelIDs: provisioningChannels.map(\.channelId).sorted(),
@@ -1232,21 +1237,9 @@ final class PushGoWatchAutomationRuntime {
             return
         }
 
-        let exportedAt = Date()
-        let snapshot = WatchMirrorSnapshot(
-            generation: Int64(exportedAt.timeIntervalSince1970 * 1_000),
-            mode: .standalone,
-            messages: messages,
-            events: events,
-            things: things,
-            exportedAt: exportedAt,
-            contentDigest: WatchMirrorSnapshot.contentDigest(
-                messages: messages,
-                events: events,
-                things: things
-            )
-        )
-        try await environment.dataStore.mergeWatchMirrorSnapshot(snapshot)
+        for message in messages { try await environment.dataStore.upsertWatchLightPayload(.message(message)) }
+        for event in events { try await environment.dataStore.upsertWatchLightPayload(.event(event)) }
+        for thing in things { try await environment.dataStore.upsertWatchLightPayload(.thing(thing)) }
     }
 
     private func applyFixtureSubscriptions(
@@ -1344,6 +1337,7 @@ final class PushGoWatchAutomationRuntime {
             channelCount: environment.channelSubscriptions.count,
             watchProvisioningGeneration: nil,
             watchProvisioningDigest: nil,
+            watchAlertWindowMinutes: nil,
             watchProvisioningGatewayBaseURL: nil,
             watchProvisioningTokenPresent: false,
             watchProvisioningChannelIDs: [],

@@ -63,12 +63,12 @@ struct WatchConnectivityModelTests {
     func manifestRoundTripsEffectiveModeStatusThroughDictionaryPayload() throws {
         let manifest = WatchSyncManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            mode: .mirror,
+            mode: .standalone,
             controlGeneration: 88,
             mirrorPackage: nil,
             standalonePackage: nil,
             effectiveModeStatus: WatchEffectiveModeStatus(
-                effectiveMode: .mirror,
+                effectiveMode: .standalone,
                 sourceControlGeneration: 88,
                 appliedAt: Date(timeIntervalSince1970: 1_732_100_000),
                 noop: true,
@@ -76,7 +76,7 @@ struct WatchConnectivityModelTests {
                 failureReason: nil
             ),
             standaloneReadinessStatus: WatchStandaloneReadinessStatus(
-                effectiveMode: .mirror,
+                effectiveMode: .standalone,
                 standaloneReady: false,
                 sourceControlGeneration: 88,
                 provisioningGeneration: 0,
@@ -102,7 +102,7 @@ struct WatchConnectivityModelTests {
     func manifestApplicationContextSupportsNilAckCursorEventID() throws {
         let manifest = WatchSyncManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            mode: .mirror,
+            mode: .standalone,
             controlGeneration: 100,
             mirrorPackage: MirrorPackageRef(
                 packageID: "mirror-package",
@@ -164,59 +164,6 @@ struct WatchConnectivityModelTests {
     }
 
     @Test
-    func manifestRoundTripsInlineSnapshotPayloadThroughApplicationContext() throws {
-        let package = MirrorSnapshotPackage(
-            manifest: WatchTransferPackageManifest(
-                schemaVersion: WatchConnectivitySchema.currentVersion,
-                packageID: "inline-manifest-mirror",
-                kind: .mirrorSnapshot,
-                generation: 444,
-                createdAt: Date(timeIntervalSince1970: 1_732_000_444)
-            ),
-            snapshot: WatchMirrorSnapshot(
-                generation: 444,
-                mode: .mirror,
-                messages: [],
-                events: [],
-                things: [],
-                exportedAt: Date(timeIntervalSince1970: 1_732_000_445),
-                contentDigest: "inline-manifest-digest"
-            )
-        )
-        let inlinePayload = try #require(WatchConnectivityWire.encode(package))
-        let manifest = WatchSyncManifest(
-            schemaVersion: WatchConnectivitySchema.currentVersion,
-            mode: .mirror,
-            controlGeneration: 444,
-            mirrorPackage: MirrorPackageRef(
-                packageID: package.manifest.packageID,
-                generation: package.manifest.generation,
-                createdAt: package.manifest.createdAt
-            ),
-            standalonePackage: nil,
-            ackCursor: AckCursorRef(generation: 0, lastEventID: nil),
-            mirrorSnapshotAck: AppliedPackageAckRef(
-                generation: 444,
-                contentDigest: "inline-manifest-digest",
-                appliedAt: Date(timeIntervalSince1970: 1_732_000_446)
-            ),
-            standaloneProvisioningAck: nil,
-            inlineMirrorSnapshot: inlinePayload,
-            inlineStandaloneProvisioning: nil
-        )
-
-        let decoded = try #require(WatchSyncManifest.fromApplicationContext(manifest.applicationContext()))
-        let decodedInlinePayload = try #require(decoded.inlineMirrorSnapshot)
-        let decodedPackage = try #require(
-            WatchConnectivityWire.decode(MirrorSnapshotPackage.self, from: decodedInlinePayload)
-        )
-
-        #expect(decoded == manifest)
-        #expect(decodedPackage.manifest == package.manifest)
-        #expect(decodedPackage.snapshot == package.snapshot)
-    }
-
-    @Test
     func manifestDecodeFailsWhenDictionaryFieldsMissingAndBlobUnavailable() {
         let manifest = makeManifest(
             mirrorPackageID: "mirror-missing",
@@ -243,46 +190,6 @@ struct WatchConnectivityModelTests {
 
         let decoded = try #require(WatchEventEnvelope.fromUserInfo(envelope.userInfo()))
         #expect(decoded == envelope)
-    }
-
-    @Test
-    func mirrorSnapshotInlineEventRoundTripsThroughReliableEvent() throws {
-        let snapshot = WatchMirrorSnapshot(
-            generation: 200,
-            mode: .mirror,
-            messages: [],
-            events: [],
-            things: [],
-            exportedAt: Date(timeIntervalSince1970: 1_732_000_200),
-            contentDigest: "mirror-inline-digest"
-        )
-        let package = MirrorSnapshotPackage(
-            manifest: WatchTransferPackageManifest(
-                schemaVersion: WatchConnectivitySchema.currentVersion,
-                packageID: "mirror-inline-package",
-                kind: .mirrorSnapshot,
-                generation: 200,
-                createdAt: Date(timeIntervalSince1970: 1_732_000_201)
-            ),
-            snapshot: snapshot
-        )
-        let payload = try #require(WatchConnectivityWire.encode(package))
-        let envelope = WatchEventEnvelope(
-            eventID: "event-mirror-inline-1",
-            schemaVersion: WatchConnectivitySchema.currentVersion,
-            createdAt: Date(timeIntervalSince1970: 1_732_000_202),
-            kind: .mirrorSnapshotInline,
-            payload: payload
-        )
-
-        let decodedEnvelope = try #require(WatchEventEnvelope.fromUserInfo(envelope.userInfo()))
-        let decodedPackage = try #require(
-            WatchConnectivityWire.decode(MirrorSnapshotPackage.self, from: decodedEnvelope.payload)
-        )
-
-        #expect(decodedEnvelope == envelope)
-        #expect(decodedPackage.manifest == package.manifest)
-        #expect(decodedPackage.snapshot == package.snapshot)
     }
 
     @Test
@@ -416,124 +323,6 @@ struct WatchConnectivityModelTests {
     }
 
     @Test
-    func mirrorSnapshotDigestIgnoresGenerationAndExportTime() {
-        let messages = [
-            WatchLightMessage(
-                messageId: "msg-1",
-                title: "CPU high",
-                body: "Node overloaded",
-                imageURL: URL(string: "https://example.com/msg-1.png"),
-                url: URL(string: "https://example.com/msg-1"),
-                severity: "high",
-                receivedAt: Date(timeIntervalSince1970: 1_732_000_100),
-                isRead: false,
-                entityType: "message",
-                entityId: "msg-1",
-                notificationRequestId: "req-1"
-            )
-        ]
-        let events = [
-            WatchLightEvent(
-                eventId: "evt-1",
-                title: "Disk pressure",
-                summary: "Node above threshold",
-                state: "OPEN",
-                severity: "critical",
-                decryptionState: nil,
-                imageURL: URL(string: "https://example.com/evt-1.png"),
-                updatedAt: Date(timeIntervalSince1970: 1_732_000_101)
-            )
-        ]
-        let things = [
-            WatchLightThing(
-                thingId: "thing-1",
-                title: "Router",
-                summary: "Core router",
-                attrsJSON: #"{"role":"edge"}"#,
-                decryptionState: nil,
-                imageURL: URL(string: "https://example.com/thing-1.png"),
-                updatedAt: Date(timeIntervalSince1970: 1_732_000_102)
-            )
-        ]
-
-        let digestA = WatchMirrorSnapshot.contentDigest(messages: messages, events: events, things: things)
-        let digestB = WatchMirrorSnapshot.contentDigest(messages: messages, events: events, things: things)
-
-        let snapshotA = WatchMirrorSnapshot(
-            generation: 1,
-            mode: .mirror,
-            messages: messages,
-            events: events,
-            things: things,
-            exportedAt: Date(timeIntervalSince1970: 1_732_000_200),
-            contentDigest: digestA
-        )
-        let snapshotB = WatchMirrorSnapshot(
-            generation: 99,
-            mode: .mirror,
-            messages: messages,
-            events: events,
-            things: things,
-            exportedAt: Date(timeIntervalSince1970: 1_732_000_300),
-            contentDigest: digestB
-        )
-
-        #expect(snapshotA.contentDigest == snapshotB.contentDigest)
-    }
-
-    @Test
-    func mirrorSnapshotAckRoundTripsThroughReliableEvent() throws {
-        let ack = WatchMirrorSnapshotAck(
-            generation: 55,
-            contentDigest: "mirror-digest-55",
-            appliedAt: Date(timeIntervalSince1970: 1_732_000_559)
-        )
-        let payload = try #require(WatchConnectivityWire.encode(ack))
-        let envelope = WatchEventEnvelope(
-            eventID: "event-mirror-ack-1",
-            schemaVersion: WatchConnectivitySchema.currentVersion,
-            createdAt: Date(timeIntervalSince1970: 1_732_000_560),
-            kind: .mirrorSnapshotAck,
-            payload: payload
-        )
-
-        let decodedEnvelope = try #require(WatchEventEnvelope.fromUserInfo(envelope.userInfo()))
-        let decodedAck = try #require(
-            WatchConnectivityWire.decode(WatchMirrorSnapshotAck.self, from: decodedEnvelope.payload)
-        )
-
-        #expect(decodedEnvelope == envelope)
-        #expect(decodedAck == ack)
-    }
-
-    @Test
-    func mirrorSnapshotNackRoundTripsThroughReliableEvent() throws {
-        let nack = WatchMirrorSnapshotNack(
-            generation: 56,
-            contentDigest: "mirror-digest-56",
-            failedStage: "replace_watch_mirror_snapshot",
-            errorDescription: "database busy",
-            reportedAt: Date(timeIntervalSince1970: 1_732_000_561)
-        )
-        let payload = try #require(WatchConnectivityWire.encode(nack))
-        let envelope = WatchEventEnvelope(
-            eventID: "event-mirror-nack-1",
-            schemaVersion: WatchConnectivitySchema.currentVersion,
-            createdAt: Date(timeIntervalSince1970: 1_732_000_562),
-            kind: .mirrorSnapshotNack,
-            payload: payload
-        )
-
-        let decodedEnvelope = try #require(WatchEventEnvelope.fromUserInfo(envelope.userInfo()))
-        let decodedNack = try #require(
-            WatchConnectivityWire.decode(WatchMirrorSnapshotNack.self, from: decodedEnvelope.payload)
-        )
-
-        #expect(decodedEnvelope == envelope)
-        #expect(decodedNack == nack)
-    }
-
-    @Test
     func standaloneProvisioningNackRoundTripsThroughReliableEvent() throws {
         let nack = WatchStandaloneProvisioningNack(
             generation: 78,
@@ -586,8 +375,8 @@ struct WatchConnectivityModelTests {
         )
         let metadata = WatchTransferPackageManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            packageID: "mirror-current",
-            kind: .mirrorSnapshot,
+            packageID: "standalone-current",
+            kind: .standaloneProvisioning,
             generation: 10,
             createdAt: createdAt
         )
@@ -649,8 +438,8 @@ struct WatchConnectivityModelTests {
         )
         let metadata = WatchTransferPackageManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            packageID: "mirror-current",
-            kind: .mirrorSnapshot,
+            packageID: "standalone-current",
+            kind: .standaloneProvisioning,
             generation: 10,
             createdAt: createdAt
         )
@@ -743,7 +532,7 @@ struct WatchConnectivityModelTests {
         let createdAt = Date(timeIntervalSince1970: 1_732_010_400)
         let manifest = WatchSyncManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            mode: .mirror,
+            mode: .standalone,
             controlGeneration: 200,
             mirrorPackage: MirrorPackageRef(
                 packageID: "mirror-current",
@@ -759,8 +548,8 @@ struct WatchConnectivityModelTests {
         )
         let metadata = WatchTransferPackageManifest(
             schemaVersion: WatchConnectivitySchema.currentVersion,
-            packageID: "mirror-current",
-            kind: .mirrorSnapshot,
+            packageID: "standalone-current",
+            kind: .standaloneProvisioning,
             generation: 200,
             createdAt: createdAt
         )
@@ -827,5 +616,42 @@ struct WatchConnectivityModelTests {
             inlineMirrorSnapshot: nil,
             inlineStandaloneProvisioning: nil
         )
+    }
+}
+
+struct WatchMirrorRetirementTests {
+    @Test
+    func upgradeAbandonsLegacyRetriesAndRetainsProvisioningConfirmation() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let role = base.appendingPathComponent("watch-connectivity-v3/phone")
+        try FileManager.default.createDirectory(at: role, withIntermediateDirectories: true)
+        let encoder = WatchConnectivityWire.makeEncoder()
+        let mirror = WatchEventEnvelope(eventID: "old-delete", schemaVersion: 8, createdAt: Date(), kind: .mirrorActionBatch, payload: Data("legacy-delete".utf8))
+        let confirmation = WatchEventEnvelope(eventID: "provisioning-confirmation", schemaVersion: 8, createdAt: Date(), kind: .standaloneProvisioningAck, payload: Data("confirmation".utf8))
+        let events = try [mirror, confirmation].map { try JSONSerialization.jsonObject(with: encoder.encode($0)) }
+        let state: [String: Any] = ["schemaVersion": 7, "pendingEvents": events, "processedIncomingEventIDs": ["received-token"], "pendingForcedReconfigure": false]
+        try JSONSerialization.data(withJSONObject: state).write(to: role.appendingPathComponent("runtime-state.json"))
+        let runtime = WatchConnectivityRuntime(role: .phone, baseDirectory: base)
+        #expect(await runtime.pendingReliableEvents().map(\.eventID) == ["provisioning-confirmation"])
+        #expect(await runtime.acceptIncomingEvent(mirror) == false)
+        await runtime.enqueueReliableEvent(mirror)
+        #expect(await runtime.pendingReliableEvents().map(\.eventID) == ["provisioning-confirmation"])
+        #expect(await runtime.consumeForcedReconfigureFlag() == false)
+        let relaunched = WatchConnectivityRuntime(role: .phone, baseDirectory: base)
+        #expect(await relaunched.pendingReliableEvents().map(\.eventID) == ["provisioning-confirmation"])
+    }
+
+    @Test
+    func legacyProvisioningLoadsStandaloneAndDefaultWindow() throws {
+        let legacy = Data(#"{"generation":11,"mode":"mirror","channels":[],"contentDigest":"legacy"}"#.utf8)
+        let snapshot = try WatchConnectivityWire.makeDecoder().decode(WatchStandaloneProvisioningSnapshot.self, from: legacy)
+        #expect(snapshot.mode == .standalone)
+        #expect(snapshot.watchAlertWindowMinutes == 30)
+        let invalid = Data(#"{"generation":11,"mode":"standalone","channels":[],"contentDigest":"legacy","watchAlertWindowMinutes":-1}"#.utf8)
+        #expect(try WatchConnectivityWire.makeDecoder().decode(WatchStandaloneProvisioningSnapshot.self, from: invalid).watchAlertWindowMinutes == 30)
+        let a = WatchStandaloneProvisioningSnapshot.contentDigest(serverConfig: nil, notificationKeyMaterial: nil, channels: [], watchAlertWindowMinutes: 5)
+        let b = WatchStandaloneProvisioningSnapshot.contentDigest(serverConfig: nil, notificationKeyMaterial: nil, channels: [], watchAlertWindowMinutes: 60)
+        #expect(a != b)
     }
 }

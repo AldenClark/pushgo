@@ -74,7 +74,8 @@ struct ChannelSubscriptionServiceTests {
     func deviceRegisterRequestEncodesExpectedGatewayKeys() throws {
         let request = ChannelSubscriptionService.DeviceRegisterRequest(
             deviceKey: "dev-001",
-            platform: "ios"
+            platform: "ios",
+            watchAlertWindowMinutes: nil
         )
 
         let data = try JSONEncoder().encode(request)
@@ -84,6 +85,44 @@ struct ChannelSubscriptionServiceTests {
         #expect(object["platform"] as? String == "ios")
         #expect(object["channel_type"] == nil)
         #expect(object["provider_token"] == nil)
+        #expect(object["watch_alert_window_minutes"] == nil)
+    }
+
+    @Test(arguments: [5, 15, 30, 60])
+    func watchRegistrationSendsConfiguredWindowWithoutChangingPhoneRegistration(minutes: Int) async throws {
+        let host = "watch-window-\(UUID().uuidString.lowercased()).example"
+        let baseURL = try #require(URL(string: "https://\(host)/gateway"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            ChannelServiceURLProtocol.unregister(host: host)
+        }
+        let requests = OSAllocatedUnfairLock(initialState: [String]())
+        ChannelServiceURLProtocol.register(host: host) { request in
+            #expect(request.url?.path == "/gateway/device/register")
+            let body = try #require(ChannelServiceURLProtocol.bodyData(from: request))
+            let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let platform = try #require(object["platform"] as? String)
+            #expect(object["device_key"] as? String == "existing-\(platform)")
+            #expect(object["watch_alert_window_minutes"] as? Int == (platform == "watchos" ? minutes : nil))
+            requests.withLock { $0.append(platform) }
+            let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (response, Data("{\"success\":true,\"data\":{\"device_key\":\"existing-\(platform)\"}}".utf8))
+        }
+        let service = ChannelSubscriptionService(session: session)
+        for platform in ["watchos", "ios"] {
+            let result = try await service.registerDevice(
+                baseURL: baseURL,
+                token: nil,
+                platform: platform,
+                existingDeviceKey: "existing-\(platform)",
+                watchAlertWindowMinutes: minutes
+            )
+            #expect(result.deviceKey == "existing-\(platform)")
+        }
+        #expect(requests.withLock { $0 } == ["watchos", "ios"])
     }
 
     @Test

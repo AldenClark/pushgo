@@ -278,6 +278,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v24_durable_pending_local_deletions"))
             #expect(applied.contains("v25_canonical_derived_work_outbox"))
             #expect(applied.contains("v26_output_system_snapshot_work"))
+            #expect(applied.contains("v27_watch_standalone_alert_window"))
 
             let migratedTables = try await dbQueue.read { db in
                 try Set(
@@ -316,8 +317,9 @@ struct RuntimeQualityLargeScaleTests {
                 let queue = try DatabaseQueue(path: databaseURL.path)
                 try await queue.write { db in
                     try db.execute(sql: "DROP TABLE IF EXISTS canonical_derived_work;")
+                    try db.execute(sql: "ALTER TABLE app_settings DROP COLUMN watch_alert_window_minutes;")
                     try db.execute(
-                        sql: "DELETE FROM grdb_migrations WHERE identifier IN ('v25_canonical_derived_work_outbox', 'v26_output_system_snapshot_work');"
+                        sql: "DELETE FROM grdb_migrations WHERE identifier IN ('v25_canonical_derived_work_outbox', 'v26_output_system_snapshot_work', 'v27_watch_standalone_alert_window');"
                     )
                 }
             }
@@ -582,58 +584,6 @@ struct RuntimeQualityLargeScaleTests {
         }
     }
 
-    @Test(.enabled(if: runtimeQualityOptInEnabled))
-    func watchLightStoreHandlesTenThousandItemSnapshot() async throws {
-        let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        try await withIsolatedLocalDataStore { store, _ in
-            let generator = RuntimeQualityFixtureGenerator(seed: configuration.seed, platform: .watchOS)
-            let snapshot = generator.makeWatchSnapshot(
-                messageCount: configuration.watchScale,
-                eventCount: max(1, configuration.watchScale / 10),
-                thingCount: max(1, configuration.watchScale / 10)
-            )
-
-            let merge = try await RuntimeQualityMetric.measure("watch.merge.mirrorSnapshot", count: snapshot.messages.count) {
-                try await store.mergeWatchMirrorSnapshot(snapshot)
-            }
-            #expect(merge.seconds < configuration.maxWatchMergeSeconds)
-
-            let messages = try await RuntimeQualityMetric.measure("watch.read.messages", count: snapshot.messages.count) {
-                try await store.loadWatchLightMessages()
-            }
-            #expect(messages.value.count == snapshot.messages.count)
-            #expect(messages.seconds < configuration.maxWatchReadSeconds)
-
-            let events = try await RuntimeQualityMetric.measure("watch.read.events", count: snapshot.events.count) {
-                try await store.loadWatchLightEvents()
-            }
-            #expect(events.value.count == snapshot.events.count)
-            #expect(events.seconds < configuration.maxWatchReadSeconds)
-
-            let things = try await RuntimeQualityMetric.measure("watch.read.things", count: snapshot.things.count) {
-                try await store.loadWatchLightThings()
-            }
-            #expect(things.value.count == snapshot.things.count)
-            #expect(things.seconds < configuration.maxWatchReadSeconds)
-
-            let repeatedReloads = try await RuntimeQualityMetric.measure("watch.read.repeatedReloads", count: snapshot.messages.count * 10) {
-                for _ in 0 ..< 10 {
-                    let reloadedMessages = try await store.loadWatchLightMessages()
-                    let reloadedEvents = try await store.loadWatchLightEvents()
-                    let reloadedThings = try await store.loadWatchLightThings()
-                    #expect(reloadedMessages.count == snapshot.messages.count)
-                    #expect(reloadedEvents.count == snapshot.events.count)
-                    #expect(reloadedThings.count == snapshot.things.count)
-                }
-            }
-            #expect(repeatedReloads.seconds < configuration.maxWatchReadSeconds * 10)
-
-            if let residentMemoryBytes = RuntimeQualityResourceSnapshot.current().residentMemoryBytes {
-                print("[runtime-quality] metric=watch.resource.residentMemory count=\(configuration.watchScale) resident_memory_bytes=\(residentMemoryBytes)")
-                #expect(residentMemoryBytes < configuration.maxWatchResidentMemoryBytes)
-            }
-        }
-    }
 
     @Test(.enabled(if: runtimeQualityOptInEnabled))
     func concurrentOutOfOrderBatchesConvergeWithoutDuplicates() async throws {
@@ -1123,6 +1073,7 @@ struct RuntimeQualityLargeScaleTests {
         )
         try dbQueue.write { db in
             try db.execute(sql: """
+                ALTER TABLE app_settings DROP COLUMN watch_alert_window_minutes;
                 DROP TRIGGER IF EXISTS messages_stats_after_insert;
                 DROP TRIGGER IF EXISTS messages_stats_after_delete;
                 DROP TRIGGER IF EXISTS messages_stats_after_update;
@@ -1149,7 +1100,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v23_trigram_message_search_index',
                     'v24_durable_pending_local_deletions',
                     'v25_canonical_derived_work_outbox',
-                    'v26_output_system_snapshot_work'
+                    'v26_output_system_snapshot_work',
+                    'v27_watch_standalone_alert_window'
                 );
                 """)
         }

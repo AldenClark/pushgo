@@ -297,11 +297,11 @@
     },
     {
       "id": "watch",
-      "paths": ["Apps/PushGo-watchOS/**", "Shared/Models/WatchLightModels.swift", "Shared/Utilities/WatchLightQuantizer.swift", "Apps/PushGo-iOS/App/Watch*.swift", "Extensions/PushGoNSE-watchOS/**", "Extensions/PushGoWidgets/*Watch*.swift"],
+      "paths": ["Apps/PushGo-watchOS/**", "Shared/Models/WatchLightModels.swift", "Shared/Utilities/WatchLightQuantizer.swift", "Shared/Utilities/WatchNotificationFreshness.swift", "Apps/PushGo-iOS/App/Watch*.swift", "Extensions/PushGoNSE-watchOS/**", "Extensions/PushGoWidgets/*Watch*.swift"],
       "capabilities": ["watch-messages-events-things", "watch-receiver-complication"],
       "minimum_evidence": ["Watch model/connectivity/quantizer tests", "App-owned watchOS simulator UI journey with visible fields, delete cancellation/commit, and relaunch persistence", "message Store failure remains owned by Messages while Event/Thing tasks stay usable"],
       "lane": "nightly",
-      "known_evidence_gaps": ["The 2026-10-05 four-case native Watch smoke covers Messages/Event/Thing UI, exact read/delete across relaunch, rendered fixture images, Receiver Health copy, migration and route/provisioning recovery. Signed Keychain/App Group integration, provider decryption/delivery, paired physical notification/receiver/complication and VoiceOver remain unproven. Legacy mirror ACK is tested only with an explicit mixed-version commitment."],
+      "known_evidence_gaps": ["The 2026-10-05 four-case native Watch smoke covers Messages/Event/Thing UI, exact read/delete across relaunch, rendered fixture images, Receiver Health copy, migration and route/provisioning recovery. Signed Keychain/App Group integration, provider decryption/delivery, paired physical notification/receiver/complication and VoiceOver remain unproven. The current iPhone/Watch contract is standalone only. Upgrade explicitly discards old unsynced Watch-to-phone mirror read/delete actions without settlement or pending UI, while preserving existing Watch content, local read state, gateway delivery ACK/queues and provisioning. Paired physical delivery and notification acceptance remain separate."],
       "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
     },
     {

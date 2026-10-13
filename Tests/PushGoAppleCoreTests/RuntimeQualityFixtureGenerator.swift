@@ -119,56 +119,6 @@ struct RuntimeQualityFixtureGenerator {
         return (newer, stale)
     }
 
-    func makeWatchSnapshot(messageCount: Int, eventCount: Int, thingCount: Int) -> WatchMirrorSnapshot {
-        let messages = (0 ..< messageCount).map { index in
-            WatchLightMessage(
-                messageId: "watch-message-\(seed)-\(index)",
-                title: "Watch message \(index)",
-                body: body(index: index),
-                imageURL: index.isMultiple(of: 31) ? URL(string: "https://example.com/watch/\(index).webp") : nil,
-                url: index.isMultiple(of: 13) ? URL(string: "https://example.com/watch/message/\(index)") : nil,
-                severity: severity(index: index),
-                receivedAt: receivedAt(index: index),
-                isRead: index.isMultiple(of: 5),
-                entityType: "message",
-                entityId: "watch-message-\(index)",
-                notificationRequestId: "watch-request-\(seed)-\(index)"
-            )
-        }
-        let events = (0 ..< eventCount).map { index in
-            WatchLightEvent(
-                eventId: "watch-event-\(seed)-\(index)",
-                title: "Watch event \(index)",
-                summary: index.isMultiple(of: 7) ? nil : "Event summary \(index)",
-                state: ["open", "ack", "resolved"][index % 3],
-                severity: severity(index: index),
-                decryptionState: nil,
-                imageURL: index.isMultiple(of: 37) ? URL(string: "https://example.com/watch/event/\(index).png") : nil,
-                updatedAt: receivedAt(index: index)
-            )
-        }
-        let things = (0 ..< thingCount).map { index in
-            WatchLightThing(
-                thingId: "watch-thing-\(seed)-\(index)",
-                title: "Watch thing \(index)",
-                summary: "Thing state \(index)",
-                attrsJSON: #"{"status":"ok","index":"\#(index)"}"#,
-                decryptionState: nil,
-                imageURL: index.isMultiple(of: 41) ? URL(string: "https://example.com/watch/thing/\(index).jpg") : nil,
-                updatedAt: receivedAt(index: index)
-            )
-        }
-        return WatchMirrorSnapshot(
-            generation: Int64(seed & 0x7FFF_FFFF),
-            mode: .mirror,
-            messages: messages,
-            events: events,
-            things: things,
-            exportedAt: Date(timeIntervalSince1970: 1_800_100_000),
-            contentDigest: WatchMirrorSnapshot.contentDigest(messages: messages, events: events, things: things)
-        )
-    }
-
     private func makeMessage(
         index: Int,
         forcedMessageID: String? = nil,

@@ -1,51 +1,16 @@
 import Foundation
 
 enum WatchLightQuantizer {
-    private static let mirrorMessageLookbackDays = 7
-    private static let mirrorMessageLimit = 500
-
-    static func buildMirrorSnapshot(
-        messages: [PushMessage],
-        eventMessages: [PushMessage],
-        thingMessages: [PushMessage],
-        generation: Int64,
-        exportedAt: Date = Date()
-    ) -> WatchMirrorSnapshot {
-        let quantizedMessages = quantizeMirrorMessages(messages)
-        let quantizedEvents = quantizeEvents(eventMessages)
-        let quantizedThings = quantizeThings(thingMessages)
-        return WatchMirrorSnapshot(
-            generation: generation,
-            mode: .mirror,
-            messages: quantizedMessages,
-            events: quantizedEvents,
-            things: quantizedThings,
-            exportedAt: exportedAt,
-            contentDigest: WatchMirrorSnapshot.contentDigest(
-                messages: quantizedMessages,
-                events: quantizedEvents,
-                things: quantizedThings
-            )
-        )
-    }
-
-    static func quantizeMirrorMessages(_ messages: [PushMessage], now: Date = Date()) -> [WatchLightMessage] {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -mirrorMessageLookbackDays, to: now) ?? .distantPast
-        return messages
-            .filter(isTopLevelMessage)
-            .sorted { $0.receivedAt > $1.receivedAt }
-            .filter { $0.receivedAt >= cutoff }
-            .prefix(mirrorMessageLimit)
-            .compactMap(quantizeMirrorMessage)
-    }
+    private static let messageLookbackDays = 7
+    private static let messageLimit = 500
 
     static func quantizeMessages(_ messages: [PushMessage], now: Date = Date()) -> [WatchLightMessage] {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -mirrorMessageLookbackDays, to: now) ?? .distantPast
+        let cutoff = Calendar.current.date(byAdding: .day, value: -messageLookbackDays, to: now) ?? .distantPast
         return messages
             .filter(isTopLevelMessage)
             .sorted { $0.receivedAt > $1.receivedAt }
             .filter { $0.receivedAt >= cutoff }
-            .prefix(mirrorMessageLimit)
+            .prefix(messageLimit)
             .compactMap(quantizeStandaloneMessageRecord)
     }
 
@@ -209,13 +174,6 @@ enum WatchLightQuantizer {
                 result[key] = String(describing: pair.value)
             }
         }
-    }
-
-    private static func quantizeMirrorMessage(_ message: PushMessage) -> WatchLightMessage? {
-        guard let resolvedMessageId = normalizedIdentifier(message.messageId) else {
-            return nil
-        }
-        return buildLightMessage(message, resolvedMessageId: resolvedMessageId)
     }
 
     private static func quantizeStandaloneMessageRecord(_ message: PushMessage) -> WatchLightMessage? {
