@@ -1,5 +1,7 @@
 # PushGo 全栈质量体系实施进度
 
+2026-10-13 Android 闲置 FTS4 退役：仅删除生产 FTS 实体/Room 注册及闲置索引诊断，新增 32→33 前向迁移移除四个同步触发器与虚拟表；metadata 搜索、业务数据和九份历史 schema 保持不变。API 37 受控 emulator 的完整迁移类及两个既有搜索方法 13/13、既有搜索 UI 主链 1/1；标准 PR 312 JVM、本地化与编译/Debug 组装通过，影响脚本 246 项通过，零失败/跳过/重试。按用户范围未扩为整个通用 device、Nightly/Release 或性能测量；不承诺实机、签名升级、33→32 降级或性能收益。收口时五项受测输入及九份历史 schema 哈希核对一致，Android 本地提交为 `2cd780b92f83c53032baf1758fbdeb8d7a79a5a5`；本仓仅将对应进度另存为本地文档提交，不重复测试，不强制加入被忽略的文档，未推送或发布；[Android 记录及证据边界](../../../../pushgo-android/docs/quality/current-test-disposition.md)。本仓仅增加此跨平台进度记录，Apple 产品与已完成摘要切片不变。
+
 2026-10-03 当前源码 Release 产物复核：本地 `736ff6c`（相对已验证 `1e541eb3` 的产品/测试/构建/runner 输入无差异）完成未签名 iOS/watchOS 设备 SDK 与 macOS Release 构建，实际 12 个 App/扩展载荷版本/构建号一致，逐目标架构与 Mach-O 平台准确，20 项 Release 隔离 source guards PASS。本机工具链与原 CI 工具链分别记录；不替代 Simulator、物理设备、生产签名或正式质量门禁。详见 [统一证据](../../../docs/quality/evidence/apple-release-refresh-20261003.json)。
 
 2026-10-03 核心搜索分页修复：待删除消息隐藏后，旧搜索补页将游标推进到未消费批次末尾；真实 Store 43 条匹配/隐藏 2 条时只返回 23 条，漏 18 条。现在游标停在最后实际消费的消息，定点 2/2 通过，41 条完整顺序/唯一性、重开续页和 43 条 canonical 内容均准确。最终产品源码 `1e541eb3`：Core 457 注册/453 执行 PASS，4 个规模 opt-in 明确跳过；iOS 原生分页已读、搜索恢复、删除 Undo 重开 3/3 PASS，零重试/警告；macOS/watchOS/iOS 严格并发编译、TSAN 3 项和 Core CI PASS。首次 NSE 类型作用域编译失败已通过共享游标修正，原失败保留；正式质量 CI 仍因过期 QoS 登记与 P1-STORE deadline 失败，产品 NOT_RUN，未关闭整个 P1-SEARCH 或改动门禁。详见 [统一证据](../../../docs/quality/evidence/apple-search-paging-20261003.json)。
