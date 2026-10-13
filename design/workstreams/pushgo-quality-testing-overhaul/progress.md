@@ -947,3 +947,13 @@ Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getti
 收据 build/quality-results/apple-observation-repair-20261013/apple-focused-summary.json 为产品/测试系统双PASSED，选择/执行一致，无未完成项；原生 native/run-1-20261013-093215.xcresult，测试源哈希及原HEAD9d5c9e1/dirty身份见 source-identity.json 与source.patch。旧失败和整体BLOCKED保持原状；本次只更改UITest与现有记录，不宣称远端CI或正式发布就绪。修改留在本地未提交/未推送，任务Simulator关机，其他项目设备不动，完成后停止。
 
 随后按用户授权，将上述UITest修复及progress/capability记录一并提交到Apple本地仓库。提交前核对测试源码哈希与既有3/3原生收据一致；仅检查提交范围和Git差异，没有重跑测试、推送或正式发布。原始dirty验证身份与失败记录保留，不改写为新一轮验收。
+
+### 2026-10-13 Android 定时消息慢加载超时定点修复
+
+仅处理schedule38329841437的standardFixtureShowsAccurateContentAndSurvivesActivityRelaunch第486行慢提示超时。确定的测试系统错误是注入错位：QualityRuntime的2秒一次性延迟在PagingData发布前，UI慢提示却要求实际Paging.refresh Loading持续一秒。新增JVM边界回归在原代码准确失败（load立即完成），修复将延迟移到现有PagingSource.load hook，删除ViewModel发布前质量调用，保留Flow形状、Release原PagingSource、一次消费、取消传播及一次错误后重试。没有修改产品业务/UI状态逻辑；原完整instrumented测试一个字节未改，原2秒delay/4秒等待及所有准确数据、搜索、已读和重开断言不变。
+
+必要验证仅JVM两个方法：修复前1fail/1pass，修复后2/2；以及API37任务AVD上的原消息完整方法1/1、26.1s、零fail/skip/retry、准确selector核验EXECUTED。API35原CI环境没有复验，不能把本地通过写成远端CI全绿；原CI失败及原生XML/logcat保持。只读差异复核确认Release无fault等价性和错误重试/取消边界，无实质问题。证据与源哈希/patch见 sibling pushgo-android/build/quality-results/android-message-timeout-20261013/ 和该仓capability记录；未跑全量、其他平台、真机或签名，未推送/正式发布。
+
+代码及两个仓库的现有记录保留本地未提交。任务emulator-5560关闭，实体Redmi及其VPN/屏幕设置不动；完成后停止。
+
+随后按用户授权，Android修复、回归及capability记录保存为本地提交 1761b968da2e17e6883c1abe2361abec39da01c3；本仓只提交上述跨平台progress记录。提交内容与既有验证源哈希一致，没有重跑测试、推送或正式发布。
