@@ -557,8 +557,6 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let searchField = runtimeQualitySearchField(in: relaunched.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
-        searchField.tap()
-        searchField.typeText("P2 Split")
         let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
         let searchTargets = relaunched.app.staticTexts.matching(
             NSPredicate(format: "label == %@", "P2 Split Seed Message")
@@ -567,25 +565,35 @@ final class PushGo_iOSUITests: XCTestCase {
             in: relaunched.app,
             identifier: "state.messages.search.loading.slow"
         )
-        let slowSearchFeedback = relaunched.app.staticTexts.matching(
-            NSPredicate(
-                format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
-                "Messages are still loading",
-                "消息仍在加载",
-                "訊息仍在載入"
-            )
-        ).firstMatch
-        XCTAssertTrue(
-            slowSearchState.waitForExistence(timeout: 2.5),
-            "A deliberately slow search must expose its real slow-loading state before the result is available."
+        let slowSearchObserved = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                guard let snapshot = try? relaunched.app.snapshot() else { return false }
+                var nodes: [any XCUIElementSnapshot] = [snapshot]
+                var loading = false
+                var slowWarning = false
+                var targetVisible = false
+                while let node = nodes.popLast() {
+                    nodes.append(contentsOf: node.children)
+                    loading = loading || node.identifier == "state.messages.search.loading"
+                    if node.identifier == "state.messages.search.loading.slow" {
+                        slowWarning = slowWarning || [
+                            "Messages are still loading", "消息仍在加载", "訊息仍在載入",
+                        ].contains { node.label.localizedCaseInsensitiveContains($0) }
+                    }
+                    targetVisible = targetVisible || (
+                        node.elementType == .staticText && node.label == "P2 Split Seed Message"
+                    )
+                }
+                return loading && slowWarning && !targetVisible
+            },
+            object: nil
         )
-        XCTAssertTrue(
-            slowSearchFeedback.exists,
-            "The slow-loading state must expose the supported localized warning text."
-        )
-        XCTAssertFalse(
-            searchTarget.exists,
-            "The slow-search warning must be visible before the delayed result is available."
+        searchField.tap()
+        searchField.typeText("P2 Split")
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [slowSearchObserved], timeout: 2.5),
+            .completed,
+            "The same UI snapshot must show the loading container and localized slow warning before the exact target appears."
         )
         XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
         XCTAssertEqual(
@@ -1569,6 +1577,7 @@ final class PushGo_iOSUITests: XCTestCase {
             ].exists,
             "The delete action must start from the exact target detail"
         )
+        let deletionStartedAt = Date()
         tapWhenHittable(
             element(in: context.app, identifier: "action.message.delete"),
             timeout: 8
@@ -1582,11 +1591,15 @@ final class PushGo_iOSUITests: XCTestCase {
             "The test must observe a real undo opportunity before deliberately letting it expire"
         )
 
-        // An explicit XCTest process termination is the cheapest real
-        // interruption boundary available to this UI lane. The durable pending record must
-        // survive the termination, remain visible/suppressed after the next
-        // launch, and then complete exactly once at its original deadline.
+        // Interrupt before the original 15-second Undo deadline. Relaunch may
+        // finish after it, so observe suppression and final commit rather than
+        // requiring an already-expired Undo bar to reappear.
         context.app.terminate()
+        XCTAssertLessThan(
+            Date().timeIntervalSince(deletionStartedAt),
+            15,
+            "QUALITY_PRECONDITION: Process interruption must finish before the original Undo deadline."
+        )
         let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
         afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
@@ -1598,10 +1611,6 @@ final class PushGo_iOSUITests: XCTestCase {
             in: afterTermination.app,
             identifier: "state.pending_deletion"
         )
-        XCTAssertTrue(
-            restoredPendingDeletion.waitForExistence(timeout: 8),
-            "A pending deletion must survive a process termination before its deadline"
-        )
         XCTAssertFalse(
             element(
                 in: afterTermination.app,
@@ -1611,7 +1620,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(
             restoredPendingDeletion.waitForNonExistence(timeout: 15),
-            "The real undo deadline did not commit and clear the pending deletion"
+            "The original Undo window must close; the exact deletion and control data are checked below."
         )
         XCTAssertFalse(
             afterTermination.app.staticTexts["Quality Delete History Message"].exists,
@@ -1951,7 +1960,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         launch(context.app)
 
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertQualityRuntimeReady(in: context.app, timeout: 15, expectedSessionID: sessionID)
         XCTAssertEqual(
             element(in: context.app, identifier: "quality-runtime.ready").value as? String,
             sessionID
@@ -5903,49 +5912,48 @@ final class PushGo_iOSUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let ready = element(in: app, identifier: "quality-runtime.ready")
-        if ready.waitForExistence(timeout: timeout) {
-            if let expectedSessionID {
-                XCTAssertEqual(
-                    ready.value as? String,
-                    expectedSessionID,
-                    "QUALITY_PRECONDITION: App-owned quality session identity did not match the requested session.",
-                    file: file,
-                    line: line
-                )
-            }
-            return
-        }
-        let observedStatus = [
-            "invalid",
-            "missing",
-            "failed",
-            "seeding.messages.system_snapshot.end",
-            "seeding.messages.live_activity.end",
-            "seeding.messages.notification_snapshot.end",
-            "seeding.messages.system_search.end",
-            "seeding.messages.metadata.end",
-            "seeding.messages.search.end",
-            "seeding.messages.search.start",
-            "seeding.messages.backend.end",
-            "seeding.messages.backend.start",
-            "seeding.messages.saved",
-            "seeding.messages",
-            "seeding.entities",
-            "seeding.entities.saved",
-            "seeding.channels",
-            "seeding.channels.saved",
-            "seeding.refresh",
-            "seeding.complete",
-            "seeding",
-            "executing",
-            "finalizing",
-            "initializing",
-        ]
-            .first { element(in: app, identifier: "quality-runtime.\($0)").exists }
-            ?? "missing"
+        var observedStatus = "unobserved"
+        var observedSessionID: String?
+        let preparation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                guard let snapshot = try? app.snapshot() else { return false }
+                var nodes: [any XCUIElementSnapshot] = [snapshot]
+                var markers: [String: String] = [:]
+                var storageUnavailable = false
+                while let node = nodes.popLast() {
+                    nodes.append(contentsOf: node.children)
+                    if node.identifier.hasPrefix("quality-runtime.") {
+                        markers[node.identifier] = node.value as? String ?? ""
+                    }
+                    storageUnavailable = storageUnavailable || node.identifier == "state.storage.unavailable"
+                }
+                observedSessionID = markers["quality-runtime.ready"]
+                if observedSessionID != nil {
+                    observedStatus = expectedSessionID == nil || observedSessionID == expectedSessionID
+                        ? "ready" : "identity_mismatch"
+                    return true
+                }
+                if storageUnavailable {
+                    observedStatus = "storage_unavailable"
+                    return true
+                }
+                for status in ["invalid", "missing", "failed"] {
+                    if markers["quality-runtime.\(status)"] != nil {
+                        observedStatus = status
+                        return true
+                    }
+                }
+                observedStatus = markers.keys.sorted().first.map {
+                    String($0.dropFirst("quality-runtime.".count))
+                } ?? "unobserved"
+                return false
+            },
+            object: nil
+        )
+        let result = XCTWaiter.wait(for: [preparation], timeout: timeout)
+        if result == .completed && observedStatus == "ready" { return }
         XCTFail(
-            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus)",
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus); session: \(observedSessionID ?? "unobserved")",
             file: file,
             line: line
         )

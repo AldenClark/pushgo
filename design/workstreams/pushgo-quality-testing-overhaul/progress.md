@@ -931,3 +931,19 @@ Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getti
 本条只修改测试与记录，App/Core/package/config/scripts 输入与严格 SUCCESS 38223741966 一致；解密方法与刚通过的8e839f6完全相同。仅做两份 UITest Swift parse、diff检查，不重新运行 UI、真机、SDK全编译或全量验收。保留首败、BLOCKED、无关短暂状态观测失败及既有有效证据。按已授权范围完成 PR 整合；没有正式发布动作，不宣称完整 release gate 通过。
 
 最终 main 自动质量38234949191在App执行前失败：两条脚本合同仍要求旧 Safari 地址栏与 helper 名称，属于本次测试范围调整遗漏的同步，原始日志保留在 /tmp/pushgo-integration-apple-main-first.log。仅同步这两条到真实设置/消息入口、系统浏览器前台和返回原详情，原图片/数据/路由断言不动；两个原失败脚本用例定点执行2/2通过（0.004s），diff检查通过。无 App/UI 重跑；该补交不将原CI失败改写为成功。
+
+### 2026-10-13 Apple 测试准备与观察时序定点修复
+
+用户范围：先读取已有CI，只修会话准备、删除及慢查询观察，不为测试修改产品逻辑、不重跑全量、不扩展、不正式发布。读取时Apple schedule 38328355131（main9d5c9e1）仍在执行；Android schedule 38329841437（main8623fb5）FAILED，准确失败是standardFixtureShowsAccurateContentAndSurvivesActivityRelaunch在486行4秒Compose条件超时，未完成归因，原始日志保留于 /tmp/pushgo-android-nightly-38329841437-failed.log，本轮不修改或复验Android，也未触发新的CI。
+
+原Apple 38231537478的“missing”归因撤回：失败AX快照已有准确session的quality-runtime.ready和真实消息列表/四个Tab，未见storage unavailable；辅助诊断对二十余状态逐次查询后未命中就默认missing，不能证明输入丢失。当前纯测试准备每次只取一个不可变AX快照，同时检查状态与session身份，保留一次launch、原15秒预算；真实invalid/missing/failed/storage不可用或身份不符仍失败，无marker为unobserved，不在失败后补等或转PASS。该修复消除已确认的观察分时与错误分类，不声称定位了XCTest冷启动内部延迟的全部原因。
+
+删除保留15秒原Undo期限，并确认真实delete动作前记时到terminate完成少于15秒；重启可能在期限之后完成，因此移除“重启一定看到pending”这一失效时序要求。真实Undo机会、目标抑制、窗口最终关闭、准确目标永久删除、对照正文、第二次普通重启及删除目标外部入口的解释/回退均保留。跨重开pending字段/原deadline与已过期scope恢复职责仍由既有Store/Controller测试保护，本轮未改这些实现或重跑它们。
+
+慢查询保持3秒故障延迟及2.5秒观察预算。准备好查询后输入，同一AX快照同时要求loading容器、slow标识与支持的本地化警告、准确目标缺席；随后唯一准确结果/详情/空结果断言保留，独立错误重试方法未修改。不加延迟、不重试、不新增fault或暂停框架。
+
+必要复验：新建专用PushGo Quality iPhone / iPhone17Pro / iOS27.0，一批只选择原有三个方法，MAX_RETRIES=0。删除PASS63.664s、主导航PASS68.141s、标准消息（含慢查询）PASS84.046s；原生3/3、0失败/跳过/expected failure，严格verifier EXECUTED且拒绝runtime warnings通过。38项受影响脚本合同、Swift parse及diff检查通过；只读源码复核未发现丢断言/误通过的实质问题。未执行其他平台、Core全量、原CI iOS26.2、真机、签名或全量发布验收。
+
+收据 build/quality-results/apple-observation-repair-20261013/apple-focused-summary.json 为产品/测试系统双PASSED，选择/执行一致，无未完成项；原生 native/run-1-20261013-093215.xcresult，测试源哈希及原HEAD9d5c9e1/dirty身份见 source-identity.json 与source.patch。旧失败和整体BLOCKED保持原状；本次只更改UITest与现有记录，不宣称远端CI或正式发布就绪。修改留在本地未提交/未推送，任务Simulator关机，其他项目设备不动，完成后停止。
+
+随后按用户授权，将上述UITest修复及progress/capability记录一并提交到Apple本地仓库。提交前核对测试源码哈希与既有3/3原生收据一致；仅检查提交范围和Git差异，没有重跑测试、推送或正式发布。原始dirty验证身份与失败记录保留，不改写为新一轮验收。

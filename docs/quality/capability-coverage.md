@@ -595,3 +595,11 @@ Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言
 最终收敛补充：iOS26.2已通过Messages/Events/Things三页重选与search。Safari地址读取改为原生Command-L，删去私有工具栏/Tip和多层等待；密钥替换只对已确认short用对应长度普通删除+合法文本，不改公共helper。最终2条本地iOS27通过，原环境两条另行确认。额外删除/慢查询新失败由超出短暂期限的观测引起，保留失败与旧有效证据、不修无关实现/不重复全量；见同日progress。
 
 最终整合收口：原环境 CI 38231537478 的原生解密完整旅程 PASSED（178.174s）；主导航在 app-owned session missing 前置条件处失败，整个运行/收据保持 BLOCKED，不能称两项或 CI 全绿。按用户最新确认，iOS/macOS 两处外链调用均移除浏览器内部地址判断；生产 URL 分发未改、地址已核对、已有真实打开证据复用。本次仅 Swift parse 与 diff 检查，不新增 UI/全量运行，也不外推正式发布就绪。
+
+### 2026-10-13 iOS 测试准备、慢查询与删除时序
+
+仅测试代码调整：准备以同一AX快照核对状态/准确session，保留15秒且不重启重试；慢查询以同一快照核对loading、真实本地化文案及目标缺席，原3秒delay/2.5秒预算不变；删除保留期限前中断及准确删除/对照/普通重启/不存在目标回退，允许重启后Undo期限已结束。对应I/M/W App launch（测试前置）、I/M Search和I/M Delete/Undo三行，产品行为与原核心断言不变。
+
+受控iOS27.0原生三个既有方法3/3、零失败/跳过/expected failure/retry/runtime warning，严格EXECUTED；收据 build/quality-results/apple-observation-repair-20261013/apple-focused-summary.json 双PASSED，源码为9d5c9e1上的dirty UITest字节，身份/patch同目录。原iOS26.2失败及现有CI原状保留；没有原环境CI、全量、真机或发行包验收。详见同日workstream progress；本地未提交/推送，无产品源码改动。
+
+修复和相关记录随后按用户授权提交到Apple本地仓库，提交字节与既有验证的UITest哈希一致；未重跑测试、未推送、未正式发布。
