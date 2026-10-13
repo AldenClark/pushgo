@@ -3859,14 +3859,43 @@ private struct GRDBMessageRecord {
 
     init(row: Row) {
         let idString: String = row["id"]
-        id = UUID(uuidString: idString) ?? UUID()
+        let isReadInt: Int64 = row["is_read"]
+        let topLevelInt: Int64 = row["is_top_level_message"]
+        self.init(
+            row: row,
+            id: UUID(uuidString: idString) ?? UUID(),
+            isRead: isReadInt != 0,
+            projectionDestination: row["projection_destination"],
+            topLevelMessage: topLevelInt != 0
+        )
+    }
+
+    init(pendingRow: Row) {
+        // A waiting row has no canonical local identity or read state. Generate
+        // them only when its parent triggers replay, before duplicate checks.
+        self.init(
+            row: pendingRow,
+            id: UUID(),
+            isRead: false,
+            projectionDestination: nil,
+            topLevelMessage: false
+        )
+    }
+
+    private init(
+        row: Row,
+        id: UUID,
+        isRead: Bool,
+        projectionDestination: String?,
+        topLevelMessage: Bool
+    ) {
+        self.id = id
         messageId = row["message_id"]
         title = row["title"]
         body = row["body"]
         channel = row["channel"]
         url = row["url"]
-        let isReadInt: Int64 = row["is_read"]
-        isRead = isReadInt != 0
+        self.isRead = isRead
         let receivedAtEpoch: Double = row["received_at"]
         receivedAt = GRDBStore.dateFromStoredEpoch(receivedAtEpoch)
         rawPayloadJSON = row["raw_payload_json"]
@@ -3879,13 +3908,12 @@ private struct GRDBMessageRecord {
         entityId = row["entity_id"]
         eventId = row["event_id"]
         thingId = row["thing_id"]
-        projectionDestination = row["projection_destination"]
+        self.projectionDestination = projectionDestination
         eventState = row["event_state"]
         eventTimeEpoch = row["event_time_epoch"]
         observedTimeEpoch = row["observed_time_epoch"]
         occurredAtEpoch = row["occurred_at_epoch"]
-        let topLevelInt: Int64 = row["is_top_level_message"]
-        topLevelMessage = topLevelInt != 0
+        self.topLevelMessage = topLevelMessage
     }
 
     func toPushMessage(decoder: JSONDecoder) -> PushMessage {
@@ -3985,84 +4013,6 @@ private struct GRDBMessageRecord {
 
     private static func epochMilliseconds(from value: Any?) -> Int64? {
         PayloadTimeParser.epochMilliseconds(from: value)
-    }
-}
-
-private struct GRDBPendingInboundMessageRecord {
-    let pendingId: String
-    let thingId: String
-    let messageId: String
-    let rawPayloadJSON: String
-    let title: String
-    let body: String
-    let channel: String?
-    let url: String?
-    let receivedAt: Date
-    let status: String
-    let decryptionState: String?
-    let notificationRequestId: String?
-    let deliveryId: String?
-    let operationId: String?
-    let entityType: String
-    let entityId: String?
-    let eventId: String?
-    let eventState: String?
-    let eventTimeEpoch: Int64?
-    let observedTimeEpoch: Int64?
-    let occurredAtEpoch: Int64?
-
-    init(row: Row) {
-        pendingId = row["pending_id"]
-        thingId = row["thing_id"]
-        messageId = row["message_id"]
-        rawPayloadJSON = row["raw_payload_json"]
-        title = row["title"]
-        body = row["body"]
-        channel = row["channel"]
-        url = row["url"]
-        let receivedAtEpoch: Double = row["received_at"]
-        receivedAt = GRDBStore.dateFromStoredEpoch(receivedAtEpoch)
-        status = row["status"]
-        decryptionState = row["decryption_state"]
-        notificationRequestId = row["notification_request_id"]
-        deliveryId = row["delivery_id"]
-        operationId = row["operation_id"]
-        entityType = row["entity_type"]
-        entityId = row["entity_id"]
-        eventId = row["event_id"]
-        eventState = row["event_state"]
-        eventTimeEpoch = row["event_time_epoch"]
-        observedTimeEpoch = row["observed_time_epoch"]
-        occurredAtEpoch = row["occurred_at_epoch"]
-    }
-
-    func toMessageRecord() -> GRDBMessageRecord {
-        GRDBMessageRecord(
-            id: UUID(),
-            messageId: messageId,
-            title: title,
-            body: body,
-            channel: channel,
-            url: url,
-            isRead: false,
-            receivedAt: receivedAt,
-            rawPayloadJSON: rawPayloadJSON,
-            status: status,
-            decryptionState: decryptionState,
-            notificationRequestId: notificationRequestId,
-            deliveryId: deliveryId,
-            operationId: operationId,
-            entityType: entityType,
-            entityId: entityId,
-            eventId: eventId,
-            thingId: thingId,
-            projectionDestination: nil,
-            eventState: eventState,
-            eventTimeEpoch: eventTimeEpoch,
-            observedTimeEpoch: observedTimeEpoch,
-            occurredAtEpoch: occurredAtEpoch,
-            topLevelMessage: false
-        )
     }
 }
 
@@ -6976,27 +6926,28 @@ private actor GRDBStore {
         )
         guard !rows.isEmpty else { return }
         for row in rows {
-            let pending = GRDBPendingInboundMessageRecord(row: row)
-            let record = pending.toMessageRecord()
+            let pendingID: String = row["pending_id"]
+            let record = GRDBMessageRecord(pendingRow: row)
 
             if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
                 try db.execute(
-                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
                 )
                 continue
             }
-            if let identity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder)),
+            let operationIdentity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder))
+            if let identity = operationIdentity,
                try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) != nil
             {
                 try db.execute(
-                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
                 )
                 continue
             }
 
             try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
             try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
-            if let identity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder)) {
+            if let identity = operationIdentity {
                 try upsertOperationLedger(
                     identity: identity,
                     messageId: record.messageId,
@@ -7005,7 +6956,7 @@ private actor GRDBStore {
                 )
             }
             try db.execute(
-                sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+                sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
             )
         }
     }

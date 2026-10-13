@@ -972,3 +972,18 @@ Safari真实点击在地址中心，迟到Tip消费点击，页面已显示Getti
 首轮 Python3.9/测试类归属清单失败和设备选择器因注解同行而在执行前 BLOCKED 均保留；修正运行环境、既有清单计数及注解格式后形成上述新证据，没有业务断言失败或业务重试。影响计划 READY/release 仅为计划；用户明确限定必要检查及不测性能，未执行累计 Release/nightly、性能、真机/OEM、真实 Provider/FCM/Private 网络、签名安装/降级或发布。旧 baseline/startup profile 只删除失效 DAO/构造引用，未重新采样或宣称性能结果。
 
 证据 `../pushgo-android/build/quality-results/thing-event-lifecycle-20261013/{pr,data-final,ui}/`（最终两批 native-results 独立保存），`source-identity.json` 绑定未提交 HEAD 2cd780b 的最终源码哈希；验证后源码哈希未漂移。任务 AVD 已关闭，实体 Redmi 未操作。改动保留本地未提交、未推送、未发布，完成后停止。
+
+
+### 2026-10-13 Apple Thing 子 Message＋子 Event 共享生命周期有限简化（本地待审）
+
+用户要求两类合并判断并只做有净收益的等价简化。删除 `GRDBPendingInboundMessageRecord` 的完整字段载体、Row→pending→canonical 往返和 replay 的第二次 raw 解码/operation identity 解析；canonical 与 pending Row 直接共用一个字段读取 initializer，pending 只在原父到重放位置覆盖 UUID、未读、无 projection destination、非顶层四项。生产差异增加 42 行、删除 91 行，净减 49 行；新增责任仅为既有 canonical record 的一处私有共享构造入口，没有新表、队列、ledger、生命周期协调器或迁移。两类都登记“转换/搬运责任收敛完成”，不登记 pending/replay 已退役。
+
+保留 pending 独立存储及隐藏、两域同 message_id 不同内容、pending 多行容量、既有排序和 canonical 唯一性。顶层统计/保留清理只作用于顶层 Message，pending 无独立数量上限；不借简化改变范围。父到才创建新的本地 UUID，先 canonical 查重、再 ledger 查重、写 canonical/派生、写 ledger、删 pending；重复行消费与整个父事务失败回滚保持。通知 pending 仍是 ingress 成功并允许 ACK，父到不产生额外子 ingress 结果；本地读态、无 head 正式行可访问性、Thing 删除覆盖 pending 及删除后的迟到新子可再次等待保持。单条准备失败与批量事务失败的不同错误范围未统一。
+
+真实 macOS-host SwiftPM/GRDB/LocalDataStore 联合选集 13 个方法全部有通过证据：逐字段/raw 内容、UUID 时机、两域同 ID 共存、重复/顺序、父到、删除迟到、waiting/canonical 重开、读态、projection、operation ledger 与派生任务及通知上下文快照准确内容；真实 SQLite page quota 和 pending DELETE 故障验证回滚后恢复。Provider 集成走 durable inbox→真实 NotificationPersistenceCoordinator→Store→受控 URLProtocol HTTP，验证两类 pending 成功、原 gateway/device/legacy ACK 目的地、配置切换后的正确 ACK、父到不补子 ingress 结果。13 项首次执行通过；修正 ACK 新测试的主 actor 配置捕获警告后只重跑该 1 项通过，其他 12 项复用，未改生产源码。此前编译准备中的 StatementArguments 和跨 actor payload 夹具错误及失败修正日志全部保留为 FAILED_TEST_SYSTEM；无产品断言失败，无业务重试求绿。
+
+iOS 27.0 / PushGo Quality iPhone 的 `testThingLifecycleFiltersRelationsAndUnavailableTargetFallback` 原生 1/1，113.447 秒，零失败/跳过/expected failure/runtime warning，严格 verifier EXECUTED；覆盖真实筛选、删除、relaunch、准确 Thing 及 Message/Event/Update 关系终点。macOS 同一代表关系旅程在 App 启动前由 console lock 保护阻断：`macos_console_must_be_unlocked:Yes`，状态 BLOCKED、产品 NOT_RUN，不重试或绕过。NSE→host 只完成源码路径核对；新 host 集成不是 NSE 进程执行、真实 APNs、通知中心或物理后台证据。iOS scheme 附带编译的扩展/Watch 也不算这些平台的运行验收。
+
+`quality_changed.sh` 的 275 项脚本合同通过，影响计划 READY/pr；按本轮用户明确限定，采用上述定向 Store＋最少 UI，不扩累计 PR/Release、性能或设备矩阵。脚本日志里的故意 QoS FAILED_TEST_SYSTEM 是负控制测试输出，不是本批真实运行失败。schema/migration 未改，因此没有新增迁移/迁移失败选集；pending 删除及 SQLite FULL 属真实事务回滚证据。独立生产边界审查无发现，最终 diff 检查通过。macOS UI 阻断、NSE/runtime/真实 Provider/APNs/物理设备、完整 PR/Release、性能及旧二进制降级均未被推成通过。
+
+Apple 基线 `47f25fb7289fdf658357e940b2a79734fad1e42d` 保持不变；4 份源码/测试组合 SHA-256 `5aaab349fe430d1a32fcef57962a4d7bae7769250465fabf8ab03320f2aeecf3`，生产 LocalDataStore SHA-256 `90c5ff717de2f2b12295e9b4b13f94fb7fde55dc6dd7fa881dbe7ed55872403c`。逐文件输入和完整本批 patch、首次失败、13＋1 执行日志及原生 xcresult 见 `build/quality-results/apple-thing-child-lifecycle-20261013/`。修改仅为 1 份生产文件、3 份测试文件及本 progress/capability 记录，保留本地未提交/未推送/未发布；任务专用 iOS Simulator 已关闭。Watch 和其他六项未进入本批，完成后停止。

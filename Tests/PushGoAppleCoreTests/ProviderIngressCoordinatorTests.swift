@@ -186,6 +186,137 @@ private final class ProviderIngressHTTPState: Sendable {
 @MainActor
 struct ProviderIngressCoordinatorTests {
     @Test
+    func pendingThingChildrenKeepIngressSuccessAndAckDestinationThroughParentReplay() async throws {
+        @MainActor final class GatewayConfiguration {
+            var baseURL: URL
+            var deviceKey = "original-device"
+            init(baseURL: URL) { self.baseURL = baseURL }
+        }
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
+            let host = "provider-thing-children-\(UUID().uuidString.lowercased()).example"
+            let baseURL = try #require(URL(string: "https://\(host)/OriginalGateway"))
+            let gateway = GatewayConfiguration(baseURL: baseURL)
+            var persistedKinds: [String] = []
+            var appliedCount = 0
+            var providerErrors: [String] = []
+            let httpState = ProviderIngressHTTPState(pullPayloads: [])
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+            let session = URLSession(configuration: configuration)
+            ChannelServiceURLProtocol.register(host: host) { request in
+                try httpState.handle(request)
+            }
+            defer {
+                session.invalidateAndCancel()
+                ChannelServiceURLProtocol.unregister(host: host)
+            }
+
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let coordinator = ProviderIngressCoordinator(
+                platformSuffix: "test",
+                dataStore: store,
+                channelSubscriptionService: ChannelSubscriptionService(session: session),
+                notificationIngressInbox: inbox,
+                ackMarkerStore: ackStore,
+                wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier),
+                hooks: .init(
+                    isEnabled: { true },
+                    serverConfig: { ServerConfig(baseURL: gateway.baseURL, token: "test-token") },
+                    cachedDeviceKey: { gateway.deviceKey },
+                    hasPersistedNotification: { identity in
+                        guard let messageID = identity.messageId,
+                              let message = try? await store.loadMessage(messageId: messageID)
+                        else { return false }
+                        return identity.matchesPersisted(message)
+                    },
+                    persistPayloads: { inputs in
+                        let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                            inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) },
+                            dataStore: store
+                        )
+                        for outcome in outcomes {
+                            switch outcome {
+                            case .persistedPending: persistedKinds.append("pending")
+                            case .persistedMain: persistedKinds.append("main")
+                            case .duplicate: persistedKinds.append("duplicate")
+                            case .rejected: persistedKinds.append("rejected")
+                            case .failed: persistedKinds.append("failed")
+                            }
+                        }
+                        return outcomes.map(ProviderIngressPersistenceResult.init)
+                    },
+                    applyPersistenceResults: { appliedCount += $0.filter(\.isApplied).count },
+                    reportInboxProgress: { _ in },
+                    recordProviderError: { error, _ in providerErrors.append(String(describing: error)) }
+                )
+            )
+            for kind in ["message", "event"] {
+                let messageID = "ingress-child-\(kind)"
+                var payload: [String: String] = [
+                    "entity_type": kind,
+                    "entity_id": messageID,
+                    "message_id": messageID,
+                    "delivery_id": "delivery-\(kind)",
+                    "thing_id": "ingress-parent",
+                    "op_id": "operation-\(kind)",
+                    "title": "Exact \(kind) child",
+                    "body": "Persisted \(kind) body before parent",
+                    "base_url": baseURL.absoluteString,
+                    "provider_device_key": "original-device",
+                ]
+                if kind == "event" { payload["event_id"] = messageID }
+                let enqueued = await inbox.enqueue(codablePayload: payload.mapValues(AnyCodable.init), requestIdentifier: "delivery-\(kind)",
+                    source: "test.thing-child.host-inbox")
+                #expect(enqueued)
+            }
+            #expect(await coordinator.mergeInbox(reason: "test_pending_children", allowFallbackPull: false) == 2)
+            #expect(persistedKinds == ["pending", "pending"])
+            #expect(appliedCount == 2)
+            #expect(await inbox.pendingEntries().isEmpty)
+            #expect(try await store.loadMessage(messageId: "ingress-child-message") == nil)
+            #expect(try await store.loadMessage(messageId: "ingress-child-event") == nil)
+            let markers = await ackStore.pendingMarkers(limit: 10, minimumAge: 0)
+            #expect(Set(markers.map(\.record.deliveryId)) == ["delivery-message", "delivery-event"])
+            #expect(markers.allSatisfy {
+                $0.identity?.baseURLString == baseURL.absoluteString
+                    && $0.identity?.deviceKey == "original-device"
+                    && $0.identity?.ackContract == .legacySingle
+            })
+
+            gateway.baseURL = try #require(URL(string: "https://\(host)/NewGateway"))
+            gateway.deviceKey = "new-device"
+            await coordinator.drainAckMarkers(source: "test_pending_children_after_config_change")
+            #expect(httpState.recordedPaths() == ["/OriginalGateway/messages/ack", "/OriginalGateway/messages/ack"])
+            #expect(httpState.recordedDeviceKeys() == ["original-device", "original-device"])
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
+
+            #expect(await inbox.enqueue(payload: [
+                "entity_type": "thing", "entity_id": "ingress-parent", "thing_id": "ingress-parent",
+                "message_id": "ingress-parent-message", "title": "Exact ingress parent", "body": "Parent body",
+            ], requestIdentifier: "parent-request", source: "test.thing-child.parent"))
+            #expect(await coordinator.mergeInbox(reason: "test_parent_replay", allowFallbackPull: false) == 1)
+            #expect(persistedKinds == ["pending", "pending", "main"])
+            #expect(appliedCount == 3, "Parent replay must not emit additional child ingress results")
+            let detail = try await store.loadThingProjectionDetail(thingId: "ingress-parent")
+            #expect(detail.head?.title == "Exact ingress parent")
+            #expect(Set(detail.messages.compactMap(\.messageId)) == [
+                "ingress-parent-message", "ingress-child-message", "ingress-child-event",
+            ])
+            for kind in ["message", "event"] {
+                let child = try #require(try await store.loadMessage(messageId: "ingress-child-\(kind)"))
+                #expect(child.title == "Exact \(kind) child")
+                #expect(child.body == "Persisted \(kind) body before parent")
+                #expect(child.providerSourceBaseURL == baseURL.absoluteString)
+                #expect(child.deliveryId == "delivery-\(kind)")
+            }
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
+            #expect(providerErrors.isEmpty)
+        }
+    }
+
+    @Test
     func v2FullSyncTraversesEmptyCorruptPageAndUsesOuterDeliveryIds() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-pages-\(UUID().uuidString.lowercased()).example"
