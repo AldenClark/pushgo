@@ -277,6 +277,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v23_trigram_message_search_index"))
             #expect(applied.contains("v24_durable_pending_local_deletions"))
             #expect(applied.contains("v25_canonical_derived_work_outbox"))
+            #expect(applied.contains("v26_output_system_snapshot_work"))
 
             let migratedTables = try await dbQueue.read { db in
                 try Set(
@@ -316,7 +317,7 @@ struct RuntimeQualityLargeScaleTests {
                 try await queue.write { db in
                     try db.execute(sql: "DROP TABLE IF EXISTS canonical_derived_work;")
                     try db.execute(
-                        sql: "DELETE FROM grdb_migrations WHERE identifier = 'v25_canonical_derived_work_outbox';"
+                        sql: "DELETE FROM grdb_migrations WHERE identifier IN ('v25_canonical_derived_work_outbox', 'v26_output_system_snapshot_work');"
                     )
                 }
             }
@@ -1147,7 +1148,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v22_split_message_stats_and_revision_update_triggers',
                     'v23_trigram_message_search_index',
                     'v24_durable_pending_local_deletions',
-                    'v25_canonical_derived_work_outbox'
+                    'v25_canonical_derived_work_outbox',
+                    'v26_output_system_snapshot_work'
                 );
                 """)
         }

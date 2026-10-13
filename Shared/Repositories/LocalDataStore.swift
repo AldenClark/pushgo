@@ -220,7 +220,7 @@ private enum CanonicalDerivedWorkKind: String, CaseIterable, Sendable {
 
 private struct CanonicalDerivedWorkItem: Sendable {
     let workID: String
-    let messageID: UUID
+    let messageID: UUID?
     let kind: CanonicalDerivedWorkKind
     let owner: String
     let generation: Int64
@@ -359,6 +359,7 @@ actor LocalDataStore {
     private static let systemSearchHealthCheckInterval: TimeInterval = 12 * 60 * 60
     static let systemSurfaceSnapshotHealthCheckDefaultsKey = "pushgo.system_surface_snapshot.health_check.last_run.v1"
     private static let systemSurfaceSnapshotHealthCheckInterval: TimeInterval = 60 * 60
+    private static let systemSurfaceSnapshotMaximumAge: TimeInterval = 60 * 60 * 6
 
     private struct SharedResourcesKey: Hashable, Sendable {
         let appGroupIdentifier: String
@@ -944,7 +945,7 @@ actor LocalDataStore {
             )
         }
         await rebuildNotificationContextSnapshot()
-        await refreshSystemSurfaceSnapshot(reason: .delete)
+        await refreshSystemSurfaceSnapshot()
     }
 
     nonisolated func enqueueTrackedWrite(
@@ -1473,7 +1474,7 @@ actor LocalDataStore {
         }
         await rebuildSystemSearchIndex()
         await rebuildNotificationContextSnapshot()
-        await refreshSystemSurfaceSnapshot(reason: .delete)
+        await refreshSystemSurfaceSnapshot()
         return result
     }
 
@@ -1748,7 +1749,7 @@ actor LocalDataStore {
         } else if normalized.systemSearchEnabled {
             await rebuildSystemSearchIndex(settings: normalized)
         }
-        await refreshSystemSurfaceSnapshot(reason: .settingsChanged)
+        await refreshSystemSurfaceSnapshot()
     }
 
     func loadWatchMode() async -> WatchMode {
@@ -2398,7 +2399,7 @@ actor LocalDataStore {
         await progressObserver?("notification_snapshot.end")
         await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
         await progressObserver?("live_activity.end")
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        await refreshSystemSurfaceSnapshot()
         await progressObserver?("system_snapshot.end")
     }
 
@@ -2410,7 +2411,7 @@ actor LocalDataStore {
         await indexSystemSearchEntities(from: canonicalMessages)
         await mergeNotificationContextSnapshot(with: canonicalMessages)
         await PushGoLiveActivityCoordinator.handlePersistedMessages(canonicalMessages)
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        await refreshSystemSurfaceSnapshot()
     }
 
     func saveMessage(_ message: PushMessage) async throws {
@@ -2424,7 +2425,7 @@ actor LocalDataStore {
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
         await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        await refreshSystemSurfaceSnapshot()
     }
 
     func persistNotificationMessageIfNeeded(
@@ -2438,8 +2439,9 @@ actor LocalDataStore {
     }
 
     /// Commits one bounded ingress batch atomically. The durable derived-work
-    /// rows remain per canonical identity, while the worker is kicked once only
-    /// after the whole transaction is visible to database observers.
+    /// rows remain per canonical identity except for the shared system snapshot.
+    /// Its generation advances once per changed batch, and the worker is kicked
+    /// only after the whole transaction is visible to database observers.
     func persistNotificationMessagesIfNeeded(
         _ messages: [PushMessage]
     ) async throws -> [NotificationStoreSaveOutcome] {
@@ -2512,26 +2514,26 @@ actor LocalDataStore {
                 break
             }
             do {
-                guard let message = try await backend.loadMessage(id: item.messageID) else {
-                    try await backend.completeCanonicalDerivedWork(item, now: Date())
-                    processed += 1
-                    continue
-                }
-                switch item.kind {
-                case .search:
-                    if isTopLevelMessage(message) {
-                        try await updateSearchIndexReportingFailure(with: [message])
-                        try await rebuildMetadataIndexReportingFailure(with: [message])
-                        try await indexSystemSearchMessagesReportingFailure([message])
+                if item.kind == .systemSnapshot {
+                    try await rebuildSystemSurfaceSnapshotReportingFailure()
+                } else if let messageID = item.messageID,
+                          let message = try await backend.loadMessage(id: messageID) {
+                    switch item.kind {
+                    case .search:
+                        if isTopLevelMessage(message) {
+                            try await updateSearchIndexReportingFailure(with: [message])
+                            try await rebuildMetadataIndexReportingFailure(with: [message])
+                            try await indexSystemSearchMessagesReportingFailure([message])
+                        }
+                    case .notificationContext:
+                        if affectsNotificationContextSnapshot(message) {
+                            try await mergeNotificationContextSnapshotReportingFailure(with: [message])
+                        }
+                    case .liveActivity:
+                        try await canonicalLiveActivityHandler(message)
+                    case .systemSnapshot:
+                        break // Handled without a message dependency above.
                     }
-                case .notificationContext:
-                    if affectsNotificationContextSnapshot(message) {
-                        try await mergeNotificationContextSnapshotReportingFailure(with: [message])
-                    }
-                case .liveActivity:
-                    try await canonicalLiveActivityHandler(message)
-                case .systemSnapshot:
-                    try await refreshSystemSurfaceSnapshotReportingFailure(reason: .write)
                 }
                 try await backend.completeCanonicalDerivedWork(item, now: Date())
             } catch {
@@ -2640,7 +2642,7 @@ actor LocalDataStore {
             await indexSystemSearchMessages(searchable)
             await mergeNotificationContextSnapshot(with: storedMessages)
             await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
-            await refreshSystemSurfaceSnapshot(reason: .write)
+            await refreshSystemSurfaceSnapshot()
         }
     }
 
@@ -2648,7 +2650,7 @@ actor LocalDataStore {
         try await performBackendWrite { backend in
             try await backend.setMessageReadState(id: id, isRead: isRead)
         }
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        await refreshSystemSurfaceSnapshot()
     }
 
     func markMessagesRead(
@@ -2659,7 +2661,7 @@ actor LocalDataStore {
             try await backend.markMessagesRead(filter: filter, channel: channel)
         }
         if changed > 0 {
-            await refreshSystemSurfaceSnapshot(reason: .write)
+            await refreshSystemSurfaceSnapshot()
         }
         return changed
     }
@@ -2669,7 +2671,7 @@ actor LocalDataStore {
             try await backend.markMessagesRead(ids: ids)
         }
         if changed > 0 {
-            await refreshSystemSurfaceSnapshot(reason: .write)
+            await refreshSystemSurfaceSnapshot()
         }
         return changed
     }
@@ -2688,7 +2690,7 @@ actor LocalDataStore {
             PushGoSpotlightIdentifier(kind: .message, identifier: id.uuidString),
         ].compactMap { $0 })
         await rebuildNotificationContextSnapshot()
-        await refreshSystemSurfaceSnapshot(reason: .delete)
+        await refreshSystemSurfaceSnapshot()
     }
 
     func deleteMessages(ids: [UUID]) async throws -> Int {
@@ -2719,9 +2721,9 @@ actor LocalDataStore {
         }
         if !deletedIds.isEmpty {
             if deletedIds.count > 10 {
-                scheduleSystemSurfaceSnapshotRefresh(reason: .delete)
+                scheduleDerivedWorkDrain()
             } else {
-                await refreshSystemSurfaceSnapshot(reason: .delete)
+                await refreshSystemSurfaceSnapshot()
             }
         }
         return deletedIds.count
@@ -2747,7 +2749,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .message, identifier: deletedMessageId.uuidString),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
     }
 
@@ -2762,7 +2764,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .event, identifier: normalized),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2784,7 +2786,7 @@ actor LocalDataStore {
                 normalized.compactMap { PushGoSpotlightIdentifier(kind: .event, identifier: $0) }
             )
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2797,7 +2799,7 @@ actor LocalDataStore {
         if deletedCount > 0 {
             await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2813,7 +2815,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .thing, identifier: normalized),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2835,7 +2837,7 @@ actor LocalDataStore {
                 normalized.compactMap { PushGoSpotlightIdentifier(kind: .thing, identifier: $0) }
             )
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2848,7 +2850,7 @@ actor LocalDataStore {
         if deletedCount > 0 {
             await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedCount
     }
@@ -2881,7 +2883,7 @@ actor LocalDataStore {
             await clearSystemSearchIndex()
             if total > 0 {
                 await rebuildNotificationContextSnapshot()
-                await refreshSystemSurfaceSnapshot(reason: .delete)
+                await refreshSystemSurfaceSnapshot()
             }
             return total
         }
@@ -2902,7 +2904,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedIds.count
     }
@@ -2924,7 +2926,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedIds.count
     }
@@ -2946,7 +2948,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            await refreshSystemSurfaceSnapshot()
         }
         return deletedIds.count
     }
@@ -3021,7 +3023,7 @@ actor LocalDataStore {
             deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
         )
         await rebuildNotificationContextSnapshot()
-        await refreshSystemSurfaceSnapshot(reason: .delete)
+        await refreshSystemSurfaceSnapshot()
         return deletedIds.count
     }
     func warmCachesIfNeeded() async {
@@ -3032,7 +3034,7 @@ actor LocalDataStore {
         await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildTagMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildNotificationContextSnapshot()
-        await refreshSystemSurfaceSnapshot(reason: .warmCache)
+        await refreshSystemSurfaceSnapshot()
     }
 
     private func mergeNotificationContextSnapshot(with messages: [PushMessage]) async {
@@ -3102,35 +3104,16 @@ actor LocalDataStore {
         )
     }
 
-    private func refreshSystemSurfaceSnapshot(
-        reason: PushGoSystemSnapshotRefreshReason,
-        now: Date = Date()
-    ) async {
-        try? await refreshSystemSurfaceSnapshotReportingFailure(reason: reason, now: now)
-    }
-
-    private func refreshSystemSurfaceSnapshotReportingFailure(
-        reason: PushGoSystemSnapshotRefreshReason,
-        now: Date = Date()
-    ) async throws {
-        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
-        let policy = PushGoSystemSnapshotRefreshPolicy()
-        guard policy.shouldRefresh(now: now, reason: reason, defaults: defaults) else { return }
-        try await rebuildSystemSurfaceSnapshotReportingFailure(now: now)
-        policy.recordRefresh(now: now, defaults: defaults)
-    }
-
-    private func scheduleSystemSurfaceSnapshotRefresh(
-        reason: PushGoSystemSnapshotRefreshReason
-    ) {
-        Task { [weak self] in
-            await Task.yield()
-            await self?.refreshSystemSurfaceSnapshot(reason: reason)
-        }
+    private func refreshSystemSurfaceSnapshot(now: Date = Date()) async {
+        try? await rebuildSystemSurfaceSnapshotReportingFailure(now: now)
     }
 
     func rebuildSystemSurfaceSnapshot(now: Date = Date()) async {
-        try? await rebuildSystemSurfaceSnapshotReportingFailure(now: now)
+        // Focus/explicit system entry points may change state outside SQLite.
+        // Invalidate an existing background pass, but retain the immediate
+        // refresh instead of creating a second scheduler or waiting on its lease.
+        try? await backend?.invalidatePendingSystemSnapshot()
+        await refreshSystemSurfaceSnapshot(now: now)
     }
 
     private func rebuildSystemSurfaceSnapshotReportingFailure(now: Date = Date()) async throws {
@@ -3298,12 +3281,12 @@ actor LocalDataStore {
             return
         }
         guard let snapshot else {
-            await refreshSystemSurfaceSnapshot(reason: .healthCheck, now: now)
+            await refreshSystemSurfaceSnapshot(now: now)
             return
         }
         let age = now.timeIntervalSince(snapshot.generatedAt)
-        if snapshot.counts.totalMessages != total || age > PushGoSystemSnapshotRefreshPolicy.healthCheckMaximumAge {
-            await refreshSystemSurfaceSnapshot(reason: .healthCheck, now: now)
+        if snapshot.counts.totalMessages != total || age > Self.systemSurfaceSnapshotMaximumAge {
+            await refreshSystemSurfaceSnapshot(now: now)
         }
     }
 
@@ -5494,6 +5477,51 @@ private actor GRDBStore {
                     """
             )
         }
+        migrator.registerMigration("v26_output_system_snapshot_work") { db in
+            // Snapshot work describes the one current output, not a historical
+            // message. Replace its old rows once; other derived work is copied
+            // with its identity, generation, lease and retry state intact.
+            try db.execute(sql: """
+                CREATE TABLE canonical_derived_work_v26 (
+                    work_id TEXT PRIMARY KEY NOT NULL,
+                    local_message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'pending',
+                    generation INTEGER NOT NULL DEFAULT 1,
+                    lease_owner TEXT,
+                    lease_until_epoch_ms INTEGER,
+                    lease_generation INTEGER NOT NULL DEFAULT 0,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_epoch_ms INTEGER NOT NULL,
+                    created_at_epoch_ms INTEGER NOT NULL,
+                    updated_at_epoch_ms INTEGER NOT NULL,
+                    last_error TEXT,
+                    CHECK (kind IN ('search', 'notification_context', 'live_activity', 'system_snapshot')),
+                    CHECK (state IN ('pending', 'leased', 'retry_wait', 'completed')),
+                    CHECK (
+                        (kind = 'system_snapshot' AND work_id = 'system_snapshot' AND local_message_id IS NULL)
+                        OR (kind <> 'system_snapshot' AND work_id <> 'system_snapshot' AND local_message_id IS NOT NULL)
+                    ),
+                    UNIQUE(local_message_id, kind)
+                );
+                INSERT INTO canonical_derived_work_v26
+                    SELECT * FROM canonical_derived_work WHERE kind <> 'system_snapshot';
+                INSERT INTO canonical_derived_work_v26 (
+                    work_id, kind, state, generation, next_attempt_epoch_ms,
+                    created_at_epoch_ms, updated_at_epoch_ms
+                )
+                SELECT 'system_snapshot', 'system_snapshot', 'pending', 1,
+                    CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                    MIN(created_at_epoch_ms), CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                FROM canonical_derived_work
+                WHERE kind = 'system_snapshot' AND state <> 'completed'
+                HAVING COUNT(*) > 0;
+                DROP TABLE canonical_derived_work;
+                ALTER TABLE canonical_derived_work_v26 RENAME TO canonical_derived_work;
+                CREATE INDEX idx_canonical_derived_work_due
+                    ON canonical_derived_work(state, next_attempt_epoch_ms, lease_until_epoch_ms, created_at_epoch_ms);
+                """)
+        }
 	        return migrator
 	    }()
 
@@ -6020,6 +6048,23 @@ private actor GRDBStore {
         try dbQueue.write(action)
     }
 
+    /// Keep canonical mutations and their snapshot invalidation in one commit.
+    /// The existing revision covers message content, read state and deletion,
+    /// including entity records. Compare once per transaction, not per message.
+    private func writeCanonicalMessages<T>(
+        enqueueSystemSnapshot: Bool = false,
+        _ action: (Database) throws -> T
+    ) throws -> T {
+        try write { db in
+            let revision = try Int64.fetchOne(db, sql: "SELECT revision FROM message_store_revision WHERE id = 1;")
+            let result = try action(db)
+            if try Int64.fetchOne(db, sql: "SELECT revision FROM message_store_revision WHERE id = 1;") != revision {
+                try markSystemSnapshotDirty(db: db, enqueueIfNeeded: enqueueSystemSnapshot)
+            }
+            return result
+        }
+    }
+
     func enqueuePendingLocalDeletion(
         summary: String,
         undoLabel: String,
@@ -6297,7 +6342,7 @@ private actor GRDBStore {
         owner: String,
         now: Date
     ) async throws -> PendingLocalDeletionCleanup {
-        try write { db in
+        try writeCanonicalMessages { db in
             guard let record = try pendingLocalDeletion(id: id, db: db),
                   record.state == .executing,
                   record.leaseOwner == owner
@@ -7895,7 +7940,7 @@ private actor GRDBStore {
             throw localStoreError("Invalid gateway/channel_id for atomic channel removal.")
         }
 
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let channelCondition = Self.channelMatchCondition(value: normalizedChannelId)
             let messageRecords = try Row.fetchAll(
                 db,
@@ -7972,7 +8017,11 @@ private actor GRDBStore {
 
     func saveAppSettings(_ snapshot: AppSettingsSnapshot) async throws {
         try write { db in
+            let previousSystemSettings = try loadAppSettings(db)?.systemIntegrationSettingsData
             try saveAppSettings(snapshot, db: db)
+            if previousSystemSettings != snapshot.systemIntegrationSettingsData {
+                try markSystemSnapshotDirty(db: db, enqueueIfNeeded: false)
+            }
         }
     }
 
@@ -8650,7 +8699,7 @@ private actor GRDBStore {
     func persistNotificationMessageIfNeeded(
         _ message: PushMessage
     ) async throws -> NotificationStoreSaveOutcome {
-        try write { db in
+        try writeCanonicalMessages(enqueueSystemSnapshot: true) { db in
             try persistNotificationMessageIfNeeded(message, db: db)
         }
     }
@@ -8659,7 +8708,7 @@ private actor GRDBStore {
         _ messages: [PushMessage]
     ) async throws -> [NotificationStoreSaveOutcome] {
         guard !messages.isEmpty else { return [] }
-        return try write { db in
+        return try writeCanonicalMessages(enqueueSystemSnapshot: true) { db in
             try messages.map { try persistNotificationMessageIfNeeded($0, db: db) }
         }
     }
@@ -8763,7 +8812,7 @@ private actor GRDBStore {
 
     private func enqueueCanonicalDerivedWork(messageID: UUID, db: Database) throws {
         let now = Int64((Date().timeIntervalSince1970 * 1_000).rounded())
-        for kind in CanonicalDerivedWorkKind.allCases {
+        for kind in CanonicalDerivedWorkKind.allCases where kind != .systemSnapshot {
             let workID = "\(messageID.uuidString.lowercased()):\(kind.rawValue)"
             try db.execute(
                 sql: """
@@ -8786,6 +8835,46 @@ private actor GRDBStore {
                 // TEXT foreign keys are byte-for-byte, so preserve that spelling.
                 arguments: [workID, messageID.uuidString, kind.rawValue, now, now, now]
             )
+        }
+    }
+
+    private func markSystemSnapshotDirty(db: Database, enqueueIfNeeded: Bool) throws {
+        let now = Int64((Date().timeIntervalSince1970 * 1_000).rounded())
+        if enqueueIfNeeded {
+            try db.execute(
+                sql: """
+                    INSERT INTO canonical_derived_work (
+                        work_id, kind, state, generation, next_attempt_epoch_ms,
+                        created_at_epoch_ms, updated_at_epoch_ms
+                    ) VALUES ('system_snapshot', 'system_snapshot', 'pending', 1, ?, ?, ?)
+                    ON CONFLICT(work_id) DO UPDATE SET
+                        generation = canonical_derived_work.generation + 1,
+                        state = CASE WHEN canonical_derived_work.state = 'leased' THEN 'leased' ELSE 'pending' END,
+                        next_attempt_epoch_ms = excluded.next_attempt_epoch_ms,
+                        updated_at_epoch_ms = excluded.updated_at_epoch_ms,
+                        last_error = NULL;
+                    """,
+                arguments: [now, now, now]
+            )
+        } else {
+            // Immediate refreshes keep their existing timing. They only rearm
+            // work already in flight; they do not create another queued rebuild.
+            try db.execute(
+                sql: """
+                    UPDATE canonical_derived_work
+                    SET generation = generation + 1,
+                        state = CASE WHEN state = 'leased' THEN 'leased' ELSE 'pending' END,
+                        next_attempt_epoch_ms = ?, updated_at_epoch_ms = ?, last_error = NULL
+                    WHERE work_id = 'system_snapshot' AND state <> 'completed';
+                    """,
+                arguments: [now, now]
+            )
+        }
+    }
+
+    func invalidatePendingSystemSnapshot() async throws {
+        try write { db in
+            try markSystemSnapshotDirty(db: db, enqueueIfNeeded: false)
         }
     }
 
@@ -8817,6 +8906,12 @@ private actor GRDBStore {
             let workID: String = row["work_id"]
             let expectedGeneration: Int64 = row["generation"]
             let expectedLeaseGeneration: Int64 = row["lease_generation"]
+            let messageIDText: String? = row["local_message_id"]
+            let messageID = messageIDText.flatMap(UUID.init(uuidString:))
+            guard let kindRaw: String = row["kind"],
+                  let kind = CanonicalDerivedWorkKind(rawValue: kindRaw),
+                  kind == .systemSnapshot ? messageIDText == nil : messageID != nil
+            else { throw localStoreError("Invalid canonical derived-work identity.") }
             try db.execute(
                 sql: """
                     UPDATE canonical_derived_work
@@ -8831,12 +8926,7 @@ private actor GRDBStore {
                     expectedLeaseGeneration, nowMs, nowMs,
                 ]
             )
-            guard db.changesCount == 1,
-                  let messageIDText: String = row["local_message_id"],
-                  let messageID = UUID(uuidString: messageIDText),
-                  let kindRaw: String = row["kind"],
-                  let kind = CanonicalDerivedWorkKind(rawValue: kindRaw)
-            else { return nil }
+            guard db.changesCount == 1 else { return nil }
             return CanonicalDerivedWorkItem(
                 workID: workID,
                 messageID: messageID,
@@ -8871,16 +8961,19 @@ private actor GRDBStore {
         now: Date
     ) async throws {
         try write { db in
+            let nowMs = Int64((now.timeIntervalSince1970 * 1_000).rounded())
             try db.execute(
                 sql: """
                     UPDATE canonical_derived_work
-                    SET state = 'completed', lease_owner = NULL, lease_until_epoch_ms = NULL,
+                    SET state = CASE WHEN generation = ? THEN 'completed' ELSE 'pending' END,
+                        next_attempt_epoch_ms = CASE WHEN generation = ? THEN next_attempt_epoch_ms ELSE ? END,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL,
                         updated_at_epoch_ms = ?, last_error = NULL
                     WHERE work_id = ? AND state = 'leased' AND lease_owner = ?
-                      AND generation = ? AND lease_generation = ?;
+                      AND (generation = ? OR kind = 'system_snapshot') AND lease_generation = ?;
                     """,
                 arguments: [
-                    Int64((now.timeIntervalSince1970 * 1_000).rounded()), item.workID,
+                    item.generation, item.generation, nowMs, nowMs, item.workID,
                     item.owner, item.generation, item.leaseGeneration,
                 ]
             )
@@ -8893,18 +8986,22 @@ private actor GRDBStore {
         error: String
     ) async throws {
         try write { db in
+            let nowMs = Int64((Date().timeIntervalSince1970 * 1_000).rounded())
             try db.execute(
                 sql: """
                     UPDATE canonical_derived_work
-                    SET state = 'retry_wait', lease_owner = NULL, lease_until_epoch_ms = NULL,
-                        attempt_count = attempt_count + 1, next_attempt_epoch_ms = ?,
-                        updated_at_epoch_ms = ?, last_error = ?
+                    SET state = CASE WHEN generation = ? THEN 'retry_wait' ELSE 'pending' END,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        attempt_count = attempt_count + 1,
+                        next_attempt_epoch_ms = CASE WHEN generation = ? THEN ? ELSE ? END,
+                        updated_at_epoch_ms = ?, last_error = CASE WHEN generation = ? THEN ? ELSE NULL END
                     WHERE work_id = ? AND state = 'leased' AND lease_owner = ?
-                      AND generation = ? AND lease_generation = ?;
+                      AND (generation = ? OR kind = 'system_snapshot') AND lease_generation = ?;
                     """,
                 arguments: [
+                    item.generation, item.generation,
                     Int64((retryAfter.timeIntervalSince1970 * 1_000).rounded()),
-                    Int64((Date().timeIntervalSince1970 * 1_000).rounded()),
+                    nowMs, nowMs, item.generation,
                     String(error.prefix(1_000)), item.workID, item.owner,
                     item.generation, item.leaseGeneration,
                 ]
@@ -8926,7 +9023,7 @@ private actor GRDBStore {
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
         guard !messages.isEmpty else { return }
-        try write { db in
+        try writeCanonicalMessages { db in
             for message in messages {
                 let canonical = canonicalizedMessageForPersistence(message)
                 guard isEntityScopedWrite(canonical) else { continue }
@@ -8972,7 +9069,7 @@ private actor GRDBStore {
         let maintainDerivedData = true
         var storedMessages: [PushMessage] = []
         storedMessages.reserveCapacity(messages.count)
-        try write { db in
+        try writeCanonicalMessages { db in
             let useBulkProjectionHeads = messages.count > 500
             var existingByMessageID: [String: (id: UUID, receivedAt: Date, isRead: Bool)] = [:]
             var eventProjectionHeads: [String: GRDBMessageRecord] = [:]
@@ -9712,7 +9809,7 @@ private actor GRDBStore {
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
-        try write { db in
+        try writeCanonicalMessages { db in
             let sql = """
                 UPDATE messages
                 SET is_read = \(isRead ? 1 : 0)
@@ -9726,7 +9823,7 @@ private actor GRDBStore {
         filter: MessageQueryFilter,
         channel: String?
     ) async throws -> Int {
-        try write { db in
+        try writeCanonicalMessages { db in
             let unreadCondition = unreadPredicateCondition(filter: filter, channel: channel)
             guard unreadCondition != "0" else { return 0 }
 
@@ -9746,7 +9843,7 @@ private actor GRDBStore {
     func markMessagesRead(ids: [UUID]) async throws -> Int {
         let uniqueIds = Array(Set(ids))
         guard !uniqueIds.isEmpty else { return 0 }
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let joined = uniqueIds.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
             let unreadSql = """
                 SELECT COUNT(*)
@@ -9771,7 +9868,7 @@ private actor GRDBStore {
     }
 
 	    func deleteMessage(id: UUID) async throws {
-	        try write { db in
+	        try writeCanonicalMessages { db in
             let records = try Row.fetchAll(
                 db,
                 sql: "SELECT * FROM messages WHERE id = ?;",
@@ -9796,6 +9893,8 @@ private actor GRDBStore {
 	            let existingJoined = existing.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
 	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(existingJoined));")
             try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: existingRecords, db: db)
+            // Match the public API's existing >10 asynchronous-refresh boundary.
+            try markSystemSnapshotDirty(db: db, enqueueIfNeeded: existing.count > 10)
 	            return existing
 	        }
 	    }
@@ -9803,7 +9902,7 @@ private actor GRDBStore {
     func deleteMessage(notificationRequestId: String) async throws {
         let normalized = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-	        try write { db in
+	        try writeCanonicalMessages { db in
 	            let whereClause = "notification_request_id = \(Self.sqlQuoted(normalized))"
 	            let records = try Row.fetchAll(
                     db,
@@ -9816,7 +9915,7 @@ private actor GRDBStore {
 	    }
 
 	    func deleteAllMessages() async throws {
-	        try write { db in
+	        try writeCanonicalMessages { db in
 	            try db.execute(sql: "DELETE FROM messages;")
 	            try db.execute(sql: "DELETE FROM event_projection_heads;")
 	            try db.execute(sql: "DELETE FROM thing_projection_heads;")
@@ -9824,7 +9923,7 @@ private actor GRDBStore {
 	    }
 
 	    func deleteAllEntityRecords() async throws {
-	        try write { db in
+	        try writeCanonicalMessages { db in
 	            try db.execute(sql: "DELETE FROM messages WHERE is_top_level_message = 0 OR entity_type <> 'message';")
 	            try db.execute(sql: "DELETE FROM event_projection_heads;")
 	            try db.execute(sql: "DELETE FROM thing_projection_heads;")
@@ -9835,7 +9934,7 @@ private actor GRDBStore {
     func deleteEventRecords(eventId: String) async throws -> Int {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return 0 }
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let idsSQL = """
                 SELECT id
                 FROM messages
@@ -9863,7 +9962,7 @@ private actor GRDBStore {
             )
         )
         guard !normalized.isEmpty else { return 0 }
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
             let idsSQL = """
                 SELECT id
@@ -9885,7 +9984,7 @@ private actor GRDBStore {
 
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let channelCondition = Self.channelMatchCondition(value: normalized)
             let idsSQL = """
                 SELECT id
@@ -9908,7 +10007,7 @@ private actor GRDBStore {
     func deleteThingRecords(thingId: String) async throws -> Int {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return 0 }
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let idsSQL = """
                 SELECT id
                 FROM messages
@@ -9943,7 +10042,7 @@ private actor GRDBStore {
             )
         )
         guard !normalized.isEmpty else { return 0 }
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
             let idsSQL = """
                 SELECT id
@@ -9972,7 +10071,7 @@ private actor GRDBStore {
 
     func deleteThingRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try write { db in
+        return try writeCanonicalMessages { db in
             let channelCondition = Self.channelMatchCondition(value: normalized)
             let idsSQL = """
                 SELECT id
@@ -10003,7 +10102,7 @@ private actor GRDBStore {
         readState: Bool?,
         before cutoff: Date?
     ) async throws -> [UUID] {
-        try write { db in
+        try writeCanonicalMessages { db in
             var conditions: [String] = ["is_top_level_message = 1"]
             if let readState {
                 conditions.append("is_read = \(readState ? 1 : 0)")
@@ -10030,7 +10129,7 @@ private actor GRDBStore {
     }
 
     func deleteMessages(channel: String?, readState: Bool?) async throws -> [UUID] {
-        try write { db in
+        try writeCanonicalMessages { db in
             var conditions: [String] = ["is_top_level_message = 1"]
             if let readState {
                 conditions.append("is_read = \(readState ? 1 : 0)")
@@ -10087,7 +10186,7 @@ private actor GRDBStore {
         let messages = try await loadOldestReadMessages(limit: limit, excludingChannels: excludingChannels)
         let ids = messages.map(\.id)
         guard !ids.isEmpty else { return [] }
-        try write { db in
+        try writeCanonicalMessages { db in
             let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
             try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
         }
@@ -10114,7 +10213,7 @@ private actor GRDBStore {
         let candidates = try await loadPruneCandidates(maxCount: maxCount, batchSize: batchSize)
         let ids = candidates.map(\.id)
         guard !ids.isEmpty else { return [] }
-        try write { db in
+        try writeCanonicalMessages { db in
             let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
             try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
         }

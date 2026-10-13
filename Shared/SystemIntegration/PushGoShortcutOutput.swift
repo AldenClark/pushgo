@@ -24,3 +24,10 @@ struct PushGoShortcutSummary: Codable, Equatable, Sendable {
         self.generatedAt = generatedAt
     }
 }
+
+enum PushGoShortcutSummaryKind: String, CaseIterable, Sendable {
+    case recentMessages
+    case unreadMessages
+    case criticalEvents
+    case objectStatus
+}

@@ -65,9 +65,34 @@ private final class BarrierFileManager: FileManager, @unchecked Sendable {
 
 @main
 private enum MigrationChild {
-    static func main() {
+    static func main() async {
         let arguments = CommandLine.arguments
         guard arguments.count >= 3 else { Darwin._exit(31) }
+        if arguments[1] == "snapshot-crash-before-publish" || arguments[1] == "snapshot-pause-before-publish" {
+            let manager: FileManager
+            if arguments[1] == "snapshot-pause-before-publish" {
+                guard arguments.count == 5 else { Darwin._exit(34) }
+                manager = PausedSnapshotPublicationFileManager(
+                    controlDirectory: URL(fileURLWithPath: arguments[3], isDirectory: true),
+                    failFirstWrite: arguments[4] == "fail"
+                )
+            } else {
+                manager = ExitBeforeSnapshotPublicationFileManager()
+            }
+            let store = LocalDataStore(
+                fileManager: manager,
+                appGroupIdentifier: arguments[2], spotlightIndexer: nil
+            )
+            do {
+                _ = try await store.persistNotificationMessageIfNeeded(PushMessage(
+                    messageId: "snapshot-process-exit", title: "Saved before process exit",
+                    body: "Canonical content must survive the interrupted snapshot write."
+                ))
+                _ = await store.drainDerivedWorkForBackgroundRefresh()
+            } catch { Darwin._exit(36) }
+            if arguments[1] == "snapshot-pause-before-publish" { Darwin._exit(0) }
+            Darwin._exit(37) // The file boundary must have killed this process.
+        }
         if arguments[1] == "probe-lock" {
             let descriptor = Darwin.open(arguments[2], O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
             guard descriptor >= 0 else { Darwin._exit(32) }
@@ -104,5 +129,54 @@ private enum MigrationChild {
             try? Data(text.utf8).write(to: controlDirectory.appendingPathComponent("\(role)-error"))
             Darwin._exit(35)
         }
+    }
+}
+
+/// Pauses after snapshot construction, before the cross-process file lock.
+/// Keeping this blocking fixture outside the test runner prevents its global
+/// process lock from starving unrelated Swift concurrency tests.
+private final class PausedSnapshotPublicationFileManager: FileManager, @unchecked Sendable {
+    private let controlDirectory: URL
+    private let failFirstWrite: Bool
+    private var intercepted = false
+
+    init(controlDirectory: URL, failFirstWrite: Bool) {
+        self.controlDirectory = controlDirectory
+        self.failFirstWrite = failFirstWrite
+        super.init()
+    }
+
+    override func createDirectory(
+        at url: URL,
+        withIntermediateDirectories createIntermediates: Bool,
+        attributes: [FileAttributeKey: Any]? = nil
+    ) throws {
+        if url.lastPathComponent == "system-surface-snapshot", !intercepted {
+            intercepted = true
+            try Data().write(to: controlDirectory.appendingPathComponent("paused"))
+            let deadline = Date().addingTimeInterval(10)
+            while !super.fileExists(atPath: controlDirectory.appendingPathComponent("release").path) {
+                if Date() >= deadline { Darwin._exit(39) }
+                Thread.sleep(forTimeInterval: 0.005)
+            }
+            if failFirstWrite { throw InjectedWriteFailure() }
+        }
+        try super.createDirectory(at: url, withIntermediateDirectories: createIntermediates, attributes: attributes)
+    }
+
+    private struct InjectedWriteFailure: Error {}
+}
+
+private final class ExitBeforeSnapshotPublicationFileManager: FileManager, @unchecked Sendable {
+    override func createDirectory(
+        at url: URL,
+        withIntermediateDirectories createIntermediates: Bool,
+        attributes: [FileAttributeKey: Any]? = nil
+    ) throws {
+        if url.lastPathComponent == "system-surface-snapshot" {
+            guard Darwin.kill(Darwin.getpid(), SIGKILL) == 0 else { Darwin._exit(38) }
+            while true { _ = Darwin.pause() }
+        }
+        try super.createDirectory(at: url, withIntermediateDirectories: createIntermediates, attributes: attributes)
     }
 }

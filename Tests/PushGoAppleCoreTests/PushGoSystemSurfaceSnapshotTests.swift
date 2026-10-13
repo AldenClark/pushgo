@@ -421,6 +421,72 @@ struct PushGoSystemSurfaceSnapshotTests {
     }
 
     @Test
+    func nsePublicationInterleavesWithHostThenCanonicalSnapshotPreservesWidgetAndPrivacyContract() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let child = try SnapshotPublicationChild(root: root, appGroupIdentifier: appGroupIdentifier)
+            try await child.waitUntilPaused()
+            let host = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let extensionUpdate = Task {
+                let content = UNMutableNotificationContent()
+                content.userInfo = [
+                    "message_id": "nse-new", "entity_type": "message",
+                    "title": "New extension message", "body": "New public body",
+                ]
+                return await PushGoNotificationProjectionUpdater.update(
+                    content: content, requestIdentifier: "nse-new-request", insertedUnread: true,
+                    appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil
+                )
+            }
+            let published = try #require(await extensionUpdate.value)
+            #expect(published.snapshot.recentMessages.contains { $0.title == "New extension message" })
+            #expect(published.unreadCount == 1) // Only the NSE message has been published yet.
+            try await child.releaseAndWait()
+            #expect(PushGoSystemSnapshotStore.load(appGroupIdentifier: appGroupIdentifier)?.recentMessages.first?.title == "Saved before process exit")
+
+            let sensitive = UNMutableNotificationContent()
+            sensitive.userInfo = [
+                "message_id": "nse-private", "entity_type": "message",
+                "title": "Private encrypted title", "body": "Secret must never enter a system surface",
+                "ciphertext": "abc", "decryption_state": "decryptFailed",
+            ]
+            let redacted = try #require(await PushGoNotificationProjectionUpdater.update(
+                content: sensitive, requestIdentifier: "nse-private-request", insertedUnread: true,
+                appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil
+            ))
+            #expect(redacted.unreadCount == 2)
+            #expect(redacted.summary == nil)
+            #expect(!String(describing: redacted.snapshot).contains("Secret must never"))
+
+            // This is the same canonical entry used after durable NSE ingress
+            // is imported. Final counts come from the Store, not accumulated
+            // extension increments, and sensitive content remains filtered.
+            let visibleCanonical = PushMessage(messageId: "nse-new", title: "New extension message", body: "New public body")
+            _ = try await host.persistNotificationMessagesIfNeeded([
+                visibleCanonical,
+                PushMessage(
+                    messageId: "nse-private", title: "Private encrypted title",
+                    body: "Secret must never enter a system surface", decryptionState: .decryptFailed
+                ),
+            ])
+            #expect(await host.drainDerivedWorkForBackgroundRefresh())
+            let url = try #require(PushGoSystemSnapshotStore.snapshotFileURL(appGroupIdentifier: appGroupIdentifier))
+            let snapshot = try #require(PushGoSystemSnapshotStore.load(from: url))
+            #expect(snapshot.counts.totalMessages == 3)
+            #expect(snapshot.counts.unreadMessages == 3)
+            #expect(Set(snapshot.recentMessages.map(\.title)) == ["Saved before process exit", "New extension message"])
+            #expect(!String(describing: snapshot).contains("Secret must never"))
+            #expect(!String(describing: snapshot).contains("Private encrypted title"))
+            let widget = try PropertyListDecoder().decode(WidgetSnapshotCompatibility.self, from: Data(contentsOf: url))
+            #expect(widget.counts.unreadMessages == 3)
+            #expect(widget.recentMessages.contains {
+                $0.openTarget?.identifier == visibleCanonical.id.uuidString
+                    && $0.openTarget?.localMessageID == visibleCanonical.id
+                    && $0.title == visibleCanonical.title
+            })
+        }
+    }
+
+    @Test
     func focusStateStoreRoundTripsModes() {
         let defaults = UserDefaults(suiteName: "pushgo.focus.test.\(UUID().uuidString)")!
         defer {

@@ -100,7 +100,6 @@ let package = Package(
                 "SystemIntegration/PushGoSystemPrivacyPolicy.swift",
                 "SystemIntegration/PushGoSystemRouter.swift",
                 "SystemIntegration/PushGoSystemSnapshotProjector.swift",
-                "SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift",
                 "SystemIntegration/PushGoSystemSnapshotStore.swift",
                 "SystemIntegration/PushGoSystemSurfaceSnapshot.swift",
                 "SystemIntegration/PushGoShortcutOutput.swift",

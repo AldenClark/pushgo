@@ -1,6 +1,6 @@
 # Durable ingress v2 progress
 
-Status: 1.3.0 build 90 local release gates are complete. Physical-device, upload, review, and production validation remain not run and are not publication prerequisites for this release decision.
+Historical 1.3.0 build 90 status: local release gates are complete. Physical-device, upload, review, and production validation remain not run and are not publication prerequisites for that release decision. The 2026-10-13 snapshot slice and its separate evidence limits are recorded below.
 
 Completed:
 
@@ -40,3 +40,31 @@ Constraints:
 
 - local commits are authorized; push, tag, signing/upload, release, App Store action, and live Gateway migration are not authorized;
 - unrelated in-progress deletion/UI changes remain user-owned and must not be reverted.
+
+## 2026-10-13 Apple system snapshot simplification
+
+This slice changes only the shared Apple system snapshot. Canonical notification persistence and ACK, the other derived-work kinds, and NSE responsibilities remain unchanged. Delivery scope is one local commit of this slice; push and publication remain unauthorized.
+
+- `canonical_derived_work` now holds one fixed `system_snapshot` identity without a message foreign key. A changed notification batch marks it dirty once in the same canonical transaction. Per-message snapshot jobs and their completed history are removed.
+- Existing synchronous save/read/delete/settings/Focus refresh timing is retained. Canonical mutations invalidate unfinished snapshot work in their own transaction; explicit Focus rebuilds invalidate before their immediate rebuild. Idle synchronous operations do not create another queued pass. The existing >10-message asynchronous delete path now uses the durable worker instead of an unowned refresh task.
+- The existing worker rebuilds current canonical data. Completion and retry retain lease-owner fencing and compare the claimed generation with the current generation; newer changes remain immediately pending. No second scheduler, cache, or cross-process wait protocol is introduced.
+- Removed the zero-interval refresh policy, reason plumbing, and unused last-refresh recording. The actual hourly health check and six-hour snapshot age limit remain. The shortcut summary enum moved into the existing shortcut output source; the deleted policy file was removed from SwiftPM and Xcode registration.
+- Migration `v26_output_system_snapshot_work` drops completed legacy snapshot rows and merges pending/leased/retry-wait rows into one due rebuild. Other kinds retain their exact identity, generation, lease, retry state, and metadata. Canonical records and read state are not replayed. This supports forward upgrade, not an older binary reopening or concurrently writing the v26 database.
+
+The focused 26-test run passed and verifies exact Message/Event/Thing summaries and counts, transaction rollback when snapshot enqueue fails, immediate read/delete results, changes during old success/failure, actual SIGKILL after claim followed by recovery without new ingress, mixed v25 migration/reopen, and host/NSE interleaving with Widget decoding and sensitive/decrypt-failed content filtering. The exit test advances only its persisted test lease deadline after real process termination; production lease duration is unchanged. Privacy follows real normalized settings and decryption behavior, without inventing a privacy-switch flow.
+
+The concurrency fixture pauses a real child process after snapshot construction and before the cross-process file lock. Initial in-process pausing could block unrelated parallel tests and was replaced; child timeout or abnormal exit now explicitly fails. Other fixture corrections retained exact product oracles: event-title patches carry the payload key, Widget targets use the canonical local UUID, and the kill fixture waits for SIGKILL rather than racing a normal exit. First-failure logs remain in `build/quality-results/apple-system-snapshot-20261013/`.
+
+A one-off negative control made completion ignore newer generations. The new-ingress race failed on both counts (1 instead of 2) and the missing new title. After restoring production code, the focused suite passed again. Independent read-only reviews found no consequential product or final-test defect; they are source review, not additional runtime evidence.
+
+The first `quality_changed.sh` invocation used Xcode's Python 3.9 and failed three script compatibility checks before product execution. Selecting the installed Python 3.14 resolved that cause: 275 script tests, required static contracts, migration probes, and 467 Swift Testing cases in 44 Core suites passed. The impact selector conservatively recommended `release` for the shared Store and SwiftPM/Xcode registration changes. That lane was then interrupted at the user's pause request during its iOS positive batch (observed exit 75). The original `changed/apple-release-summary.json` is retained: its generic exit handler labels the interruption `FAILED` with a product-oracle reason, although no product assertion failed before interruption. `changed-interruption-annotation.json` records the cause, retains completed claims, and leaves the unfinished scope unaccepted. Resumption runs the required PR and performance lanes without restarting the full Release matrix.
+
+Final working-tree checks:
+
+- The pre-commit identity check matched all nine product, test, and build-registration entries (including the deleted policy file) against `candidate-source-manifest.json`, with base `e6d1dd968442b70c7d6c87a0dbf5056e9b633288` unchanged. The only additional tracked changes are the three capability, disposition, and progress records for this slice. No tests were repeated for local commit closure.
+- `scripts/quality_test.sh pr`: `PASSED/PASSED`, no incomplete claims or test-system issue IDs. Core and localization passed; iOS ran all four selected journeys and macOS ran its selected navigation journey, with zero retries. Native results: `ios/run-1-20261013-111515.xcresult` and `macos-ui/run-20261013-112406.xcresult` under `build/quality-results/`.
+- `scripts/quality_test.sh performance`: `PASSED/PASSED`, no incomplete claims or test-system issue IDs. All 11 opt-in scale tests passed, including 100k Store/upgrade and 10k Watch/concurrency correctness. The iOS and macOS 1k Store cold-process-to-accurate-content journeys each passed. Native results: `ios/run-1-20261013-112903.xcresult` and `macos-ui/run-20261013-113020.xcresult`. Both slow-load controls and the iOS wrong-body control rejected their deliberate faults; these are test-system sensitivity results, not extra product passes.
+- Performance reused the fresh PR build products with unchanged product/test/build-source hashes. `candidate-source-manifest.json` binds that frozen working tree; `final-impact-plan.json` remains `READY` with the conservative `release` recommendation. Complete Release acceptance remains unclaimed. Existing SwiftPM warnings about unhandled `p2` fixture resources were observed and left outside this slice.
+- Receipts and original logs are indexed by `build/quality-results/apple-system-snapshot-20261013/verification-summary.md`. These checks establish bounded host/Simulator correctness and existing regression ceilings, not a before/after performance improvement.
+
+The existing host/NSE publication window remains: an older host build can temporarily overwrite an NSE increment until canonical import/rebuild converges. Database commit and snapshot publication are not atomic, and synchronous/background rebuilds may overlap. Physical Widget/Siri/Shortcut UI, APNs, OS background scheduling, power loss/real disk exhaustion, signed release, and old-binary downgrade are not inferred from host tests.

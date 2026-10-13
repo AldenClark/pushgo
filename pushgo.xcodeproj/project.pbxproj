@@ -256,7 +256,6 @@
 		F0A000000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
 		F0A000000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
 		F0A000000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0A000000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
 		F0A000000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
 		F0A00000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
 		F0A00000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
@@ -291,7 +290,6 @@
 		F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
 		F0BB00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
 		F0BB00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0BB00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
 		F0BB00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
 		F0BB0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
 		F0BB0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
@@ -325,7 +323,6 @@
 		F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
 		F0CC00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
 		F0CC00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0CC00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
 		F0CC00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
 		F0CC0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
 		F0CC0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
@@ -673,7 +670,6 @@
 		F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift; sourceTree = SOURCE_ROOT; };
 		F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoFocusStateStore.swift; sourceTree = SOURCE_ROOT; };
 		F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift; sourceTree = SOURCE_ROOT; };
 		F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotStore.swift; sourceTree = SOURCE_ROOT; };
 		F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift; sourceTree = SOURCE_ROOT; };
 		F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/EntityProjectionDetail.swift; sourceTree = SOURCE_ROOT; };
@@ -1219,7 +1215,6 @@
 				F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */,
 				F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */,
 				F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */,
-				F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */,
 				F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */,
 				F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */,
 				F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */,
@@ -1841,7 +1836,6 @@
 				F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */,
 				F0BB00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */,
 				F0BB00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */,
-				F0BB00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */,
 				F0BB00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */,
 				F0BB0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */,
 				F0BB0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */,
@@ -1954,7 +1948,6 @@
 				F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */,
 				F0CC00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */,
 				F0CC00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */,
-				F0CC00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */,
 				F0CC00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */,
 				F0CC0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */,
 				F0CC0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */,
@@ -2144,7 +2137,6 @@
 				F0A000000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */,
 				F0A000000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */,
 				F0A000000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */,
-				F0A000000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */,
 				F0A000000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */,
 				F0A00000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */,
 				F0A00000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */,
