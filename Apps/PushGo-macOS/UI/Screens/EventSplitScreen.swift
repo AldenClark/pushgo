@@ -2,7 +2,6 @@ import SwiftUI
 
 struct EventSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
@@ -28,7 +27,7 @@ struct EventSplitScreen: View {
             Divider()
             eventDetailPane
         }
-        .id(pendingLocalDeletionController.effectiveScope)
+
         .alert(
             "\(localizationManager.localized("close")) \(localizationManager.localized("push_type_event"))?",
             isPresented: $showCloseConfirmation
@@ -80,9 +79,6 @@ struct EventSplitScreen: View {
             hydratedSelectedEvent = nil
             requestSelectedEventHydration(id)
         }
-        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            syncSelection()
-        }
     }
 
     @ViewBuilder
@@ -107,7 +103,7 @@ struct EventSplitScreen: View {
                     )
                 },
                 onDeleteEvent: { event in
-                    Task { await scheduleDeletion(for: event) }
+                    Task { await requestDeletion(for: event) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
@@ -167,7 +163,7 @@ struct EventSplitScreen: View {
     private var filteredEvents: [EventProjection] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return viewModel.events.filter { event in
-            guard !isPendingLocalDeletion(event) else { return false }
+
             if showOnlyOngoingEvents,
                eventLifecycleState(from: event.state) != .ongoing {
                 return false
@@ -211,7 +207,7 @@ struct EventSplitScreen: View {
 
     private var channelOptions: [(id: String, name: String)] {
         let channelIds = Set(viewModel.events.compactMap { event -> String? in
-            guard !isPendingLocalDeletion(event) else { return nil }
+
             let trimmed = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? nil : trimmed
         })
@@ -276,12 +272,6 @@ struct EventSplitScreen: View {
         return eventLifecycleState(from: selectedEvent.state) != .closed
     }
 
-    private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
-        pendingLocalDeletionController.suppressesEvent(
-            id: event.id,
-            channelId: event.channelId
-        )
-    }
 
     @MainActor
     private func handleProviderIngressPullRefresh() async {
@@ -314,25 +304,21 @@ struct EventSplitScreen: View {
 
     private func deleteSelectedEvent() {
         guard let selectedEvent else { return }
-        Task { await scheduleDeletion(for: selectedEvent) }
+        Task { await requestDeletion(for: selectedEvent) }
     }
 
     @MainActor
-    private func scheduleDeletion(for event: EventProjection) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [event],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("push_type_event"),
-            multipleSummaryTitle: localizationManager.localized("push_type_event"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .events(ids: $0) }
-        ) else { return }
-
-        if let selectedEvent,
-           result.contains(where: { $0.id == selectedEvent.id })
-        {
-            selection = nil
+    private func requestDeletion(for event: EventProjection) async {
+        let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("push_type_event") : title,
+            intent: .events(ids: [event.id])
+        ) {
+            if let selectedEvent,
+               selectedEvent.id == event.id
+            {
+                selection = nil
+            }
         }
     }
 
@@ -487,7 +473,7 @@ struct EventSplitScreen: View {
     private var allTags: [String] {
         var tags = Set<String>()
         for event in viewModel.events {
-            guard !isPendingLocalDeletion(event) else { continue }
+
             for tag in event.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {

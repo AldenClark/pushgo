@@ -240,16 +240,10 @@ final class AppEnvironment {
         serverConfigProvider: { [weak self] in
             self?.serverConfig
         },
-        messageStateCoordinatorProvider: { [weak self] in
-            self?.messageStateCoordinator
-        },
         channelMutationRoundTrip: Self.makeQualityChannelMutationRoundTrip()
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
-        timeout: PushGoAutomationContext.qualitySession?.faults.pendingDeletionTimeoutMilliseconds.map {
-            TimeInterval($0) / 1_000
-        } ?? 5,
         channelCommitHandler: { [weak self] record, owner in
             guard let self else { throw CancellationError() }
             return try await self.channelSubscriptionController.commitPendingChannelRemoval(
@@ -286,6 +280,14 @@ final class AppEnvironment {
         showToast: { [weak self] message in
             self?.showToast(message: message)
         }
+    )
+    @ObservationIgnored private(set) lazy var localDeletionConfirmationController = LocalDeletionConfirmationController(
+        dataStore: dataStore,
+        configuration: { [weak self] in self?.serverConfig },
+        reconcileCleanup: { [weak self] in
+            await self?.pendingLocalDeletionController.reconcileCommittedCleanup()
+        },
+        failure: { [weak self] error in self?.showErrorToast(error) }
     )
     @ObservationIgnored private(set) lazy var localStoreRecoveryController = LocalStoreRecoveryController(
         dataStore: dataStore,
@@ -1079,6 +1081,9 @@ final class AppEnvironment {
         _ error: Error,
         fallbackMessage: String? = nil
     ) -> String {
+        if (error as? AppError)?.code == "channel_history_changed_during_removal" {
+            return localizationManager.localized("channel_removal_reconfirmation_required")
+        }
         let defaultMessage = fallbackMessage ?? localizationManager.localized("operation_failed")
         let wrapped = AppError.wrap(error, fallbackMessage: defaultMessage)
         return wrapped.errorDescription ?? defaultMessage
@@ -1562,20 +1567,41 @@ final class AppEnvironment {
         try await channelSubscriptionController.renameChannel(channelId: channelId, alias: alias)
     }
 
-    func unsubscribeChannel(channelId: String) async throws {
-        try await channelSubscriptionController.unsubscribeChannel(channelId: channelId)
+    func prepareChannelRemoval(
+        subscription: ChannelSubscription,
+        keepHistory: Bool
+    ) async throws -> PendingChannelRemovalTarget {
+        guard let originalConfig = serverConfig?.normalized() else { throw AppError.noServer }
+        let target = try await channelSubscriptionController.prepareChannelRemoval(
+            subscription: subscription,
+            originalConfig: originalConfig,
+            keepHistory: keepHistory
+        )
+        guard serverConfig?.normalized() == originalConfig else {
+            throw AppError.typedLocal(code: "gateway_changed_during_channel_removal", category: .validation,
+                message: localizationManager.localized("operation_failed"))
+        }
+        return target
     }
 
-    func unsubscribeChannelAndDeleteLocalHistory(
-        channelId: String,
-        expectedGateway: String,
-        expectedUpdatedAt: Date
-    ) async throws -> Int {
-        try await channelSubscriptionController.unsubscribeChannelAndDeleteLocalHistory(
-            channelId: channelId,
-            expectedGateway: expectedGateway,
-            expectedUpdatedAt: expectedUpdatedAt
-        )
+    func confirmChannelRemoval(_ target: PendingChannelRemovalTarget) async throws {
+        var currentConfig = serverConfig?.normalized()
+        currentConfig?.notificationKeyMaterial = nil
+        guard currentConfig == target.originalConfig.normalized() else {
+            throw AppError.typedLocal(code: "gateway_changed_during_channel_removal", category: .validation,
+                message: localizationManager.localized("operation_failed"))
+        }
+        let receipt = try await dataStore.acceptConfirmedChannelRemoval(target)
+        await pendingLocalDeletionController.reconcileCommittedCleanup()
+        if let remaining = try await dataStore.pendingLocalDeletionRecord(id: receipt.id) {
+            throw AppError.typedLocal(
+                code: remaining.lastErrorCode ?? "channel_removal_recovery_pending",
+                category: .local,
+                message: localizationManager.localized(remaining.lastErrorCode == "channel_history_changed_during_removal"
+                    ? "channel_removal_reconfirmation_required" : "operation_failed"),
+                detail: "The accepted channel removal remains pending recovery."
+            )
+        }
     }
 
     func closeEvent(
@@ -1765,7 +1791,7 @@ final class AppEnvironment {
     }
 
     private func beginPendingDeletionActivity() {
-        guard pendingDeletionActivityTask == nil else { return }
+        guard !pendingLocalDeletionController.isDormant, pendingDeletionActivityTask == nil else { return }
         let activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled],
             reason: "Finish pending local deletions"
@@ -1930,6 +1956,89 @@ final class AppEnvironment {
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
         await notificationIngressController.persistNotificationIfNeeded(notification)
+    }
+
+    func commitPreparedLocalDeletion(
+        _ confirmation: LocalDeletionConfirmation,
+        configuration: ServerConfig?
+    ) async throws {
+        guard configuration == serverConfig?.normalized() else {
+            throw AppError.localStore(localizationManager.localized("operation_failed"))
+        }
+        _ = try await dataStore.deleteConfirmedLocalData(confirmation)
+        await pendingLocalDeletionController.reconcileCommittedCleanup()
+    }
+
+    func requestLocalDeletion(
+        summary: String,
+        intent: PendingLocalDeletionIntent,
+        onDeleted: (@MainActor () -> Void)? = nil
+    ) async {
+        await localDeletionConfirmationController.request(
+            summary: summary,
+            intent: intent,
+            onDeleted: onDeleted
+        )
+    }
+
+    /// Receiving a notification remains independent of accepting or cancelling deletion.
+    /// Existing canonical targets are read without replaying their payload or opening detail.
+    func requestNotificationDeletion(
+        notificationRequestId: String,
+        messageId: String?,
+        notification: UNNotification? = nil
+    ) async {
+        MainWindowController.shared.showMainWindow()
+        let configuration = serverConfig?.normalized()
+        do {
+            var target = try await notificationDeletionTarget(
+                notificationRequestId: notificationRequestId,
+                messageId: messageId
+            )
+            if target == nil, let notification {
+                _ = await persistNotificationIfNeeded(notification)
+                target = try await notificationDeletionTarget(
+                    notificationRequestId: notificationRequestId,
+                    messageId: messageId
+                )
+            }
+            guard configuration == serverConfig?.normalized(), let target else {
+                showToast(message: localizationManager.localized("operation_failed"))
+                return
+            }
+            await requestLocalDeletion(summary: target.summary, intent: target.intent)
+        } catch {
+            showErrorToast(error)
+        }
+    }
+
+    private func notificationDeletionTarget(
+        notificationRequestId: String,
+        messageId: String?
+    ) async throws -> (summary: String, intent: PendingLocalDeletionIntent)? {
+        var message: PushMessage?
+        if let messageId {
+            message = try await dataStore.loadMessage(messageId: messageId)
+            if message == nil, let localID = UUID(uuidString: messageId) {
+                message = try await dataStore.loadMessage(id: localID)
+            }
+        }
+        if message == nil {
+            message = try await dataStore.loadMessage(notificationRequestId: notificationRequestId)
+        }
+        if let message {
+            return (message.title, .messages(ids: [message.id]))
+        }
+        var entity = try await dataStore.loadEntityOpenTarget(notificationRequestId: notificationRequestId)
+        if entity == nil, let messageId {
+            entity = try await dataStore.loadEntityOpenTarget(messageId: messageId)
+        }
+        guard let entity else { return nil }
+        switch entity.entityType {
+        case "event": return (entity.entityId, .events(ids: [entity.entityId]))
+        case "thing": return (entity.entityId, .things(ids: [entity.entityId]))
+        default: throw AppError.localStore("Unknown notification deletion target.")
+        }
     }
 
     func handleNotificationOpen(notificationRequestId: String) async {

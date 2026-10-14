@@ -886,6 +886,23 @@ final class PushGo_iOSUITests: XCTestCase {
             "The detail must still expose the canonical stored body at accessibility5"
         )
         tapWhenHittable(
+            element(in: context.app, identifier: "action.message.delete"),
+            timeout: 8,
+            message: "The deletion request must remain reachable at accessibility5."
+        )
+        let confirmation = localDeletionConfirmation(in: context.app, summary: "P2 Split Seed Message")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        let confirmDeletion = element(in: context.app, identifier: "action.local_deletion.confirm")
+        XCTAssertEqual(confirmDeletion.label, "删除")
+        XCTAssertTrue(confirmDeletion.isHittable, "The localized confirmation must fit at accessibility5.")
+        let cancelDeletion = element(in: context.app, identifier: "action.local_deletion.cancel")
+        XCTAssertEqual(cancelDeletion.label, "取消")
+        tapWhenHittable(cancelDeletion, timeout: 5)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "Large-text cancellation must leave the exact Message detail intact."
+        )
+        tapWhenHittable(
             element(in: context.app, identifier: "action.message.close"),
             timeout: 8,
             message: "The large-font detail must keep its close action reachable"
@@ -1468,85 +1485,70 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch() {
-        let sessionID = "ios-delete-undo-\(UUID().uuidString.lowercased())"
-        let qualityReadinessTimeout: TimeInterval = 30
+    func testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch() {
+        let sessionID = "ios-delete-cancel-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
-            sessionID: sessionID,
-            fixture: "messages.standard",
-            timeoutMilliseconds: 30_000
-        )
-
+        let encodedSession = qualitySessionPayload(sessionID: sessionID, fixture: "messages.standard")
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
 
-        assertQualityRuntimeReady(in: context.app, timeout: qualityReadinessTimeout)
         let title = context.app.staticTexts["P2 Split Seed Message"]
-        XCTAssertTrue(title.waitForExistence(timeout: 8))
-        title.tap()
+        tapWhenHittable(title, timeout: 8)
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
         let delete = element(in: context.app, identifier: "action.message.delete")
-        XCTAssertTrue(delete.waitForExistence(timeout: 8))
-        delete.tap()
-        let row = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000001"
-        )
-        XCTAssertTrue(row.waitForNonExistence(timeout: 2))
-        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
-        context.app.terminate()
-
-        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
-        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
-            sessionID: sessionID,
-            fixture: "messages.standard",
-            timeoutMilliseconds: 30_000
-        )
-        launch(afterTermination.app)
-        assertQualityRuntimeReady(in: afterTermination.app, timeout: qualityReadinessTimeout)
-        let restoredPendingDeletion = element(
-            in: afterTermination.app,
-            identifier: "state.pending_deletion"
-        )
+        tapWhenHittable(delete, timeout: 8)
+        let confirmation = localDeletionConfirmation(in: context.app, summary: "P2 Split Seed Message")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            restoredPendingDeletion.waitForExistence(timeout: 8),
-            "A pending deletion must remain undoable after the original process terminates"
-        )
-        XCTAssertFalse(
-            element(
-                in: afterTermination.app,
-                identifier: "message.row.00000000-0000-0000-0000-000000000001"
-            ).exists,
-            "The restored pending scope must continue suppressing the target until Undo"
+            confirmation
+                .label.contains("P2 Split Seed Message"),
+            "The confirmation must name the exact Message the user requested."
         )
         tapWhenHittable(
-            element(in: afterTermination.app, identifier: "action.pending_deletion.undo"),
-            timeout: 8,
-            message: "A restored pending deletion must expose a real Undo action"
+            element(in: context.app, identifier: "action.local_deletion.cancel"),
+            timeout: 5,
+            message: "Cancel must be reachable before any canonical deletion."
         )
         XCTAssertTrue(
-            afterTermination.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
-            "Undo after process termination must restore the canonical object"
+            confirmation
+                .waitForNonExistence(timeout: 5)
         )
-        afterTermination.app.terminate()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "Cancel must preserve the same canonical Message detail."
+        )
 
-        let relaunched = configuredLaunchContext()
-        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
-            sessionID: sessionID,
-            fixture: "messages.standard",
-            timeoutMilliseconds: 30_000
-        )
+        // An unconfirmed request is only a draft. Process termination must not
+        // convert it into a durable deletion or restore an outstanding dialog.
+        tapWhenHittable(delete, timeout: 5)
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        context.app.terminate()
+        let relaunched = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(relaunched.app)
-        assertQualityRuntimeReady(in: relaunched.app, timeout: qualityReadinessTimeout)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            localDeletionConfirmation(in: relaunched.app, summary: "P2 Split Seed Message").exists
+        )
+        let retainedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        tapWhenHittable(retainedRow, timeout: 8)
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
         XCTAssertTrue(
-            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
-            "Undo must restore the canonical object, not only the visible row"
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Cancellation and an unconfirmed process exit must preserve the exact stored Message."
         )
     }
 
-    func testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch() {
+    func testQualityMessageDeleteConfirmationPermanentlyRemovesOnlyTargetAcrossRelaunch() {
         let sessionID = "ios-delete-commit-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard"
         )
@@ -1577,83 +1579,48 @@ final class PushGo_iOSUITests: XCTestCase {
             ].exists,
             "The delete action must start from the exact target detail"
         )
-        let deletionStartedAt = Date()
         tapWhenHittable(
             element(in: context.app, identifier: "action.message.delete"),
             timeout: 8
         )
-
-        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
-        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        let confirmation = localDeletionConfirmation(in: context.app, summary: "Quality Delete History Message")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
-            "The test must observe a real undo opportunity before deliberately letting it expire"
-        )
-
-        // Interrupt before the original 15-second Undo deadline. Relaunch may
-        // finish after it, so observe suppression and final commit rather than
-        // requiring an already-expired Undo bar to reappear.
-        context.app.terminate()
-        XCTAssertLessThan(
-            Date().timeIntervalSince(deletionStartedAt),
-            15,
-            "QUALITY_PRECONDITION: Process interruption must finish before the original Undo deadline."
-        )
-        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
-        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
-            sessionID: sessionID,
-            fixture: "channels.standard"
-        )
-        launch(afterTermination.app)
-        assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
-        let restoredPendingDeletion = element(
-            in: afterTermination.app,
-            identifier: "state.pending_deletion"
-        )
-        XCTAssertFalse(
-            element(
-                in: afterTermination.app,
-                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
-            ).exists,
-            "The restored pending scope must continue suppressing the target row"
-        )
-        XCTAssertTrue(
-            restoredPendingDeletion.waitForNonExistence(timeout: 15),
-            "The original Undo window must close; the exact deletion and control data are checked below."
-        )
-        XCTAssertFalse(
-            afterTermination.app.staticTexts["Quality Delete History Message"].exists,
-            "The committed target must stay absent"
-        )
-        XCTAssertTrue(
-            afterTermination.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 5),
-            "Committing one deletion must not remove an unrelated message"
-        )
-        let afterTerminationControlRow = element(
-            in: afterTermination.app,
-            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+            confirmation
+                .label.contains("Quality Delete History Message")
         )
         tapWhenHittable(
-            afterTerminationControlRow,
+            element(in: context.app, identifier: "action.local_deletion.confirm"),
             timeout: 5,
-            message: "The unrelated canonical message must remain a real actionable row after commit"
+            message: "Only the explicit confirmation may commit the exact target deletion."
         )
-        assertElementExists("sheet.message.detail", in: afterTermination.app, timeout: 5)
+        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 8))
         XCTAssertTrue(
-            afterTermination.app.staticTexts[
+            element(in: context.app, identifier: "sheet.message.detail")
+                .waitForNonExistence(timeout: 5),
+            "A successful confirmed deletion must dismiss the deleted detail."
+        )
+        XCTAssertFalse(targetTitle.exists, "The committed target must stay absent.")
+        let searchField = runtimeQualitySearchField(in: context.app)
+        tapWhenHittable(searchField, timeout: 8)
+        searchField.typeText("Quality Delete History Message")
+        assertElementExists("state.messages.search.empty", in: context.app, timeout: 8)
+        XCTAssertFalse(targetRow.exists, "Search must not retain the deleted Message in a stale projection.")
+        tapWhenHittable(searchField.buttons.firstMatch, timeout: 5)
+        searchField.tap()
+        searchField.typeText("Quality Keep History Message")
+        tapWhenHittable(controlTitle, timeout: 8)
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
             ].exists,
-            "The control message must retain its exact canonical content"
+            "Confirming one deletion must preserve the unrelated Message's exact canonical content."
         )
-        tapWhenHittable(
-            element(in: afterTermination.app, identifier: "action.message.close"),
-            timeout: 5
-        )
-        afterTermination.app.terminate()
+        context.app.terminate()
 
         let relaunched = configuredLaunchContext()
-        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard"
         )
@@ -1692,7 +1659,7 @@ final class PushGo_iOSUITests: XCTestCase {
             requestName: "message.open",
             args: ["message_id": "01H00000000000000000000002"]
         )
-        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard"
         )
@@ -2905,6 +2872,19 @@ final class PushGo_iOSUITests: XCTestCase {
             validKey,
             "The persisted secret must never be echoed back into the UI"
         )
+        let clearBeforeCancel = element(in: context.app, identifier: "action.settings.decryption.clear")
+        tapWhenHittable(clearBeforeCancel, timeout: 8)
+        let cancelClear = element(in: context.app, identifier: "action.settings.decryption.clear.cancel")
+        tapWhenHittable(cancelClear, timeout: 5)
+        XCTAssertTrue(cancelClear.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(restoredKeyField.exists, "Cancel must keep the protected-key editor open.")
+        XCTAssertEqual(restoredKeyField.elementType, .secureTextField)
+        XCTAssertTrue(clearBeforeCancel.isEnabled, "Cancel must retain the configured key's clear action.")
+        XCTAssertEqual(
+            restoredDecryptionAction.label,
+            configuredStatusLabel,
+            "Cancel must preserve the exact configured encryption status."
+        )
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.decryption.save"),
             timeout: 8
@@ -2928,11 +2908,16 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(
             relaunchedPreservedAction.label,
             configuredStatusLabel,
-            "A blank save must not remove the non-echoed configuration after relaunch"
+            "Cancelling key deletion and a blank save must preserve the configuration after relaunch"
         )
         tapWhenHittable(relaunchedPreservedAction, timeout: 8)
         let clearAction = element(in: context.app, identifier: "action.settings.decryption.clear")
         tapWhenHittable(clearAction, timeout: 8)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.clear.confirm"),
+            timeout: 5,
+            message: "Only confirming the saved-key deletion may clear the protected configuration."
+        )
         XCTAssertTrue(
             clearAction.waitForNonExistence(timeout: 8),
             "Clearing must finish before the editor closes"
@@ -3535,10 +3520,9 @@ final class PushGo_iOSUITests: XCTestCase {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         )
-        let encodedSession = pendingDeletionQualitySessionPayload(
+        let encodedSession = qualitySessionPayload(
             sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
-            fixture: "thing.standard",
-            timeoutMilliseconds: 30_000
+            fixture: "thing.standard"
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
@@ -3662,12 +3646,17 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8,
             message: "The real Thing detail delete action must be reachable"
         )
+        let confirmation = localDeletionConfirmation(in: context.app, summary: "Quality Pump Beta")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.local_deletion.confirm"),
+            timeout: 5
+        )
         XCTAssertTrue(
             distractorRow.waitForNonExistence(timeout: 8),
             "Deleting one Thing must immediately remove only that target from the user-visible list."
         )
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
-        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
         let searchField = runtimeQualitySearchField(in: context.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
@@ -3771,7 +3760,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             element(in: unavailableTarget.app, identifier: "thing.row.quality-thing-distractor")
                 .waitForNonExistence(timeout: 8),
-            "The deleted Thing must not return after the pending deletion commits and the App relaunches."
+            "The deleted Thing must not return after confirmation commits and the App relaunches."
         )
         let unavailableFeedback = element(
             in: unavailableTarget.app,
@@ -4076,9 +4065,6 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 5
         )
         XCTAssertTrue(deleteRow.waitForNonExistence(timeout: 8))
-        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
-        XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
 
         tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
@@ -4584,7 +4570,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandRequestsConfirmation() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -4597,8 +4583,8 @@ final class PushGo_iOSUITests: XCTestCase {
                 at: context.stateURL,
                 timeout: 12,
                 matching: {
-                    $0.totalMessageCount == 0
-                        && $0.lastNotificationAction == "delete"
+                    $0.totalMessageCount == 1
+                        && $0.lastNotificationAction == "delete_requested"
                         && $0.lastNotificationTarget == self.seedMessageId
                 }
             )
@@ -4612,7 +4598,7 @@ final class PushGo_iOSUITests: XCTestCase {
                     guard (event["type"] as? String) == "notification.action",
                           let details = event["details"] as? [String: Any]
                     else { return false }
-                    return (details["action"] as? String) == "delete"
+                    return (details["action"] as? String) == "delete_requested"
                         && (details["target"] as? String) == self.seedMessageId
                 }
             )
@@ -5360,23 +5346,6 @@ final class PushGo_iOSUITests: XCTestCase {
         return data.base64EncodedString()
     }
 
-    private func pendingDeletionQualitySessionPayload(
-        sessionID: String,
-        fixture: String,
-        timeoutMilliseconds: Int = 15_000
-    ) -> String {
-        let encoded = qualitySessionPayload(sessionID: sessionID, fixture: fixture)
-        let data = try! XCTUnwrap(Data(base64Encoded: encoded))
-        var payload = try! XCTUnwrap(
-            try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
-        )
-        var faults = try! XCTUnwrap(payload["faults"] as? [String: Any])
-        faults["pending_deletion_timeout_ms"] = timeoutMilliseconds
-        payload["faults"] = faults
-        let updatedData = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        return updatedData.base64EncodedString()
-    }
-
     func launch(_ app: XCUIApplication, qualityHandshakeTimeout: TimeInterval = 15) {
         let qualitySessionKey = "PUSHGO_QUALITY_SESSION_BASE64"
         let qualitySessionArgument = "-\(qualitySessionKey)"
@@ -5801,6 +5770,16 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    private func localDeletionConfirmation(in app: XCUIApplication, summary: String) -> XCUIElement {
+        // Native alerts preserve the message label but omit the SwiftUI Text identifier.
+        let messages = [
+            "Permanently delete \(summary) from local storage? This cannot be undone.",
+            "永久删除本地存储中的“\(summary)”？此操作无法撤销。",
+            "永久刪除本機儲存中的「\(summary)」？此操作無法復原。",
+        ]
+        return app.alerts.staticTexts.matching(NSPredicate(format: "label IN %@", messages)).firstMatch
     }
 
     private func actionButton(in app: XCUIApplication, identifier: String) -> XCUIElement {

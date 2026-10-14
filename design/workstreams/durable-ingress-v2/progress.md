@@ -1,5 +1,17 @@
 # Durable ingress v2 progress
 
+2026-10-14 当前复核纠正：此前 Android「冻结 canonical 行及 config」表述超过当时实现。旧分段通过证据保留原范围；本轮仅修普通删除确认身份与提交后通知清理恢复。临时确认保留 SHA256 与展示标题，复核实际七表删除范围，含 Thing 等待子项，不持久保存完整内容快照。配置身份仅覆盖 serverAddress、useFcmChannel、notificationKeyUpdatedAt、keyEncoding；read、previews、列表派生字段及图片缓存 key 不参与。同内容 ABA 不视为新的物理 incarnation；当前内容、关联范围或上述配置有实质变化时拒绝旧确认。
+
+同一 Room 事务验证、删除并写 v35 最小系统通知 cleanup receipt；恢复只清通知，不重删数据库或排队普通删除操作。每次子通知发布使用 UUID 系统 tag，最小 submitted 元数据覆盖 notify 已提交而 activeNotifications 尚不可见的窗口；按准确 tag/id/generation 合并 receipt，重开精确取消并保护新 replacement。发布前 Room 校验及同步 notify 位于同一事务，阻止删除提交后的迟到发布。仅启动时按 canonical 是否存在清通知不足：Event 删除可能应清关联 Thing 通知，而 Thing head 仍存在，legacy ID 也不足以准确匹配。用户已选定：没有准确自身 ID 元数据的旧 Message 通知及仅 group 身份的 legacy 通知保守保留，不哈希推断；这是准确性边界。
+
+新增 Room/device 首轮 14 方法为 10 通过、4 失败，原 device-first/native-results 保留。四项失败暴露 summary 在 childCount<2 时取消导致 OS reason12 级联删除同组无关 control，是产品缺陷。修复后只执行受影响 6 项（原失败 4 项与 hidden-observation 2 项，含真实 dumpsys 关键音频停止）及必要既有 consumer 4 项，共 10/10、46.235 秒，原生 error/skip 为零。既有 consumer 覆盖 v30→v35 迁移、确认删除 UI、Message 关键音频与准确通知点击、Event/Thing 冷暖点击。新增 14 方法的有界 composite 是首轮不受最终 Helper 变化影响的 8 项加修后 6 项，不把首轮改写为全通过。
+
+首轮 PR 295 JVM 通过；androidTest 编译首次 arrayOf 混型失败保留，夹具修复后编译通过；Helper 改动后仅重验相关 JVM 5 项通过。影响脚本 248/248 通过（13.038 秒），计划 READY/release，plan-only 未运行 release；相关 selector 脚本 89 项通过，AI history 10 项 selector 合同通过（报告状态 READY_FOR_RECORDED_SEMANTIC_REVIEW，不等于完整语义验收）。android-final-repaired-review.json 对最终三处缺陷重查 NO_FINDINGS，仅为独立源码复核，不等于用户最终复核。中文大字号 fresh selector simplifiedChineseAtLargeFontCompletesMessageDetailAndAddChannelJourney 1/1 通过（9.385 秒），同 lane 三语言 localization 通过。新批证据目录为 pushgo-android/build/quality-results/delete-review-repair-20261014/；verification-summary.json、final-source-identities.json、final-change-list.json、final-patches/、receipt-sha256.json 作为最终汇总与身份索引，以实际归档为准。
+
+此前 Apple 18 项有界分段 composite、原 PR FAILED 及 Windows host 等证据保留原范围。Watch Mirror 产品模式已由 e661544 退役，旧 mirror wire 仅兼容解码／过滤。最新 macOS/Watch 通知 callback 仅编译与复核，未实际运行；Windows 原生 NOT_RUN，真实 APNs、物理 Watch 后台、PG/MySQL 实库继续延期。本轮保留本地待审，无提交、推送、部署或发布。
+
+此前批次记录（当前纠正以上段为准）：2026-10-14 删除前确认／Undo退役：普通 Message/Event/Thing 确认后直接 canonical 事务，取消不隐藏、不写删除 intent、不退订；同事务仅保留派生 cleanup。新 Undo producer/window/bar/effectiveScope/专属调度已删除，旧 accepted 意图按原身份有限结清，坏 payload 和失败保留并可见恢复；频道冻结原 config/device/password/version/history，保留补偿、lease 和 sync 窗口，历史变化需同 receipt 重新完整确认。五端查无实际多选批量模式，独立筛选、全部已读、历史清理和内部批处理保留。Apple 首轮 PR 的 XCTest25通过、Swift Testing488方法/51suite有6issues（3方法，另4 opt-in skipped），原整体FAILED保留；修后仅3失败方法/5cases通过，其余Store/Channel分段focused结果保留。解锁后代表原生18项形成有界composite通过：iOS10（原7＋仅重验AX修复3）、macOS5（原4＋仅重验AX修复1）、中文accessibility5代表1、iOS系统通知确认／取消2。成功方法均零自动重试、零跳过和原生运行时告警，各场源码前后一致。先后发现并修复Host缺LocalizationManager的启动崩溃、通知目标未入库的产品路径缺口；原生弹框AX、真实授权准备和跨轮旧readiness错投按观察／测试准备问题修复，首败分别保留。通知从simctl注入，经过真实SpringBoard卡片和Delete动作，确认删除准确目标及重开、取消保留准确未读正文及重开均通过，不等于真实APNs。已有通知目标只读；缺失才执行既有正常收件，再重读冻结确认。最新iOS/Watch编译随通知native完成，macOS另做Debug build-for-testing通过；macOS/Watch新增callback未做系统action原生验收，Watch旧3项只复用未变业务／fixture范围。Android标准PR295及代表device、旧Room恢复、实际PID重启、大字号／密钥确认、Windows14项实际源码host SQLite局部证据保留。最终源码、首败和复用边界见 build/quality-results/delete-confirmation-retirement-20261014/。本批本地收敛完成，保留待审，无提交、推送、部署或发布；真实APNs、物理Watch后台、Windows原生、PG/MySQL实库、整套Release、签名及远端CI未验收。
+
 Historical 1.3.0 build 90 status: local release gates are complete. Physical-device, upload, review, and production validation remain not run and are not publication prerequisites for that release decision. The 2026-10-13 snapshot slice and its separate evidence limits are recorded below.
 
 Completed:

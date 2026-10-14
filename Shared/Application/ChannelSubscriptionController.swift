@@ -22,7 +22,6 @@ protocol ChannelMutationRoundTrip {
 @MainActor
 final class ChannelSubscriptionController {
     typealias ServerConfigProvider = @MainActor () -> ServerConfig?
-    typealias MessageStateCoordinatorProvider = @MainActor () -> MessageStateCoordinator?
 
     private let dataStore: LocalDataStore
     private let channelSubscriptionService: ChannelSubscriptionService
@@ -30,9 +29,9 @@ final class ChannelSubscriptionController {
     private let channelSyncController: ChannelSyncController
     private let localizationManager: LocalizationManager
     private let serverConfigProvider: ServerConfigProvider
-    private let messageStateCoordinatorProvider: MessageStateCoordinatorProvider
     private let channelMutationRoundTrip: (any ChannelMutationRoundTrip)?
     private let platform: String
+    private var inFlightChannelMutationKeys: Set<String> = []
 
     init(
         platform: String,
@@ -42,7 +41,6 @@ final class ChannelSubscriptionController {
         channelSyncController: ChannelSyncController,
         localizationManager: LocalizationManager,
         serverConfigProvider: @escaping ServerConfigProvider,
-        messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider,
         channelMutationRoundTrip: (any ChannelMutationRoundTrip)? = nil
     ) {
         self.platform = platform
@@ -52,7 +50,6 @@ final class ChannelSubscriptionController {
         self.channelSyncController = channelSyncController
         self.localizationManager = localizationManager
         self.serverConfigProvider = serverConfigProvider
-        self.messageStateCoordinatorProvider = messageStateCoordinatorProvider
         self.channelMutationRoundTrip = channelMutationRoundTrip
     }
 
@@ -81,6 +78,8 @@ final class ChannelSubscriptionController {
         let gatewayKey = config.gatewayKey
         let normalizedId = try ChannelIdValidator.normalize(channelId)
         let normalizedAlias = try ChannelNameValidator.normalize(alias)
+        let mutationKey = try beginChannelMutation(config: config, channelID: normalizedId)
+        defer { inFlightChannelMutationKeys.remove(mutationKey) }
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedId) else {
             throw AppError.typedLocal(
                 code: "channel_password_missing",
@@ -116,129 +115,121 @@ final class ChannelSubscriptionController {
         await channelSyncController.refreshChannelSubscriptions()
     }
 
-    func unsubscribeChannel(channelId: String) async throws {
-        guard let config = serverConfigProvider() else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let normalized = try ChannelIdValidator.normalize(channelId)
-        if let channelMutationRoundTrip {
-            try await channelMutationRoundTrip.unsubscribe(
-                baseURL: config.baseURL,
-                token: config.token,
-                channelId: normalized
-            )
-        } else {
-            let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
-            let deviceKey = try await providerRouteController.ensureProviderRoute(
-                config: config,
-                providerToken: token
-            )
-            _ = try await channelSubscriptionService.unsubscribe(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                channelId: normalized
-            )
+    /// Captures the displayed subscription without creating a request or durable intent.
+    func prepareChannelRemoval(
+        subscription: ChannelSubscription,
+        originalConfig: ServerConfig,
+        keepHistory: Bool
+    ) async throws -> PendingChannelRemovalTarget {
+        guard dataStore.storageState.mode == .persistent else {
+            throw AppError.localStore("Channel confirmation requires available canonical storage.")
         }
-
-        try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
-        await channelSyncController.refreshChannelSubscriptions()
+        guard normalizedGateway(subscription.gateway) == normalizedGateway(originalConfig.gatewayKey) else {
+            throw channelRemovalError("gateway_changed_during_channel_removal")
+        }
+        let channelID = try ChannelIdValidator.normalize(subscription.channelId)
+        let current = try await currentRemovalSubscription(
+            gateway: originalConfig.gatewayKey,
+            channelID: channelID,
+            expectedUpdatedAt: subscription.updatedAt
+        )
+        guard let password = try await dataStore.activeChannelPassword(
+            gateway: originalConfig.gatewayKey,
+            for: channelID
+        ) else {
+            throw channelRemovalError("channel_password_missing")
+        }
+        let deviceKey = await dataStore.cachedDeviceKey(for: platform, backfillWakeupDefaults: false)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The device-key cache belongs to the active gateway. Never pair a key
+        // from a replacement configuration with the displayed subscription.
+        guard sameRemoteIdentity(serverConfigProvider(), originalConfig) else {
+            throw channelRemovalError("gateway_changed_during_channel_removal")
+        }
+        let historySnapshot = try await dataStore.prepareChannelRemovalHistory(channelID: channelID)
+        var removalConfig = originalConfig
+        removalConfig.notificationKeyMaterial = nil
+        return PendingChannelRemovalTarget(
+            channelID: channelID,
+            originalConfig: removalConfig,
+            expectedUpdatedAt: current.updatedAt,
+            password: password,
+            originalDeviceKey: deviceKey?.isEmpty == false ? deviceKey : nil,
+            historySnapshot: historySnapshot,
+            keepHistory: keepHistory
+        )
     }
 
-    func unsubscribeChannelAndDeleteLocalHistory(
-        channelId: String,
-        expectedGateway: String,
-        expectedUpdatedAt: Date
-    ) async throws -> Int {
-        guard let config = serverConfigProvider() else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let normalizedExpectedGateway = expectedGateway.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let normalizedCurrentGateway = gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard normalizedExpectedGateway == normalizedCurrentGateway else {
-            throw AppError.typedLocal(
-                code: "gateway_changed_during_channel_removal",
-                category: .validation,
-                message: localizationManager.localized("operation_failed"),
-                detail: "gateway changed while channel removal was pending"
-            )
-        }
-        let normalized = try ChannelIdValidator.normalize(channelId)
-        let currentSubscription = try await dataStore.loadChannelSubscriptions(
-            gateway: gatewayKey,
-            includeDeleted: false
-        ).first {
-            $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalized
-        }
-        guard let currentSubscription,
-              abs(currentSubscription.updatedAt.timeIntervalSince(expectedUpdatedAt)) < 0.001
-        else {
-            throw AppError.typedLocal(
-                code: "channel_subscription_changed_during_removal",
-                category: .validation,
-                message: localizationManager.localized("operation_failed"),
-                detail: "channel subscription changed while removal was pending"
-            )
-        }
-        guard try await dataStore.activeChannelPassword(gateway: gatewayKey, for: normalized) != nil else {
-            throw AppError.typedLocal(
-                code: "channel_password_missing",
-                category: .validation,
-                message: localizationManager.localized("channel_password_missing"),
-                detail: "missing stored password for transactional channel removal"
-            )
-        }
-        guard let messageStateCoordinator = messageStateCoordinatorProvider() else {
-            throw AppError.typedLocal(
-                code: "message_state_coordinator_unavailable",
-                category: .local,
-                message: localizationManager.localized("operation_failed"),
-                detail: "messageStateCoordinatorProvider returned nil during channel cleanup"
-            )
-        }
-        let providerToken = try await performRemoteUnsubscribe(
-            config: config,
-            channelId: normalized
-        )
-
-        let result: LocalDataStore.ChannelRemovalResult
-        do {
-            result = try await dataStore.softDeleteChannelSubscriptionAndDeleteHistory(
-                gateway: gatewayKey,
-                channelId: normalized,
+    func commitPendingChannelRemoval(
+        record: PendingLocalDeletionRecord,
+        leaseOwner: String
+    ) async throws -> PendingLocalDeletionCleanup {
+        let target: PendingChannelRemovalTarget
+        switch record.intent {
+        case let .channelRemoval(captured):
+            target = captured
+        case let .channelHistory(channelID, expectedGateway, expectedUpdatedAt):
+            // Old accepted intents contain no server credentials. They can only
+            // be resolved while the original gateway is still active; otherwise
+            // the worker retains the receipt for explicit recovery.
+            guard let config = serverConfigProvider(),
+                  normalizedGateway(config.gatewayKey) == normalizedGateway(expectedGateway)
+            else {
+                throw channelRemovalError("channel_removal_reconciliation_required")
+            }
+            let subscription = try await currentRemovalSubscription(
+                gateway: expectedGateway,
+                channelID: channelID,
                 expectedUpdatedAt: expectedUpdatedAt
+            )
+            let prepared = try await prepareChannelRemoval(
+                subscription: subscription,
+                originalConfig: config,
+                keepHistory: false
+            )
+            // Execute the exact durable payload. The millisecond Date codec can
+            // round a transient ServerConfig date while freezing this receipt.
+            target = try await dataStore.freezeLegacyChannelRemoval(id: record.id, owner: leaseOwner, target: prepared)
+        case .messages, .events, .things:
+            throw AppError.localStore("Invalid pending channel removal payload.")
+        }
+        let mutationKey = try beginChannelMutation(config: target.originalConfig, channelID: target.channelID)
+        defer { inFlightChannelMutationKeys.remove(mutationKey) }
+        await channelSyncController.beginChannelRemovalWindow()
+        defer { channelSyncController.endChannelRemovalWindow() }
+        try await validateRemovalTarget(target)
+        return try await finishPendingChannelRemoval(record: record, leaseOwner: leaseOwner, target: target)
+    }
+
+    private func finishPendingChannelRemoval(
+        record: PendingLocalDeletionRecord,
+        leaseOwner: String,
+        target: PendingChannelRemovalTarget
+    ) async throws -> PendingLocalDeletionCleanup {
+        let deviceKey = try await performCapturedRemoteUnsubscribe(target)
+        let cleanup: PendingLocalDeletionCleanup
+        do {
+            cleanup = try await dataStore.commitClaimedChannelRemoval(
+                id: record.id,
+                owner: leaseOwner,
+                target: target
             )
         } catch {
             let localError = error
-            if channelMutationRoundTrip != nil {
+            if (localError as? AppError)?.code == "channel_removal_lease_changed" {
+                // The replacement executor owns the remote/local outcome.
                 throw localError
             }
-            let currentPassword: String?
             do {
-                currentPassword = try await dataStore.activeChannelPassword(
-                    gateway: gatewayKey,
-                    for: normalized
-                )
+                try await validateRemovalTarget(target)
             } catch {
-                throw AppError.localStore(
-                    "channel removal local transaction failed and remote compensation state "
-                        + "could not be verified; local=\(localError.localizedDescription); "
-                        + "credential_read=\(error.localizedDescription)"
-                )
-            }
-            guard let currentPassword else {
-                // A newer local removal superseded this intent. Do not resurrect
-                // the subscription with a credential captured by the stale intent.
-                throw localError
+                // A changed subscription does not authorize restoring either
+                // its replacement credential or the obsolete captured one.
+                throw channelRemovalError("channel_removal_reconciliation_required",
+                    detail: "local=\(localError.localizedDescription); compensation_state=\(error.localizedDescription)")
             }
             do {
-                _ = try await subscribeWithDeviceKeyRecovery(
-                    config: config,
-                    providerToken: providerToken,
-                    channelId: normalized,
-                    alias: nil,
-                    password: currentPassword
-                )
+                try await compensateCapturedRemoteUnsubscribe(target, deviceKey: deviceKey)
             } catch {
                 throw AppError.localStore(
                     "channel removal local transaction failed and remote compensation failed; "
@@ -247,90 +238,123 @@ final class ChannelSubscriptionController {
             }
             throw localError
         }
-
-        await messageStateCoordinator.reconcileExternallyDeletedMessages(
-            notificationRequestIDs: result.deletedNotificationRequestIDs,
-            imageURLs: result.deletedImageURLs
-        )
-        await channelSyncController.refreshChannelSubscriptions()
-        return result.deletedRecordCount
+        // The store commits cleanup and receipt together; the worker completes
+        // notification, image and projection cleanup even after process loss.
+        await channelSyncController.refreshChannelSubscriptions(syncProviderRoute: false)
+        return cleanup
     }
 
-    func commitPendingChannelRemoval(
-        record: PendingLocalDeletionRecord,
-        leaseOwner: String
-    ) async throws -> PendingLocalDeletionCleanup {
-        guard case let .channelHistory(channelId, expectedGateway, expectedUpdatedAt) = record.intent else {
-            throw AppError.localStore("Invalid pending channel removal payload.")
+    private func performCapturedRemoteUnsubscribe(_ target: PendingChannelRemovalTarget) async throws -> String? {
+        if let channelMutationRoundTrip {
+            try await channelMutationRoundTrip.unsubscribe(
+                baseURL: target.originalConfig.baseURL,
+                token: target.originalConfig.token,
+                channelId: target.channelID
+            )
+            return nil
         }
-        return try await commitPendingChannelRemoval(
-            record: record,
-            leaseOwner: leaseOwner,
-            channelId: channelId,
-            expectedGateway: expectedGateway,
-            expectedUpdatedAt: expectedUpdatedAt
+        // A removed/unknown route must not be replaced by a new device merely
+        // to satisfy an old unsubscribe. Keep the accepted obligation visible.
+        guard let deviceKey = target.originalDeviceKey, !deviceKey.isEmpty else {
+            throw channelRemovalError("channel_removal_reconciliation_required")
+        }
+        _ = try await channelSubscriptionService.unsubscribe(
+            baseURL: target.originalConfig.baseURL,
+            token: target.originalConfig.token,
+            deviceKey: deviceKey,
+            channelId: target.channelID
         )
+        return deviceKey
     }
 
-    private func commitPendingChannelRemoval(
-        record: PendingLocalDeletionRecord,
-        leaseOwner: String,
-        channelId: String,
-        expectedGateway: String,
-        expectedUpdatedAt: Date
-    ) async throws -> PendingLocalDeletionCleanup {
-        guard let config = serverConfigProvider() else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let expected = expectedGateway.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let current = gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard expected == current else {
-            throw AppError.typedLocal(
-                code: "gateway_changed_during_channel_removal",
-                category: .validation,
-                message: localizationManager.localized("operation_failed")
+    private func compensateCapturedRemoteUnsubscribe(
+        _ target: PendingChannelRemovalTarget,
+        deviceKey: String?
+    ) async throws {
+        let payload: ChannelSubscriptionService.SubscribePayload
+        if let channelMutationRoundTrip {
+            payload = try await channelMutationRoundTrip.subscribe(
+                baseURL: target.originalConfig.baseURL,
+                token: target.originalConfig.token,
+                channelId: target.channelID,
+                channelName: nil,
+                credential: target.password
+            )
+        } else {
+            guard let deviceKey else {
+                throw channelRemovalError("channel_removal_reconciliation_required")
+            }
+            payload = try await channelSubscriptionService.subscribe(
+                baseURL: target.originalConfig.baseURL,
+                token: target.originalConfig.token,
+                deviceKey: deviceKey,
+                channelId: target.channelID,
+                channelName: nil,
+                password: target.password
             )
         }
-        let normalized = try ChannelIdValidator.normalize(channelId)
-        let subscription = try await dataStore.loadChannelSubscriptions(
-            gateway: gatewayKey,
+        guard payload.subscribed else {
+            throw channelRemovalError("channel_removal_reconciliation_required")
+        }
+    }
+
+    private func validateRemovalTarget(_ target: PendingChannelRemovalTarget) async throws {
+        _ = try await currentRemovalSubscription(
+            gateway: target.originalConfig.gatewayKey,
+            channelID: target.channelID,
+            expectedUpdatedAt: target.expectedUpdatedAt
+        )
+        guard try await dataStore.activeChannelPassword(
+            gateway: target.originalConfig.gatewayKey,
+            for: target.channelID
+        ) == target.password else {
+            throw channelRemovalError("channel_subscription_changed_during_removal")
+        }
+    }
+
+    private func currentRemovalSubscription(
+        gateway: String,
+        channelID: String,
+        expectedUpdatedAt: Date
+    ) async throws -> ChannelSubscription {
+        let normalizedID = try ChannelIdValidator.normalize(channelID)
+        guard let subscription = try await dataStore.loadChannelSubscriptions(
+            gateway: gateway,
             includeDeleted: false
-        ).first { $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalized }
-        guard let subscription,
+        ).first(where: { $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedID }),
               abs(subscription.updatedAt.timeIntervalSince(expectedUpdatedAt)) < 0.001
         else {
-            throw AppError.typedLocal(
-                code: "channel_subscription_changed_during_removal",
-                category: .validation,
-                message: localizationManager.localized("operation_failed")
-            )
+            throw channelRemovalError("channel_subscription_changed_during_removal")
         }
-        return try await finishPendingChannelRemoval(
-            record: record,
-            leaseOwner: leaseOwner,
-            normalizedChannelId: normalized
+        return subscription
+    }
+
+    private func channelRemovalError(_ code: String, detail: String? = nil) -> AppError {
+        AppError.typedLocal(
+            code: code,
+            category: .validation,
+            message: localizationManager.localized("operation_failed"),
+            detail: detail
         )
     }
 
-    private func finishPendingChannelRemoval(
-        record: PendingLocalDeletionRecord,
-        leaseOwner: String,
-        normalizedChannelId: String
-    ) async throws -> PendingLocalDeletionCleanup {
-        guard case let .channelHistory(_, expectedGateway, expectedUpdatedAt) = record.intent else {
-            throw AppError.localStore("Invalid pending channel removal payload.")
+    private func beginChannelMutation(config: ServerConfig, channelID: String) throws -> String {
+        let key = normalizedGateway(config.gatewayKey) + "|" + channelID
+        guard inFlightChannelMutationKeys.insert(key).inserted else {
+            throw channelRemovalError("channel_mutation_in_progress")
         }
-        let deletedRecordCount = try await unsubscribeChannelAndDeleteLocalHistory(
-            channelId: normalizedChannelId,
-            expectedGateway: expectedGateway,
-            expectedUpdatedAt: expectedUpdatedAt
-        )
-        try await dataStore.abandonClaimedPendingLocalDeletion(
-            id: record.id,
-            owner: leaseOwner
-        )
-        return PendingLocalDeletionCleanup(deletedRecordCount: deletedRecordCount)
+        return key
+    }
+
+    private func normalizedGateway(_ gateway: String) -> String {
+        gateway.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func sameRemoteIdentity(_ current: ServerConfig?, _ expected: ServerConfig) -> Bool {
+        guard let current else { return false }
+        return normalizedGateway(current.gatewayKey) == normalizedGateway(expected.gatewayKey)
+            && current.token == expected.token
     }
 
     private func subscribeChannel(
@@ -341,6 +365,8 @@ final class ChannelSubscriptionController {
         guard let config = serverConfigProvider() else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
         let validatedPassword = try ChannelPasswordValidator.validate(password)
+        let mutationKey = try channelId.map { try beginChannelMutation(config: config, channelID: $0) }
+        defer { if let mutationKey { inFlightChannelMutationKeys.remove(mutationKey) } }
         let payload = try await performRemoteSubscribe(
             config: config,
             channelId: channelId,

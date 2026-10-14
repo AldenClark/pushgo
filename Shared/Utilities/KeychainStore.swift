@@ -605,12 +605,12 @@ struct LocalKeychainConfigStore {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    func loadServerConfig() throws -> ServerConfig? {
+    func loadServerConfig(backfillGatewayToken: Bool = true) throws -> ServerConfig? {
         guard let data = try read(account: Self.serverConfigAccount) else {
             return nil
         }
         let config = try decoder.decode(ServerConfig.self, from: data).normalized()
-        if qualityStorageDirectory == nil {
+        if backfillGatewayToken, qualityStorageDirectory == nil {
             _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
         }
         return config

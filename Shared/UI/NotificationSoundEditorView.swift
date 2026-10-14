@@ -337,8 +337,8 @@ struct NotificationSoundSettingsContentView: View {
 
     private func removeCustomSound(_ asset: NotificationCustomSoundAsset) async {
         pendingRemovalAsset = nil
+        guard await viewModel.removeNotificationCustomSound(asset) else { return }
         setDraftRulesUsingCustomSoundToSilent(asset.id)
-        await viewModel.removeNotificationCustomSound(assetID: asset.id)
         mergeLibraryStateFromViewModel()
     }
 

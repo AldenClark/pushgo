@@ -20,6 +20,36 @@ final class PushGo_watchOSUITests: XCTestCase {
         }
     }
 
+    func testWatchNotificationDeleteCancelPreservesUnreadContentAfterRelaunch() throws {
+        let app = XCUIApplication()
+        let sessionID = UUID().uuidString
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.notification-delete-confirmation")
+        launchPreparedApp(app)
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        cancel.tap()
+        XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID)
+        launchPreparedApp(app)
+        let row = app.buttons["row.message.quality-watch-message-001"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertEqual(row.label, "Gateway health warning")
+        XCTAssertEqual(row.value as? String, "Unread, Critical, Primary API latency is above budget.")
+        XCTAssertTrue(app.buttons["row.message.quality-watch-message-002"].exists)
+    }
+
+    func testWatchDeletionGuardsPreserveReplacementAndRejectStaleConfiguration() throws {
+        let app = XCUIApplication()
+        configureHermeticLaunch(app, sessionID: UUID().uuidString, scenario: "watch.delete-guards")
+        launchPreparedApp(app)
+        let row = app.buttons["row.message.quality-watch-message-001"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertEqual(row.label, "Gateway health warning")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
+    }
+
     func testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch() throws {
         let app = XCUIApplication()
         let sessionID = UUID().uuidString
@@ -56,7 +86,7 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertEqual(openLink.label, "Open link")
         XCTAssertTrue(openLink.isHittable)
 
-        let deleteButton = app.buttons["Delete"]
+        let deleteButton = app.buttons["action.message.delete"]
         XCTAssertTrue(scrollToElement(deleteButton, in: app, maximumSwipes: 3))
         deleteButton.tap()
         let cancelButton = app.buttons["Cancel"]
@@ -64,14 +94,33 @@ final class PushGo_watchOSUITests: XCTestCase {
         cancelButton.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.message.detail"].exists)
         XCTAssertTrue(deleteButton.isHittable)
+        XCTAssertTrue(scrollBackToElement(app.staticTexts["Primary API latency is above budget."], in: app, maximumSwipes: 4))
 
+        // Cancellation must retain canonical content across an actual app relaunch.
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID)
+        launchPreparedApp(app)
+        XCTAssertTrue(gatewayMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertEqual(gatewayMessage.label, "Gateway health warning")
+        XCTAssertTrue(databaseMessage.exists)
+        gatewayMessage.tap()
+        XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollToElement(deleteButton, in: app, maximumSwipes: 3))
         deleteButton.tap()
-        let confirmDeleteButton = try XCTUnwrap(
-            app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.first(where: \.isHittable)
-        )
+        // watchOS presents SwiftUI alerts as a native Table and discards custom
+        // action identifiers. Scope to its actual title, excluding the detail row.
+        let confirmation = app.tables.containing(
+            .staticText, identifier: "Delete this message? This cannot be undone."
+        ).firstMatch
+        let confirmDeleteButton = confirmation.buttons["Delete"]
+        XCTAssertTrue(confirmDeleteButton.waitForExistence(timeout: 5), startupFailureDescription(in: app))
         confirmDeleteButton.tap()
         XCTAssertTrue(waitUntil(timeout: 5) { !gatewayMessage.exists })
-        XCTAssertTrue(databaseMessage.waitForExistence(timeout: 5))
+        if !databaseMessage.waitForExistence(timeout: 5) {
+            _ = scrollBackToElement(app.buttons["Retry"], in: app, maximumSwipes: 4)
+            XCTFail(startupFailureDescription(in: app))
+            return
+        }
 
         databaseMessage.tap()
         XCTAssertTrue(app.staticTexts["Replica lag returned to normal."].waitForExistence(timeout: 5))

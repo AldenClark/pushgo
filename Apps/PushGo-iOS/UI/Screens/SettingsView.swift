@@ -74,7 +74,7 @@ struct SettingsView: View {
             switch sheet {
             case .manualKey:
                 ManualKeySettingsSheet(viewModel: viewModel)
-                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                    .toastOverlay(environment: environment)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             case .serverManagement:
@@ -82,12 +82,12 @@ struct SettingsView: View {
                     viewModel: viewModel,
                     onDismiss: { activeSheet = nil }
                 )
-                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                    .toastOverlay(environment: environment)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             case .notificationSounds:
                 NotificationSoundSettingsSheet(viewModel: viewModel)
-                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                    .toastOverlay(environment: environment)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -141,6 +141,15 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
+            if environment.pendingLocalDeletionController.recoveryRequiredCount > 0 {
+                Button {
+                    Task { await environment.pendingLocalDeletionController.retryRecovery() }
+                } label: {
+                    Label(localizationManager.localized("retry_unfinished_deletions"), systemImage: "arrow.clockwise")
+                }
+                .accessibilityIdentifier("action.settings.retry_deletion_recovery")
+            }
+
             if activeSheet == nil, let feedback = viewModel.serverSaveFeedbackMessage {
                 AppInlineFeedbackBanner(
                     message: feedback,

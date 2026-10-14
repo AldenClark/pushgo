@@ -326,6 +326,16 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
     return mutable
 }
 
+/// Configuration storage is outside SQLite; serialize its writes with confirmed deletion commits.
+private enum LocalDeletionConfigurationFence {
+    private static let lock = NSLock()
+    static func perform<T>(_ operation: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
+    }
+}
+
 actor LocalDataStore {
     struct ChannelRemovalResult: Sendable {
         let deletedMessageIDs: [UUID]
@@ -784,7 +794,48 @@ actor LocalDataStore {
         return backend
     }
 
-    func enqueuePendingLocalDeletion(
+    func prepareChannelRemovalHistory(channelID: String) async throws -> [String] {
+        try await requireBackend().prepareChannelRemovalHistory(channelID: channelID)
+    }
+
+    func freezeLegacyChannelRemoval(id: UUID, owner: String, target: PendingChannelRemovalTarget) async throws -> PendingChannelRemovalTarget {
+        try await requireBackend().freezeLegacyChannelRemoval(id: id, owner: owner, target: target)
+    }
+
+    func acceptConfirmedChannelRemoval(_ target: PendingChannelRemovalTarget) async throws -> PendingLocalDeletionRecord {
+        try await requireBackend().acceptConfirmedChannelRemoval(target)
+    }
+
+    func commitClaimedChannelRemoval(id: UUID, owner: String, target: PendingChannelRemovalTarget) async throws -> PendingLocalDeletionCleanup {
+        let cleanup = try await requireBackend().commitClaimedChannelRemoval(id: id, owner: owner, target: target)
+        try? softDeleteLegacyChannelSubscription(gateway: target.originalConfig.gatewayKey,
+            channelId: target.channelID, deletedAt: Date())
+        return cleanup
+    }
+
+    #if DEBUG
+    private var beforeConfirmedDeletionTransactionForTesting: (@Sendable () async -> Void)?
+    func setBeforeConfirmedDeletionTransactionForTesting(_ hook: (@Sendable () async -> Void)?) {
+        beforeConfirmedDeletionTransactionForTesting = hook
+    }
+    #endif
+
+    /// Read-only snapshot taken before presenting confirmation. Cancel simply drops it.
+    func prepareLocalDeletion(intent: PendingLocalDeletionIntent) async throws -> LocalDeletionConfirmation {
+        let config = try LocalDeletionConfigurationFence.perform { try localConfigStore.loadServerConfig(backfillGatewayToken: false)?.normalized() }
+        return try await requireBackend().prepareLocalDeletion(intent: intent, configuration: config)
+    }
+
+    /// Validates and deletes the exact confirmed scope in one commit, never an Undo queue.
+    func deleteConfirmedLocalData(_ confirmation: LocalDeletionConfirmation) async throws -> PendingLocalDeletionCleanup {
+        #if DEBUG
+        await beforeConfirmedDeletionTransactionForTesting?()
+        #endif
+        return try await requireBackend().deleteConfirmedLocalData(confirmation)
+    }
+
+    #if DEBUG
+    func seedLegacyPendingLocalDeletion(
         summary: String,
         undoLabel: String,
         intent: PendingLocalDeletionIntent,
@@ -792,13 +843,31 @@ actor LocalDataStore {
         now: Date
     ) async throws -> PendingLocalDeletionRecord {
         let backend = try requireBackend()
-        return try await backend.enqueuePendingLocalDeletion(
+        return try await backend.seedLegacyPendingLocalDeletion(
             summary: summary,
             undoLabel: undoLabel,
             intent: intent,
             timeout: timeout,
             now: now
         )
+    }
+
+    #endif
+
+    func pendingLocalDeletionRecord(id: UUID) async throws -> PendingLocalDeletionRecord? {
+        try await requireBackend().pendingLocalDeletion(id: id)
+    }
+
+    func pendingLocalDeletionRecoveryErrorCodes() async throws -> [String] {
+        try await requireBackend().pendingLocalDeletionRecoveryErrorCodes()
+    }
+
+    func pendingLocalDeletionRecoveryCount() async throws -> Int {
+        try await requireBackend().pendingLocalDeletionRecoveryCount()
+    }
+
+    func retryPendingLocalDeletionRecovery(now: Date) async throws {
+        try await requireBackend().retryPendingLocalDeletionRecovery(now: now)
     }
 
     func loadPendingLocalDeletions(now: Date) async throws -> [PendingLocalDeletionRecord] {
@@ -809,36 +878,14 @@ actor LocalDataStore {
         try await requireBackend().forcePendingLocalDeletionsDue(now: now)
     }
 
-    func forcePendingLocalDeletionDue(
-        id: UUID,
-        timeout: TimeInterval,
-        now: Date
-    ) async throws -> Bool {
-        try await requireBackend().forcePendingLocalDeletionDue(id: id, timeout: timeout, now: now)
-    }
-
-    func undoPendingLocalDeletion(
-        id: UUID,
-        timeout: TimeInterval,
-        now: Date
-    ) async throws -> Bool {
-        try await requireBackend().undoPendingLocalDeletion(
-            id: id,
-            timeout: timeout,
-            now: now
-        )
-    }
-
     func claimNextPendingLocalDeletion(
         owner: String,
         leaseDuration: TimeInterval,
-        timeout: TimeInterval,
         now: Date
     ) async throws -> PendingLocalDeletionRecord? {
         try await requireBackend().claimNextPendingLocalDeletion(
             owner: owner,
             leaseDuration: leaseDuration,
-            timeout: timeout,
             now: now
         )
     }
@@ -1092,12 +1139,11 @@ actor LocalDataStore {
             }
         }
 #endif
-        try localConfigStore.saveServerConfig(normalized)
-        if PushGoAutomationContext.qualitySession == nil {
-            Self.saveWakeupIngressServerConfigDefaults(
-                normalized,
-                suiteName: appGroupIdentifier
-            )
+        try LocalDeletionConfigurationFence.perform {
+            try localConfigStore.saveServerConfig(normalized)
+            if PushGoAutomationContext.qualitySession == nil {
+                Self.saveWakeupIngressServerConfigDefaults(normalized, suiteName: appGroupIdentifier)
+            }
         }
     }
 
@@ -1558,16 +1604,14 @@ actor LocalDataStore {
         )
     }
 
-    func cachedDeviceKey(for platform: String) async -> String? {
+    func cachedDeviceKey(for platform: String, backfillWakeupDefaults: Bool = true) async -> String? {
         guard let normalizedPlatform = normalizedDevicePlatform(platform) else {
             return nil
         }
         if let deviceKey = loadCanonicalDeviceKey(for: normalizedPlatform) {
-            Self.saveWakeupIngressDeviceKeyDefaults(
-                deviceKey,
-                platform: normalizedPlatform,
-                suiteName: appGroupIdentifier
-            )
+            if backfillWakeupDefaults {
+                Self.saveWakeupIngressDeviceKeyDefaults(deviceKey, platform: normalizedPlatform, suiteName: appGroupIdentifier)
+            }
             return deviceKey
         }
         return Self.loadWakeupIngressDeviceKeyDefaults(
@@ -5917,7 +5961,8 @@ private actor GRDBStore {
         }
     }
 
-    func enqueuePendingLocalDeletion(
+    #if DEBUG
+    func seedLegacyPendingLocalDeletion(
         summary: String,
         undoLabel: String,
         intent: PendingLocalDeletionIntent,
@@ -5966,6 +6011,36 @@ private actor GRDBStore {
         }
     }
 
+    #endif
+
+    func pendingLocalDeletionRecoveryErrorCodes() async throws -> [String] {
+        try read { db in
+            try String.fetchAll(db, sql: "SELECT COALESCE(last_error_code, 'unknown') FROM pending_local_deletions WHERE state = 'reconciliation_required' ORDER BY sequence;")
+        }
+    }
+
+    func pendingLocalDeletionRecoveryCount() async throws -> Int {
+        try read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM pending_local_deletions WHERE state = 'reconciliation_required';") ?? 0
+        }
+    }
+
+    func retryPendingLocalDeletionRecovery(now: Date) async throws {
+        try write { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM pending_local_deletions WHERE state = 'reconciliation_required';")
+            for row in rows {
+                // Unknown/corrupt payloads remain preserved. A retry never invents their scope.
+                guard let record = try? decodePendingLocalDeletion(row),
+                      record.lastErrorCode != "channel_history_changed_during_removal" else { continue }
+                try db.execute(sql: """
+                    UPDATE pending_local_deletions SET state = ?, retry_after_epoch_ms = ?,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL
+                    WHERE id = ? AND state = 'reconciliation_required';
+                    """, arguments: [record.cleanup == nil ? "retry_waiting" : "cleanup_pending", Self.storedEpoch(now), record.id.uuidString])
+            }
+        }
+    }
+
     func loadPendingLocalDeletions(now: Date) async throws -> [PendingLocalDeletionRecord] {
         try write { db in
             try recoverExpiredPendingLocalDeletionLeases(db: db, now: now)
@@ -5977,12 +6052,10 @@ private actor GRDBStore {
                     ORDER BY sequence ASC;
                     """
             )
-            var foundInvalidPayload = false
             for row in rows {
                 do {
                     _ = try decodePendingLocalDeletion(row)
                 } catch {
-                    foundInvalidPayload = true
                     let id: String = row["id"]
                     try db.execute(
                         sql: """
@@ -5996,9 +6069,6 @@ private actor GRDBStore {
                         arguments: [id]
                     )
                 }
-            }
-            if foundInvalidPayload {
-                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: 5)
             }
             return try Row.fetchAll(
                 db,
@@ -6029,49 +6099,9 @@ private actor GRDBStore {
         }
     }
 
-    func forcePendingLocalDeletionDue(
-        id: UUID,
-        timeout: TimeInterval,
-        now: Date
-    ) async throws -> Bool {
-        try write { db in
-            try db.execute(
-                sql: """
-                    UPDATE pending_local_deletions
-                    SET state = 'retry_waiting', deadline_epoch_ms = NULL,
-                        retry_after_epoch_ms = ?, last_error_code = NULL
-                    WHERE id = ? AND state = 'undoable';
-                    """,
-                arguments: [Self.storedEpoch(now), id.uuidString]
-            )
-            let changed = db.changesCount == 1
-            if changed {
-                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
-            }
-            return changed
-        }
-    }
-
-    func undoPendingLocalDeletion(
-        id: UUID,
-        timeout: TimeInterval,
-        now: Date
-    ) async throws -> Bool {
-        try write { db in
-            try db.execute(
-                sql: "DELETE FROM pending_local_deletions WHERE id = ? AND state = 'undoable';",
-                arguments: [id.uuidString]
-            )
-            guard db.changesCount == 1 else { return false }
-            try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
-            return true
-        }
-    }
-
     func claimNextPendingLocalDeletion(
         owner: String,
         leaseDuration: TimeInterval,
-        timeout: TimeInterval,
         now: Date
     ) async throws -> PendingLocalDeletionRecord? {
         try write { db in
@@ -6081,12 +6111,12 @@ private actor GRDBStore {
                 db,
                 sql: """
                     SELECT * FROM pending_local_deletions
-                    WHERE (state = 'undoable' AND deadline_epoch_ms <= ?)
+                    WHERE state IN ('queued', 'undoable')
                        OR (state = 'retry_waiting' AND retry_after_epoch_ms <= ?)
                     ORDER BY sequence ASC
                     LIMIT 1;
                     """,
-                arguments: [nowEpoch, nowEpoch]
+                arguments: [nowEpoch]
             ) else { return nil }
             let candidate = try decodePendingLocalDeletion(row)
             try db.execute(
@@ -6105,9 +6135,6 @@ private actor GRDBStore {
                 ]
             )
             guard db.changesCount == 1 else { return nil }
-            if candidate.state == .undoable {
-                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
-            }
             return try pendingLocalDeletion(id: candidate.id, db: db)
         }
     }
@@ -6202,8 +6229,34 @@ private actor GRDBStore {
                 throw localStoreError("Pending deletion lease is no longer owned by this executor.")
             }
 
+            let cleanup = try deleteLocalData(intent: record.intent, now: now, db: db)
+
+            let cleanupJSON = try encodedJSONString(cleanup)
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'cleanup_pending', cleanup_json = ?,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL,
+                        last_error_code = NULL
+                    WHERE id = ? AND state = 'executing' AND lease_owner = ?;
+                    """,
+                arguments: [cleanupJSON, id.uuidString, owner]
+            )
+            guard db.changesCount == 1 else {
+                throw localStoreError("Pending deletion lease changed during commit.")
+            }
+            return cleanup
+        }
+    }
+
+    private func deleteLocalData(
+        intent: PendingLocalDeletionIntent,
+        now: Date,
+        db: Database
+    ) throws -> PendingLocalDeletionCleanup {
             var cleanup = PendingLocalDeletionCleanup()
-            switch record.intent {
+            switch intent {
             case let .messages(ids):
                 let uniqueIDs = Array(Set(ids))
                 if !uniqueIDs.isEmpty {
@@ -6215,6 +6268,7 @@ private actor GRDBStore {
                     try db.execute(sql: "DELETE FROM messages WHERE id IN (\(inClause));")
                     try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
                     cleanup = deletionCleanup(messageRecords: records)
+                    cleanup.rebuildSystemSearchIndex = records.contains { $0.entityType == "event" || $0.entityType == "thing" }
                 }
 
             case let .events(ids):
@@ -6257,10 +6311,14 @@ private actor GRDBStore {
                     }
                     try db.execute(sql: "DELETE FROM thing_projection_heads WHERE thing_id IN (\(inClause));")
                     try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE thing_id IN (\(inClause));")
+                    try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
                     mergeMessageRecords(records, into: &cleanup)
+                    cleanup.rebuildSystemSearchIndex = true
                     cleanup.deletedRecordCount += pendingCount
                 }
 
+            case .channelRemoval:
+                throw localStoreError("Remote channel removal requires its captured target executor.")
             case let .channelHistory(channelID, expectedGateway, expectedUpdatedAt):
                 let normalizedGateway = Self.normalizeGateway(expectedGateway)
                 let normalizedChannel = channelID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -6280,6 +6338,7 @@ private actor GRDBStore {
                 try db.execute(sql: "DELETE FROM event_projection_heads WHERE \(channelCondition);")
                 try db.execute(sql: "DELETE FROM thing_projection_heads WHERE \(channelCondition);")
                 try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE \(channelCondition);")
+                try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
                 try db.execute(
                     sql: """
                         UPDATE channel_subscriptions
@@ -6302,22 +6361,284 @@ private actor GRDBStore {
                 cleanup.rebuildSystemSearchIndex = true
             }
 
-            let cleanupJSON = try encodedJSONString(cleanup)
-            try db.execute(
-                sql: """
-                    UPDATE pending_local_deletions
-                    SET state = 'cleanup_pending', cleanup_json = ?,
-                        lease_owner = NULL, lease_until_epoch_ms = NULL,
-                        deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL,
-                        last_error_code = NULL
-                    WHERE id = ? AND state = 'executing' AND lease_owner = ?;
-                    """,
-                arguments: [cleanupJSON, id.uuidString, owner]
-            )
-            guard db.changesCount == 1 else {
-                throw localStoreError("Pending deletion lease changed during commit.")
+        return cleanup
+    }
+
+    func prepareChannelRemovalHistory(channelID: String) async throws -> [String] {
+        try read { db in
+            try localDeletionSnapshot(intent: .channelHistory(channelID: channelID, expectedGateway: "", expectedUpdatedAt: .distantPast), db: db)
+        }
+    }
+
+    private func validateChannelRemovalHistory(_ target: PendingChannelRemovalTarget, db: Database) throws {
+        guard !target.keepHistory else { return }
+        guard let snapshot = target.historySnapshot,
+              snapshot == (try localDeletionSnapshot(intent: .channelHistory(channelID: target.channelID,
+                expectedGateway: target.originalConfig.gatewayKey, expectedUpdatedAt: target.expectedUpdatedAt), db: db)) else {
+            throw AppError.typedLocal(code: "channel_history_changed_during_removal", category: .validation,
+                message: "The selected channel history changed. Confirm removal again.")
+        }
+    }
+
+    func freezeLegacyChannelRemoval(id: UUID, owner: String, target: PendingChannelRemovalTarget) async throws -> PendingChannelRemovalTarget {
+        try write { db in
+            guard let record = try pendingLocalDeletion(id: id, db: db), record.state == .executing, record.leaseOwner == owner,
+                  case let .channelHistory(channelID, gateway, updatedAt) = record.intent,
+                  channelID == target.channelID, Self.normalizeGateway(gateway) == Self.normalizeGateway(target.originalConfig.gatewayKey),
+                  updatedAt == target.expectedUpdatedAt, !target.keepHistory else {
+                throw AppError.typedLocal(code: "channel_removal_lease_changed", category: .local,
+                    message: "Channel removal is being completed by another executor.")
             }
+            try validateChannelRemovalTarget(target, db: db)
+            do { try validateChannelRemovalHistory(target, db: db) }
+            catch let error as AppError where error.code == "channel_history_changed_during_removal" {
+                // No remote request has happened yet. Preserve this legacy receipt and
+                // recapture its first execution scope on the next attempt.
+                throw AppError.typedLocal(code: "legacy_channel_history_changed_before_capture", category: .local,
+                    message: "Channel history changed before its original removal could start.")
+            }
+            let frozen = PendingLocalDeletionIntent.channelRemoval(target: target)
+            try db.execute(sql: "UPDATE pending_local_deletions SET payload_json = ?, deduplication_key = ? WHERE id = ? AND lease_owner = ?;",
+                arguments: [try encodedJSONString(frozen), frozen.deduplicationKey, id.uuidString, owner])
+            guard db.changesCount == 1,
+                  let persisted = try pendingLocalDeletion(id: id, db: db),
+                  persisted.state == .executing, persisted.leaseOwner == owner,
+                  case let .channelRemoval(durableTarget) = persisted.intent else {
+                throw AppError.typedLocal(code: "channel_removal_lease_changed", category: .local,
+                    message: "Channel removal is being completed by another executor.")
+            }
+            return durableTarget
+        }
+    }
+
+    private func validateChannelRemovalTarget(_ target: PendingChannelRemovalTarget, db: Database) throws {
+        let row = try Row.fetchOne(db, sql: """
+            SELECT updated_at, password FROM channel_subscriptions
+            WHERE gateway = ? AND channel_id = ? AND is_deleted = 0;
+            """, arguments: [Self.normalizeGateway(target.originalConfig.gatewayKey), target.channelID])
+        guard let row, let updated: Double = row["updated_at"],
+              updated == Self.storedEpoch(target.expectedUpdatedAt),
+              let password: String = row["password"], password == target.password else {
+            throw AppError.typedLocal(code: "channel_subscription_changed_during_removal", category: .validation,
+                message: "The selected channel changed. Confirm removal again.")
+        }
+    }
+
+    private func channelRemovalPayload(_ json: String, excludingHistory: Bool) throws -> NSDictionary {
+        guard let data = json.data(using: .utf8),
+              var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw localStoreError("Invalid channel removal payload.")
+        }
+        if excludingHistory {
+            guard var removal = object["channelRemoval"] as? [String: Any],
+                  var target = removal["target"] as? [String: Any] else {
+                throw localStoreError("Invalid captured channel removal payload.")
+            }
+            target.removeValue(forKey: "historySnapshot")
+            removal["target"] = target
+            object["channelRemoval"] = removal
+        }
+        return object as NSDictionary
+    }
+
+    func acceptConfirmedChannelRemoval(_ target: PendingChannelRemovalTarget) async throws -> PendingLocalDeletionRecord {
+        try write { db in
+            let intent = PendingLocalDeletionIntent.channelRemoval(target: target)
+            if let existing = try pendingLocalDeletion(deduplicationKey: intent.deduplicationKey, db: db) {
+                // Compare the accepted wire payload directly. Date's millisecond decoder can
+                // round its in-memory reference epoch; that must not make an exact duplicate new work.
+                let stored = try String.fetchOne(db, sql: "SELECT payload_json FROM pending_local_deletions WHERE id = ?;", arguments: [existing.id.uuidString])
+                let incoming = try encodedJSONString(intent)
+                guard let stored else { throw localStoreError("Accepted channel removal is unavailable.") }
+                if existing.state == .reconciliationRequired,
+                   existing.lastErrorCode == "channel_history_changed_during_removal",
+                   try channelRemovalPayload(stored, excludingHistory: true).isEqual(channelRemovalPayload(incoming, excludingHistory: true)) {
+                    // Only a fresh complete confirmation may replace the changed history scope.
+                    // Every original destination, credential and subscription field remains exact.
+                    try validateChannelRemovalTarget(target, db: db)
+                    try validateChannelRemovalHistory(target, db: db)
+                    try db.execute(sql: """
+                        UPDATE pending_local_deletions SET payload_json = ?, state = 'retry_waiting',
+                            retry_after_epoch_ms = ?, last_error_code = NULL,
+                            lease_owner = NULL, lease_until_epoch_ms = NULL
+                        WHERE id = ? AND state = 'reconciliation_required'
+                          AND last_error_code = 'channel_history_changed_during_removal';
+                        """, arguments: [incoming, Self.storedEpoch(Date()), existing.id.uuidString])
+                    guard db.changesCount == 1, let refreshed = try pendingLocalDeletion(id: existing.id, db: db) else {
+                        throw localStoreError("Channel recovery receipt changed during confirmation.")
+                    }
+                    return refreshed
+                }
+                guard try channelRemovalPayload(stored, excludingHistory: false).isEqual(channelRemovalPayload(incoming, excludingHistory: false)) else {
+                    throw localStoreError("Channel removal target changed.")
+                }
+                return existing
+            }
+            try validateChannelRemovalTarget(target, db: db)
+            try validateChannelRemovalHistory(target, db: db)
+            let id = UUID()
+            let now = Self.storedEpoch(Date())
+            try db.execute(sql: """
+                INSERT INTO pending_local_deletions(id, deduplication_key, summary, undo_label,
+                    payload_version, payload_json, state, created_at_epoch_ms, retry_after_epoch_ms, attempt_count)
+                VALUES (?, ?, '', '', 1, ?, 'retry_waiting', ?, ?, 0);
+                """, arguments: [id.uuidString, intent.deduplicationKey, try encodedJSONString(intent), now, now])
+            guard let record = try pendingLocalDeletion(id: id, db: db) else { throw localStoreError("Channel removal was not persisted.") }
+            return record
+        }
+    }
+
+    func commitClaimedChannelRemoval(id: UUID, owner: String, target: PendingChannelRemovalTarget) async throws -> PendingLocalDeletionCleanup {
+        try writeCanonicalMessages { db in
+            guard let record = try pendingLocalDeletion(id: id, db: db), record.state == .executing,
+                  record.leaseOwner == owner else { throw AppError.typedLocal(code: "channel_removal_lease_changed", category: .local,
+                    message: "Channel removal is being completed by another executor.") }
+            switch record.intent {
+            case let .channelRemoval(accepted):
+                guard accepted == target else { throw localStoreError("Channel removal target changed.") }
+            case let .channelHistory(channelID, gateway, updatedAt):
+                guard channelID == target.channelID, Self.normalizeGateway(gateway) == Self.normalizeGateway(target.originalConfig.gatewayKey),
+                      updatedAt == target.expectedUpdatedAt, !target.keepHistory else {
+                    throw localStoreError("Legacy channel removal target changed.")
+                }
+            default: throw localStoreError("Invalid channel removal intent.")
+            }
+            try validateChannelRemovalTarget(target, db: db)
+            try validateChannelRemovalHistory(target, db: db)
+            let now = Date()
+            let cleanup: PendingLocalDeletionCleanup
+            if target.keepHistory {
+                try db.execute(sql: """
+                    UPDATE channel_subscriptions SET is_deleted = 1, deleted_at = ?, updated_at = ?, password = ''
+                    WHERE gateway = ? AND channel_id = ? AND is_deleted = 0;
+                    """, arguments: [Self.storedEpoch(now), Self.storedEpoch(now), Self.normalizeGateway(target.originalConfig.gatewayKey), target.channelID])
+                guard db.changesCount == 1 else { throw localStoreError("Channel subscription changed during removal.") }
+                cleanup = PendingLocalDeletionCleanup()
+            } else {
+                cleanup = try deleteLocalData(intent: .channelHistory(channelID: target.channelID,
+                    expectedGateway: target.originalConfig.gatewayKey, expectedUpdatedAt: target.expectedUpdatedAt), now: now, db: db)
+            }
+            try db.execute(sql: """
+                UPDATE pending_local_deletions SET state = 'cleanup_pending', cleanup_json = ?,
+                    lease_owner = NULL, lease_until_epoch_ms = NULL, deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL
+                WHERE id = ? AND state = 'executing' AND lease_owner = ?;
+                """, arguments: [try encodedJSONString(cleanup), id.uuidString, owner])
+            guard db.changesCount == 1 else { throw AppError.typedLocal(code: "channel_removal_lease_changed", category: .local,
+                message: "Channel removal is being completed by another executor.") }
             return cleanup
+        }
+    }
+
+    func prepareLocalDeletion(intent: PendingLocalDeletionIntent, configuration: ServerConfig?) async throws -> LocalDeletionConfirmation {
+        try read { db in
+            switch intent {
+            case .channelHistory, .channelRemoval: throw localStoreError("Channel removal requires its remote subscription transaction.")
+            case .messages, .events, .things: break
+            }
+            let snapshot = try localDeletionSnapshot(intent: intent, db: db)
+            guard !snapshot.isEmpty else {
+                throw AppError.typedLocal(code: "local_deletion_target_unavailable", category: .validation,
+                    message: "The selected data is no longer available.")
+            }
+            let titles: [String]
+            switch intent {
+            case let .messages(ids):
+                let ids = Array(Set(ids)).map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+                titles = try String.fetchAll(db, sql: "SELECT title FROM messages WHERE id IN (\(ids)) ORDER BY id;")
+            case let .events(ids):
+                let ids = normalizedIdentifiers(ids).map(Self.sqlQuoted).joined(separator: ",")
+                titles = try String.fetchAll(db, sql: "SELECT title FROM event_projection_heads WHERE event_id IN (\(ids)) ORDER BY event_id;")
+            case let .things(ids):
+                let ids = normalizedIdentifiers(ids).map(Self.sqlQuoted).joined(separator: ",")
+                titles = try String.fetchAll(db, sql: "SELECT title FROM thing_projection_heads WHERE thing_id IN (\(ids)) ORDER BY thing_id;")
+            case .channelHistory, .channelRemoval: titles = []
+            }
+            let summary = titles.count > 3 ? titles.prefix(3).joined(separator: ", ") + "… (\(titles.count))" : titles.joined(separator: ", ")
+            return LocalDeletionConfirmation(intent: intent, snapshot: snapshot, summary: summary, persistedConfiguration: configuration)
+        }
+    }
+
+    func deleteConfirmedLocalData(_ confirmation: LocalDeletionConfirmation) async throws -> PendingLocalDeletionCleanup {
+        try LocalDeletionConfigurationFence.perform {
+        try writeCanonicalMessages { db in
+            guard try LocalKeychainConfigStore().loadServerConfig(backfillGatewayToken: false)?.normalized() == confirmation.persistedConfiguration else {
+                throw AppError.typedLocal(code: "local_deletion_confirmation_changed", category: .validation,
+                    message: "The selected configuration changed. Confirm deletion again.")
+            }
+            if let existing = try pendingLocalDeletion(id: confirmation.id, db: db),
+               existing.state == .cleanupPending, let cleanup = existing.cleanup {
+                return cleanup
+            }
+            let current = try localDeletionSnapshot(intent: confirmation.intent, db: db)
+            // A repeated confirmation after its cleanup receipt was removed is harmless.
+            if current.isEmpty { return PendingLocalDeletionCleanup() }
+            guard current == confirmation.snapshot else {
+                throw AppError.typedLocal(code: "local_deletion_confirmation_changed", category: .validation,
+                    message: "The selected data changed. Confirm deletion again.")
+            }
+            let cleanup = try deleteLocalData(intent: confirmation.intent, now: Date(), db: db)
+            // Only cleanup is durable: canonical data has already been deleted in this transaction.
+            try db.execute(sql: """
+                INSERT INTO pending_local_deletions(
+                    id, deduplication_key, summary, undo_label, payload_version,
+                    payload_json, state, created_at_epoch_ms, attempt_count, cleanup_json
+                ) VALUES (?, ?, '', '', 1, ?, 'cleanup_pending', ?, 0, ?);
+                """, arguments: [confirmation.id.uuidString, "cleanup:" + confirmation.id.uuidString,
+                    try encodedJSONString(confirmation.intent), Self.storedEpoch(Date()), try encodedJSONString(cleanup)])
+            return cleanup
+        }
+        }
+    }
+
+    private func localDeletionSnapshot(intent: PendingLocalDeletionIntent, db: Database) throws -> [String] {
+        let messageCondition: String
+        var relatedQueries: [String] = []
+        switch intent {
+        case let .messages(ids):
+            let ids = Array(Set(ids)).map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            guard !ids.isEmpty else { return [] }
+            messageCondition = "id IN (\(ids))"
+        case let .events(ids):
+            let ids = normalizedIdentifiers(ids).map(Self.sqlQuoted).joined(separator: ",")
+            guard !ids.isEmpty else { return [] }
+            messageCondition = "event_id IN (\(ids)) AND entity_type = 'event'"
+            relatedQueries = ["SELECT * FROM event_projection_heads WHERE event_id IN (\(ids)) ORDER BY event_id;"]
+        case let .things(ids):
+            let ids = normalizedIdentifiers(ids).map(Self.sqlQuoted).joined(separator: ",")
+            guard !ids.isEmpty else { return [] }
+            messageCondition = "thing_id IN (\(ids)) OR (entity_type = 'thing' AND entity_id IN (\(ids)))"
+            relatedQueries = [
+                "SELECT * FROM thing_projection_heads WHERE thing_id IN (\(ids)) ORDER BY thing_id;",
+                "SELECT * FROM pending_inbound_messages WHERE thing_id IN (\(ids)) ORDER BY rowid;"
+            ]
+        case let .channelHistory(channelID, _, _):
+            let normalized = channelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { throw localStoreError("Invalid channel history scope.") }
+            messageCondition = Self.channelMatchCondition(value: normalized)
+            relatedQueries = [
+                "SELECT * FROM event_projection_heads WHERE \(messageCondition) ORDER BY event_id;",
+                "SELECT * FROM thing_projection_heads WHERE \(messageCondition) ORDER BY thing_id;",
+                "SELECT * FROM pending_inbound_messages WHERE \(messageCondition) ORDER BY rowid;"
+            ]
+        case .channelRemoval:
+            throw localStoreError("Channel removal requires its remote subscription transaction.")
+        }
+        let queries = ["SELECT * FROM messages WHERE \(messageCondition) ORDER BY id;"] + relatedQueries
+        return try queries.enumerated().flatMap { index, query in
+            try Row.fetchAll(db, sql: query).map { row in
+                let values = row.map { column, value -> String in
+                    let bytes: String
+                    switch value.storage {
+                    case .null: bytes = "null"
+                    case let .int64(value): bytes = "int:" + String(value)
+                    case let .double(value): bytes = "double:" + String(value.bitPattern)
+                    case let .string(value): bytes = "text:" + Data(value.utf8).base64EncodedString()
+                    case let .blob(value): bytes = "blob:" + value.base64EncodedString()
+                    }
+                    return column + ":" + bytes
+                }
+                return "\(index):" + (try JSONEncoder().encode(values)).base64EncodedString()
+            }
         }
     }
 
@@ -6341,7 +6662,7 @@ private actor GRDBStore {
             db,
             sql: """
                 SELECT * FROM pending_local_deletions
-                WHERE deduplication_key = ? AND state <> 'reconciliation_required'
+                WHERE deduplication_key = ?
                 ORDER BY sequence ASC LIMIT 1;
                 """,
             arguments: [deduplicationKey]
@@ -6414,29 +6735,6 @@ private actor GRDBStore {
                 WHERE state = 'executing' AND lease_until_epoch_ms <= ?;
                 """,
             arguments: [Self.storedEpoch(now), Self.storedEpoch(now)]
-        )
-    }
-
-    private func promoteNextPendingLocalDeletion(
-        db: Database,
-        now: Date,
-        timeout: TimeInterval
-    ) throws {
-        let hasUndoable = try Bool.fetchOne(
-            db,
-            sql: "SELECT EXISTS(SELECT 1 FROM pending_local_deletions WHERE state = 'undoable');"
-        ) ?? false
-        guard !hasUndoable else { return }
-        try db.execute(
-            sql: """
-                UPDATE pending_local_deletions
-                SET state = 'undoable', deadline_epoch_ms = ?
-                WHERE sequence = (
-                    SELECT sequence FROM pending_local_deletions
-                    WHERE state = 'queued' ORDER BY sequence ASC LIMIT 1
-                );
-                """,
-            arguments: [Self.storedEpoch(now.addingTimeInterval(max(0, timeout)))]
         )
     }
 

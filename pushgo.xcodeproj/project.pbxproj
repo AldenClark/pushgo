@@ -202,7 +202,8 @@
 		D1B100000000000000000005 /* Shared/Application/MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* Shared/Application/MainTab.swift */; };
 		D1B100000000000000000006 /* Shared/Application/NotificationOpenController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000006 /* Shared/Application/NotificationOpenController.swift */; };
 		D1B100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift */; };
-		D1B100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift */; };
+		D1B100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift */; };
+		D1B100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift */; };
 		D1B100000000000000000009 /* Shared/Application/FeedbackPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000009 /* Shared/Application/FeedbackPresentationPolicy.swift */; };
 		D1B100000000000000000015 /* Shared/Application/MacMainWindowPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000015 /* Shared/Application/MacMainWindowPresenter.swift */; };
 		D1B100000000000000000010 /* Shared/Application/ProviderRouteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000010 /* Shared/Application/ProviderRouteController.swift */; };
@@ -217,7 +218,8 @@
 		D1C100000000000000000005 /* Shared/Application/MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* Shared/Application/MainTab.swift */; };
 		D1C100000000000000000006 /* Shared/Application/NotificationOpenController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000006 /* Shared/Application/NotificationOpenController.swift */; };
 		D1C100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift */; };
-		D1C100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift */; };
+		D1C100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift */; };
+		D1C100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift */; };
 		D1C100000000000000000009 /* Shared/Application/FeedbackPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000009 /* Shared/Application/FeedbackPresentationPolicy.swift */; };
 		D1C100000000000000000010 /* Shared/Application/ProviderRouteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000010 /* Shared/Application/ProviderRouteController.swift */; };
 		D1C100000000000000000011 /* Shared/Application/ChannelSyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000011 /* Shared/Application/ChannelSyncController.swift */; };
@@ -635,7 +637,8 @@
 		D1A100000000000000000005 /* Shared/Application/MainTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/MainTab.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000006 /* Shared/Application/NotificationOpenController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/NotificationOpenController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/PendingLocalDeletionController.swift; sourceTree = SOURCE_ROOT; };
-		D1A100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/UI/PendingLocalDeletionBar.swift; sourceTree = SOURCE_ROOT; };
+		D1A100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/LocalDeletionConfirmationController.swift; sourceTree = SOURCE_ROOT; };
+		D1A100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/UI/LocalDeletionConfirmationHost.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000009 /* Shared/Application/FeedbackPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/FeedbackPresentationPolicy.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000010 /* Shared/Application/ProviderRouteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/ProviderRouteController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000011 /* Shared/Application/ChannelSyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/ChannelSyncController.swift; sourceTree = SOURCE_ROOT; };
@@ -1056,7 +1059,7 @@
 				85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */,
 				3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */,
 				4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */,
-				D1A100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift */,
+				D1A100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift */,
 				D2A100000000000000000004 /* NotificationSoundEditorView.swift */,
 				4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */,
 				2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */,
@@ -1253,6 +1256,7 @@
 				D1A100000000000000000005 /* Shared/Application/MainTab.swift */,
 				D1A100000000000000000006 /* Shared/Application/NotificationOpenController.swift */,
 				D1A100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift */,
+				D1A100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift */,
 				D1A100000000000000000010 /* Shared/Application/ProviderRouteController.swift */,
 				D1A100000000000000000011 /* Shared/Application/ChannelSyncController.swift */,
 				D1A100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift */,
@@ -1815,11 +1819,12 @@
 				D1B100000000000000000005 /* Shared/Application/MainTab.swift in Sources */,
 				D1B100000000000000000006 /* Shared/Application/NotificationOpenController.swift in Sources */,
 				D1B100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift in Sources */,
+				D1B100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift in Sources */,
 				D1B100000000000000000010 /* Shared/Application/ProviderRouteController.swift in Sources */,
 				D1B100000000000000000011 /* Shared/Application/ChannelSyncController.swift in Sources */,
 				D1B100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift in Sources */,
 				D1B100000000000000000013 /* Shared/Application/NotificationIngressController.swift in Sources */,
-				D1B100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */,
+				D1B100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift in Sources */,
 				F0BB00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
 				F0BB0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */,
 				F0BB00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
@@ -1928,11 +1933,12 @@
 				D1C100000000000000000005 /* Shared/Application/MainTab.swift in Sources */,
 				D1C100000000000000000006 /* Shared/Application/NotificationOpenController.swift in Sources */,
 				D1C100000000000000000007 /* Shared/Application/PendingLocalDeletionController.swift in Sources */,
+				D1C100000000000000000016 /* Shared/Application/LocalDeletionConfirmationController.swift in Sources */,
 				D1C100000000000000000010 /* Shared/Application/ProviderRouteController.swift in Sources */,
 				D1C100000000000000000011 /* Shared/Application/ChannelSyncController.swift in Sources */,
 				D1C100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift in Sources */,
 				D1C100000000000000000013 /* Shared/Application/NotificationIngressController.swift in Sources */,
-				D1C100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */,
+				D1C100000000000000000008 /* Shared/UI/LocalDeletionConfirmationHost.swift in Sources */,
 				F0CC00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
 				F0CC0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */,
 				F0CC00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,

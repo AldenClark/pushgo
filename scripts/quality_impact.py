@@ -114,6 +114,20 @@ UI_TEST_SUITES = {
         "PushGo-watchOSUITests",
     ),
 }
+# Explicit deletion-behavior retirement, 2026-10-14. A mapping only changes
+# method identity; unrelated/unowned hunks retain the existing attribution rules.
+DELETE_CONFIRMATION_TEST_REPLACEMENTS = {
+    "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift": {
+        "testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch":
+            "testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch",
+        "testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch":
+            "testQualityMessageDeleteConfirmationPermanentlyRemovesOnlyTargetAcrossRelaunch",
+    },
+    "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift": {
+        "testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch":
+            "testMessageDeletionCancelsThenConfirmsAccurateCanonicalStateAcrossRelaunch",
+    },
+}
 SWIFT_XCTEST_CLASS_PATTERN = re.compile(
     r"^\s*(?:@[A-Za-z_][\w.]*(?:\([^\n]*\))?\s+)*"
     r"(?:(?:public|internal|private|fileprivate|open|final)\s+)*"
@@ -643,6 +657,18 @@ def resolve_swift_ui_test_change(
         pure_added_ranges=pure_added_new_ranges(patch or ""),
     )
     removed_methods = old_selected - set(new_methods)
+    replacements = DELETE_CONFIRMATION_TEST_REPLACEMENTS.get(path, {})
+    mapped_replacements = {
+        replacements[name]
+        for name in removed_methods
+        if name in replacements and replacements[name] in new_methods
+    }
+    if removed_methods and all(
+        name in replacements and replacements[name] in new_methods
+        for name in removed_methods
+    ):
+        old_selected = (old_selected - removed_methods) | mapped_replacements
+        removed_methods = set()
     if removed_methods:
         return {
             "platform": platform,

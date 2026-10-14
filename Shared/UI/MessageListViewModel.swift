@@ -343,22 +343,6 @@ final class MessageListViewModel {
         }
     }
 
-    func delete(_ message: PushMessageSummary) async {
-        do {
-            try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
-            filteredMessages.removeAll { $0.id == message.id }
-            forgetUnreadSessionMessageIfNeeded(messageId: message.id)
-            await refreshCountsAndChannels()
-        } catch let appError as AppError {
-            self.error = appError
-        } catch {
-            self.error = AppError.wrap(
-                error,
-                fallbackMessage: LocalizationProvider.localized("operation_failed"),
-                code: "message_delete_failed"
-            )
-        }
-    }
 
     func messagesForCurrentChannel() -> [PushMessageSummary] {
         filteredMessages
@@ -922,7 +906,7 @@ final class MessageListViewModel {
     }
 
     private func applyFacetSelections(to messages: [PushMessageSummary]) -> [PushMessageSummary] {
-        messages.filter { self.matchesCurrentFacetSelections($0) && !self.isLocallySuppressed($0) }
+        messages.filter { self.matchesCurrentFacetSelections($0) }
     }
 
     private func loadCurrentScopeUnreadCount() async throws -> Int {
@@ -1068,9 +1052,6 @@ final class MessageListViewModel {
         return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: true)
     }
 
-    private func isLocallySuppressed(_ message: PushMessageSummary) -> Bool {
-        environment.pendingLocalDeletionController.suppressesMessage(id: message.id, channelId: message.channel)
-    }
 
     private func messageIDsChanged(
         from previous: [PushMessageSummary],

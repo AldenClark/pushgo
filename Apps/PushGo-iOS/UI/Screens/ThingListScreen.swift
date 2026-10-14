@@ -7,7 +7,6 @@ struct ThingListScreen: View {
     }
 
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -31,7 +30,7 @@ struct ThingListScreen: View {
     var body: some View {
         let filteredThingsSnapshot = filteredThings
         let baseContent = listContainer(filteredThings: filteredThingsSnapshot)
-            .id(pendingLocalDeletionController.effectiveScope)
+
         let content = applySearchIfNeeded(baseContent)
         .refreshable {
             await handlePullToRefresh()
@@ -66,13 +65,6 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            if let selectedThing, pendingLocalDeletionController.suppressesThing(
-                id: selectedThing.id, channelId: selectedThing.channelId
-            ) {
-                self.selectedThing = nil
-            }
-        }
         .sheet(item: $selectedThing) { thing in
             ThingStoreDetailScreen(
                 thingId: thing.id,
@@ -89,7 +81,7 @@ struct ThingListScreen: View {
                 }
             )
             .id(thing.id)
-            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+            .toastOverlay(environment: environment)
             .accessibilityIdentifier("sheet.thing.detail")
         }
         content
@@ -163,7 +155,7 @@ struct ThingListScreen: View {
                         environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
                     }
                     .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
-                        Task { await scheduleDeletion(for: thing) }
+                        Task { await requestDeletion(for: thing) }
                     }
                     .tag(thing.id)
                     .listRowInsets(EdgeInsets(
@@ -248,7 +240,7 @@ struct ThingListScreen: View {
 
     private var allChannelIds: [String] {
         let ids = viewModel.things.compactMap { thing -> String? in
-            guard !isPendingLocalDeletion(thing) else { return nil }
+
             return normalizedChannel(thing.channelId)
         }
         return Array(Set(ids)).sorted()
@@ -257,7 +249,7 @@ struct ThingListScreen: View {
     private var allTags: [String] {
         var tags = Set<String>()
         for thing in viewModel.things {
-            guard !isPendingLocalDeletion(thing) else { continue }
+
             for tag in thing.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {
@@ -270,7 +262,7 @@ struct ThingListScreen: View {
 
     private var filteredThings: [ThingProjection] {
         let matched = viewModel.things.filter { thing in
-            guard !isPendingLocalDeletion(thing) else { return false }
+
             let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(thing.channelId) ?? "")
             guard channelMatched else { return false }
             if !selectedTags.isEmpty {
@@ -398,10 +390,6 @@ struct ThingListScreen: View {
     private func openThingIfNeeded() {
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
-        if pendingLocalDeletionController.suppressesThing(id: target, channelId: nil) {
-            handleUnavailableThingTarget()
-            return
-        }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
             openThing(matched, target: target)
             return
@@ -437,27 +425,17 @@ struct ThingListScreen: View {
         selectedThing = DetailTarget(id: thing.id, channelId: thing.channelId)
     }
 
-    private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        pendingLocalDeletionController.suppressesThing(
-            id: thing.id,
-            channelId: thing.channelId
-        )
-    }
 
     @MainActor
-    private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [thing],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("push_type_thing"),
-            multipleSummaryTitle: localizationManager.localized("push_type_thing"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .things(ids: $0) }
-        ) else { return }
-
-        if let selectedThing, result.contains(where: { $0.id == selectedThing.id }) {
-            self.selectedThing = nil
+    private func requestDeletion(for thing: ThingProjection) async {
+        let title = thing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("push_type_thing") : title,
+            intent: .things(ids: [thing.id])
+        ) {
+            if let selectedThing, selectedThing.id == thing.id {
+                self.selectedThing = nil
+            }
         }
     }
 

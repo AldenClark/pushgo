@@ -7,7 +7,6 @@ struct EventListScreen: View {
     }
 
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -28,7 +27,7 @@ struct EventListScreen: View {
     var body: some View {
         let filteredEventsSnapshot = filteredEvents
         let baseContent = listContainer(filteredEvents: filteredEventsSnapshot)
-            .id(pendingLocalDeletionController.effectiveScope)
+
         let content = applySearchIfNeeded(baseContent)
         .refreshable {
             await handlePullToRefresh()
@@ -64,11 +63,6 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            if let selectedEvent, isPendingLocalDeletion(selectedEvent) {
-                self.selectedEvent = nil
-            }
-        }
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(
                 event: event,
@@ -82,7 +76,7 @@ struct EventListScreen: View {
                     try await viewModel.closeEvent(event: event)
                 }
             )
-            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+            .toastOverlay(environment: environment)
             .accessibilityIdentifier("sheet.event.detail")
         }
         content
@@ -155,7 +149,7 @@ struct EventListScreen: View {
                         environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
                     }
                     .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
-                        Task { await scheduleDeletion(for: event) }
+                        Task { await requestDeletion(for: event) }
                     }
                     .tag(event.id)
                     .listRowInsets(EdgeInsets(
@@ -240,7 +234,7 @@ struct EventListScreen: View {
 
     private var allChannelIds: [String] {
         let ids = viewModel.events.compactMap { event -> String? in
-            guard !isPendingLocalDeletion(event) else { return nil }
+
             return normalizedChannel(event.channelId)
         }
         return Array(Set(ids)).sorted()
@@ -249,7 +243,7 @@ struct EventListScreen: View {
     private var allTags: [String] {
         var tags = Set<String>()
         for event in viewModel.events {
-            guard !isPendingLocalDeletion(event) else { continue }
+
             for tag in event.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {
@@ -263,7 +257,7 @@ struct EventListScreen: View {
     private var filteredEvents: [EventProjection] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.events.filter { event in
-            guard !isPendingLocalDeletion(event) else { return false }
+
             guard !showOnlyOngoing || eventLifecycleState(from: event.state) == .ongoing else { return false }
             let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(event.channelId) ?? "")
             guard channelMatched else { return false }
@@ -389,10 +383,6 @@ struct EventListScreen: View {
     private func openEventIfNeeded() {
         let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
-        if pendingLocalDeletionController.suppressesEvent(id: target, channelId: nil) {
-            handleUnavailableEventTarget()
-            return
-        }
         if let matched = viewModel.events.first(where: { $0.id == target }) {
             openEvent(matched, target: target)
             return
@@ -458,27 +448,17 @@ struct EventListScreen: View {
         }
     }
 
-    private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
-        pendingLocalDeletionController.suppressesEvent(
-            id: event.id,
-            channelId: event.channelId
-        )
-    }
 
     @MainActor
-    private func scheduleDeletion(for event: EventProjection) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [event],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("push_type_event"),
-            multipleSummaryTitle: localizationManager.localized("push_type_event"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .events(ids: $0) }
-        ) else { return }
-
-        if let selectedEvent, result.contains(where: { $0.id == selectedEvent.id }) {
-            self.selectedEvent = nil
+    private func requestDeletion(for event: EventProjection) async {
+        let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("push_type_event") : title,
+            intent: .events(ids: [event.id])
+        ) {
+            if let selectedEvent, selectedEvent.id == event.id {
+                self.selectedEvent = nil
+            }
         }
     }
 

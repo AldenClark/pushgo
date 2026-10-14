@@ -115,6 +115,17 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         return ScrollView {
             VStack(spacing: 16) {
+                if environment.pendingLocalDeletionController.recoveryRequiredCount > 0 {
+                    cardContainer {
+                        Button {
+                            Task { await environment.pendingLocalDeletionController.retryRecovery() }
+                        } label: {
+                            Label(localizationManager.localized("retry_unfinished_deletions"), systemImage: "arrow.clockwise")
+                        }
+                        .accessibilityIdentifier("action.settings.retry_deletion_recovery")
+                    }
+                }
+
             if macOverlay == nil, let feedback = viewModel.serverSaveFeedbackMessage {
                 AppInlineFeedbackBanner(
                     message: feedback,
@@ -665,7 +676,7 @@ private struct ManualKeySettingsContentView: View {
                             role: .destructive,
                             fullWidth: false
                         ) {
-                            Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                            viewModel.requestManualKeyClear()
                         }
                         .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
                         .accessibilityIdentifier("action.settings.decryption.clear")
@@ -686,6 +697,30 @@ private struct ManualKeySettingsContentView: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onDisappear {
+            if let target = viewModel.manualKeyClearConfirmation {
+                viewModel.cancelManualKeyClear(id: target.id)
+            }
+        }
+        .alert(
+            localizationManager.localized("delete"),
+            isPresented: Binding(
+                get: { viewModel.manualKeyClearConfirmation != nil },
+                set: { _ in }
+            ),
+            presenting: viewModel.manualKeyClearConfirmation
+        ) { target in
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                Task { await viewModel.confirmManualKeyClear(id: target.id) }
+            }
+            .accessibilityIdentifier("action.settings.decryption.clear.confirm")
+            Button(localizationManager.localized("cancel"), role: .cancel) {
+                viewModel.cancelManualKeyClear(id: target.id)
+            }
+            .accessibilityIdentifier("action.settings.decryption.clear.cancel")
+        } message: { _ in
+            Text(localizationManager.localized("clear_decryption_key_confirmation"))
         }
         .accessibilityIdentifier("screen.settings.decryption")
         .onDisappear {

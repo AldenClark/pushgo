@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ThingSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
@@ -43,7 +42,7 @@ struct ThingSplitScreen: View {
             Divider()
             thingDetailPane
         }
-        .id(pendingLocalDeletionController.effectiveScope)
+
         .onAppear {
             if searchFieldText != searchQuery {
                 searchFieldText = searchQuery
@@ -73,9 +72,6 @@ struct ThingSplitScreen: View {
                     syncSelection()
                 }
             }
-        }
-        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            syncSelection()
         }
     }
 
@@ -118,7 +114,7 @@ struct ThingSplitScreen: View {
                         )
                     },
                     onDeleteThing: { thing in
-                        Task { await scheduleDeletion(for: thing) }
+                        Task { await requestDeletion(for: thing) }
                     }
                 )
                 .refreshable {
@@ -176,7 +172,7 @@ struct ThingSplitScreen: View {
 
     private var filteredThings: [ThingProjection] {
         let filtered = viewModel.things.filter { thing in
-            guard !isPendingLocalDeletion(thing) else { return false }
+
             if !selectedChannelIDs.isEmpty {
                 let thingChannelId = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !selectedChannelIDs.contains(thingChannelId) {
@@ -206,7 +202,7 @@ struct ThingSplitScreen: View {
 
     private var channelOptions: [(id: String, name: String)] {
         let channelIds = Set(viewModel.things.compactMap { thing -> String? in
-            guard !isPendingLocalDeletion(thing) else { return nil }
+
             let trimmed = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? nil : trimmed
         })
@@ -261,12 +257,6 @@ struct ThingSplitScreen: View {
         return filteredThings.first(where: { $0.id == selection })
     }
 
-    private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        pendingLocalDeletionController.suppressesThing(
-            id: thing.id,
-            channelId: thing.channelId
-        )
-    }
 
     @MainActor
     private func handleProviderIngressPullRefresh() async {
@@ -307,25 +297,21 @@ struct ThingSplitScreen: View {
 
     private func deleteSelectedThing() {
         guard let selectedThing else { return }
-        Task { await scheduleDeletion(for: selectedThing) }
+        Task { await requestDeletion(for: selectedThing) }
     }
 
     @MainActor
-    private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [thing],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("push_type_thing"),
-            multipleSummaryTitle: localizationManager.localized("push_type_thing"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .things(ids: $0) }
-        ) else { return }
-
-        if let selectedThing,
-           result.contains(where: { $0.id == selectedThing.id })
-        {
-            selection = nil
+    private func requestDeletion(for thing: ThingProjection) async {
+        let title = thing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("push_type_thing") : title,
+            intent: .things(ids: [thing.id])
+        ) {
+            if let selectedThing,
+               selectedThing.id == thing.id
+            {
+                selection = nil
+            }
         }
     }
 
@@ -462,7 +448,7 @@ struct ThingSplitScreen: View {
     private var allTags: [String] {
         var tags = Set<String>()
         for thing in viewModel.things {
-            guard !isPendingLocalDeletion(thing) else { continue }
+
             for tag in thing.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {

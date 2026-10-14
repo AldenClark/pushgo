@@ -62,6 +62,14 @@ final class AppEnvironment {
     private(set) var qualityGatewayCleanupError: String?
 #endif
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
+    var pendingMessageDeletion: WatchMessageDeletionTarget?
+    var messageDeletionContext: WatchControlContext {
+        WatchControlContext(
+            mode: watchMode,
+            controlGeneration: watchSyncGenerations.controlGeneration,
+            standaloneProvisioningGeneration: watchSyncGenerations.standaloneProvisioningGeneration
+        )
+    }
     var pendingMessageToOpen: String?
     var pendingEventToOpen: String?
     var pendingThingToOpen: String?
@@ -2363,6 +2371,52 @@ final class AppEnvironment {
             return pulled > 0
         }
     }
+
+    func requestNotificationDeletion(_ notification: UNNotification) async {
+        let context = messageDeletionContext
+        let configuration = serverConfig?.normalized()
+        do {
+            var message = try await loadNotificationMessage(for: notification)
+            if message == nil, isStandaloneMode {
+                _ = await persistNotificationIfNeeded(notification)
+                message = try await loadNotificationMessage(for: notification)
+            }
+            guard context == messageDeletionContext,
+                  configuration == serverConfig?.normalized(),
+                  let message else {
+                showToast(message: localizationManager.localized("operation_failed"))
+                return
+            }
+            handleNotificationDelete(message)
+        } catch {
+            showErrorToast(error)
+        }
+    }
+
+    func loadNotificationMessage(for notification: UNNotification) async throws -> WatchLightMessage? {
+        let messageID = NotificationHandling.extractMessageId(from: notification.request.content.userInfo)
+        if let messageID,
+           let message = try await dataStore.loadWatchLightMessage(messageId: messageID) {
+            return message
+        }
+        let requestID = notification.request.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !requestID.isEmpty else { return nil }
+        if let message = try await dataStore.loadWatchLightMessage(notificationRequestId: requestID) {
+            return message
+        }
+        if let messageID {
+            return try await dataStore.loadWatchLightMessage(notificationRequestId: messageID)
+        }
+        return nil
+    }
+
+    func handleNotificationDelete(_ message: WatchLightMessage) {
+        pendingMessageDeletion = WatchMessageDeletionTarget(message: message, context: messageDeletionContext, config: serverConfig?.normalized())
+        pendingEventToOpen = nil
+        pendingThingToOpen = nil
+        pendingMessageToOpen = message.messageId
+    }
+
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(
             notificationRequestId: notificationRequestId,

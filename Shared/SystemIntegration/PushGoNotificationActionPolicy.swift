@@ -43,7 +43,7 @@ enum PushGoNotificationActionPolicy {
                 UNNotificationAction(
                     identifier: deleteMessageActionIdentifier,
                     title: LocalizationProvider.localized("delete"),
-                    options: [.destructive]
+                    options: [.destructive, .foreground]
                 ),
             ],
             intentIdentifiers: [],

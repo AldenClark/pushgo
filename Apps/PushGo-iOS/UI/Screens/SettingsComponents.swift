@@ -301,7 +301,7 @@ private struct ManualKeySettingsContentView: View {
                     variant: .plain,
                     role: .destructive
                 ) {
-                    Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                    viewModel.requestManualKeyClear()
                 }
                 .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
                 .accessibilityIdentifier("action.settings.decryption.clear")
@@ -316,6 +316,30 @@ private struct ManualKeySettingsContentView: View {
             }
             .disabled(viewModel.isSaving)
             .accessibilityIdentifier("action.settings.decryption.save")
+        }
+        .onDisappear {
+            if let target = viewModel.manualKeyClearConfirmation {
+                viewModel.cancelManualKeyClear(id: target.id)
+            }
+        }
+        .alert(
+            localizationManager.localized("delete"),
+            isPresented: Binding(
+                get: { viewModel.manualKeyClearConfirmation != nil },
+                set: { _ in }
+            ),
+            presenting: viewModel.manualKeyClearConfirmation
+        ) { target in
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                Task { await viewModel.confirmManualKeyClear(id: target.id) }
+            }
+            .accessibilityIdentifier("action.settings.decryption.clear.confirm")
+            Button(localizationManager.localized("cancel"), role: .cancel) {
+                viewModel.cancelManualKeyClear(id: target.id)
+            }
+            .accessibilityIdentifier("action.settings.decryption.clear.cancel")
+        } message: { _ in
+            Text(localizationManager.localized("clear_decryption_key_confirmation"))
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)

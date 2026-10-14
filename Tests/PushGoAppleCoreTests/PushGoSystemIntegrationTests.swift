@@ -347,6 +347,25 @@ struct PushGoSystemIntegrationTests {
     }
 
     @Test
+    func notificationDeleteActionOpensForegroundForConfirmation() throws {
+        let categories = PushGoNotificationActionPolicy.categories()
+        let messageCategory = try #require(categories.first {
+            $0.identifier == AppConstants.notificationDefaultCategoryIdentifier
+        })
+        let deleteAction = try #require(messageCategory.actions.first {
+            $0.identifier == PushGoNotificationActionPolicy.deleteMessageActionIdentifier
+        })
+
+        #expect(deleteAction.options.contains(.destructive))
+        #expect(deleteAction.options.contains(.foreground))
+        #expect(!categories.contains { category in
+            category.actions.contains {
+                $0.identifier == PushGoNotificationActionPolicy.deleteEntityReminderActionIdentifier
+            }
+        })
+    }
+
+    @Test
     @MainActor
     func systemIntentRouterPersistsAndConsumesPendingTargets() throws {
         PushGoSystemIntentRouter.clearPendingOpenTarget()

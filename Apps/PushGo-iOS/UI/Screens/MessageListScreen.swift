@@ -4,7 +4,6 @@ import Observation
 @MainActor
 struct MessageListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.scenePhase) private var scenePhase
@@ -95,12 +94,6 @@ struct MessageListScreen: View {
                 )
 #endif
             }
-            .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-                if let selectedMessage, isPendingLocalDeletion(selectedMessage) {
-                    self.selectedMessage = nil
-                }
-                Task { await refreshVisibleMessageData() }
-            }
     }
 
     @ViewBuilder
@@ -141,13 +134,8 @@ struct MessageListScreen: View {
             }
             .toolbar { toolbarContent }
             .sheet(isPresented: $isHistoryCleanupPresented) {
-                MessageHistoryCleanupRangeSheet { cutoff in
-                    let deleted = try await environment.messageStateCoordinator.deleteMessages(
-                        readState: nil,
-                        before: cutoff
-                    )
+                MessageHistoryCleanupRangeSheet {
                     await refreshVisibleMessageData()
-                    return deleted
                 }
             }
 
@@ -155,7 +143,7 @@ struct MessageListScreen: View {
             baseContent
                 .sheet(item: $selectedMessage) { message in
                     MessageDetailScreen(messageId: message.id, message: nil)
-                        .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                        .toastOverlay(environment: environment)
                         .pushgoSheetSizing(.detail)
                         .accessibilityIdentifier("sheet.message.detail")
                 }
@@ -184,7 +172,6 @@ struct MessageListScreen: View {
         } else {
             ZStack {
                 messageList
-                    .id(pendingLocalDeletionController.effectiveScope)
                     .opacity(showsEmptyState ? 0.001 : 1)
                     .allowsHitTesting(!showsEmptyState)
                     .accessibilityHidden(showsEmptyState)
@@ -588,7 +575,7 @@ struct MessageListScreen: View {
             Task { await viewModel.markRead(message, isRead: true) }
         }
         .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
-            Task { await scheduleDeletion(for: message) }
+            Task { await requestDeletion(for: message) }
         }
         .listRowInsets(EdgeInsets(
             top: EntityVisualTokens.listRowInsetVertical,
@@ -619,7 +606,7 @@ struct MessageListScreen: View {
 
     private func deleteAction(for message: PushMessageSummary) -> some View {
         Button(role: .destructive) {
-            Task { await scheduleDeletion(for: message) }
+            Task { await requestDeletion(for: message) }
         } label: {
             Label(localizationManager.localized("delete"), systemImage: "trash")
         }
@@ -1185,7 +1172,7 @@ private extension MessageListScreen {
     }
 
     private var baseVisibleFilteredMessages: [PushMessageSummary] {
-        viewModel.filteredMessages.filter { !isPendingLocalDeletion($0) }
+        viewModel.filteredMessages
     }
 
     private var visibleFilteredMessages: [PushMessageSummary] {
@@ -1199,34 +1186,24 @@ private extension MessageListScreen {
     }
 
     private var visibleSearchResults: [PushMessageSummary] {
-        searchViewModel.displayedResults.filter { !isPendingLocalDeletion($0) }
+        searchViewModel.displayedResults
     }
 
-    private func isPendingLocalDeletion(_ message: PushMessageSummary) -> Bool {
-        return pendingLocalDeletionController.suppressesMessage(
-            id: message.id,
-            channelId: message.channel
-        )
-    }
 
     private func normalizedTag(_ rawTag: String) -> String {
         rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     @MainActor
-    private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [message],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("tab_messages"),
-            multipleSummaryTitle: localizationManager.localized("tab_messages"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .messages(ids: $0) }
-        ) else { return }
-
-        if let selectedMessage, result.contains(where: { $0.id == selectedMessage.id }) {
-            self.selectedMessage = nil
+    private func requestDeletion(for message: PushMessageSummary) async {
+        let title = message.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("tab_messages") : title,
+            intent: .messages(ids: [message.id])
+        ) {
+            if let selectedMessage, selectedMessage.id == message.id {
+                self.selectedMessage = nil
+            }
         }
     }
 }

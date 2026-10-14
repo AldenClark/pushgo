@@ -1,69 +1,42 @@
 import SwiftUI
 
-struct PendingLocalDeletionBar: View {
-    @Bindable var controller: PendingLocalDeletionController
-    @Environment(\.colorScheme) private var colorScheme
+/// Each root or sheet registers a host; the request captures the topmost host.
+/// This keeps a detail sheet's confirmation above that sheet and presents once.
+struct LocalDeletionConfirmationHost: ViewModifier {
+    let environment: AppEnvironment
+    @State private var hostID = UUID()
 
-    var body: some View {
-        if let deletion = controller.pendingDeletion {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                content(for: deletion, now: context.date)
+    func body(content: Content) -> some View {
+        // A root overlay can sit outside the content's environment modifiers.
+        let localizationManager = environment.localizationManager
+        let controller = environment.localDeletionConfirmationController
+        let presentation = controller.pendingConfirmation
+        content
+            .onAppear { controller.registerHost(hostID) }
+            .onDisappear { controller.unregisterHost(hostID) }
+            .alert(
+                localizationManager.localized("delete"),
+                isPresented: Binding(
+                    get: { controller.pendingConfirmation?.hostID == hostID },
+                    // Button actions own cancellation/acceptance. SwiftUI also
+                    // writes false while dismissing a destructive action.
+                    set: { _ in }
+                ),
+                presenting: presentation
+            ) { pending in
+                Button(localizationManager.localized("delete"), role: .destructive) {
+                    Task { await controller.confirm(id: pending.id) }
+                }
+                .accessibilityIdentifier("action.local_deletion.confirm")
+                .disabled(controller.isExecuting)
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    controller.cancel(id: pending.id)
+                }
+                .accessibilityIdentifier("action.local_deletion.cancel")
+            } message: { pending in
+                Text(localizationManager.localized("local_deletion_confirmation_message", pending.summary))
+                    .accessibilityIdentifier("state.local_deletion.confirmation")
             }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    private func content(
-        for deletion: PendingLocalDeletionController.PendingDeletion,
-        now: Date
-    ) -> some View {
-        let remainingSeconds = max(1, Int(ceil(deletion.timeRemaining(at: now))))
-
-        return HStack(spacing: 10) {
-            Text(deletion.summary)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .accessibilityIdentifier("state.pending_deletion")
-
-            Text(verbatim: "· \(remainingSeconds)s")
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            Spacer(minLength: 0)
-
-            Button(localizedUndoLabel) {
-                controller.undoCurrent()
-            }
-            .accessibilityIdentifier("action.pending_deletion.undo")
-            .disabled(controller.isUndoInFlight)
-            .buttonStyle(.plain)
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(backgroundStyle, in: Capsule())
-        .overlay {
-            Capsule()
-                .strokeBorder(borderColor, lineWidth: 0.8)
-        }
-    }
-
-    private var localizedUndoLabel: String {
-        let language = Locale.preferredLanguages.first?.lowercased() ?? ""
-        return language.hasPrefix("zh") ? "撤销" : "Undo"
-    }
-
-    private var backgroundStyle: some ShapeStyle {
-        if colorScheme == .dark {
-            return AnyShapeStyle(Color.white.opacity(0.08))
-        }
-        return AnyShapeStyle(.ultraThinMaterial)
-    }
-
-    private var borderColor: Color {
-        colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.08)
     }
 }
 
@@ -145,7 +118,12 @@ struct MessageHistoryCleanupRangeSheet: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.dismiss) private var dismiss
 
-    let cleanup: @MainActor (Date?) async throws -> Int
+    @Environment(AppEnvironment.self) private var environment
+    let onDeleted: @MainActor () async -> Void
+    @State private var target: LocalDeletionConfirmation?
+    @State private var capturedConfiguration: ServerConfig?
+    @State private var targetCount = 0
+    @State private var isPreparing = false
 
     @State private var selectedRange: MessageHistoryCleanupRange?
     @State private var phase: MessageHistoryCleanupPhase = .confirmation
@@ -188,9 +166,9 @@ struct MessageHistoryCleanupRangeSheet: View {
                                 systemImage: range.systemImage,
                                 isDestructive: range.isDestructive
                             ) {
-                                phase = .confirmation
-                                selectedRange = range
+                                Task { await prepareCleanup(range: range) }
                             }
+                            .disabled(isPreparing)
                             .accessibilityIdentifier(
                                 "option.messages.history_cleanup.\(range.accessibilityIdentifierSuffix)"
                             )
@@ -216,9 +194,12 @@ struct MessageHistoryCleanupRangeSheet: View {
 #endif
         .sheet(item: $selectedRange) { range in
             MessageHistoryCleanupStatusSheet(
+                rangeTitle: localizationManager.localized(range.localizationKey),
+                targetCount: targetCount,
                 phase: phase,
                 onCancel: {
                     selectedRange = nil
+                    target = nil
                     phase = .confirmation
                 },
                 onConfirm: {
@@ -226,6 +207,7 @@ struct MessageHistoryCleanupRangeSheet: View {
                 },
                 onClose: {
                     selectedRange = nil
+                    target = nil
                     phase = .confirmation
                     dismiss()
                 }
@@ -239,17 +221,61 @@ struct MessageHistoryCleanupRangeSheet: View {
         .interactiveDismissDisabled(selectedRange != nil)
     }
 
+    @MainActor
+    private func prepareCleanup(range: MessageHistoryCleanupRange) async {
+        guard !isPreparing, !phase.isCleaning else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+        let cutoff = range.cutoff()
+        let configuration = environment.serverConfig?.normalized()
+        do {
+            let messages = try await environment.dataStore.loadMessages().filter {
+                cutoff == nil || $0.receivedAt < cutoff!
+            }
+            if messages.isEmpty {
+                target = nil
+                targetCount = 0
+                capturedConfiguration = configuration
+                phase = .confirmation
+                selectedRange = range
+                return
+            }
+            let prepared = try await environment.dataStore.prepareLocalDeletion(
+                intent: .messages(ids: messages.map(\.id))
+            )
+            guard configuration == environment.serverConfig?.normalized() else {
+                throw AppError.localStore(localizationManager.localized("operation_failed"))
+            }
+            capturedConfiguration = configuration
+            targetCount = messages.count
+            target = prepared
+            phase = .confirmation
+            selectedRange = range
+        } catch {
+            target = nil
+            phase = .failure(error.localizedDescription)
+            selectedRange = range
+        }
+    }
+
     private func beginCleanup(range: MessageHistoryCleanupRange) {
-        guard phase == .confirmation else { return }
+        guard phase == .confirmation, target != nil || targetCount == 0 else { return }
+        let target = self.target
+        self.target = nil
         phase = .cleaning
         Task { @MainActor in
             do {
-                phase = .success(try await cleanup(range.cutoff()))
+                if let target {
+                    try await environment.commitPreparedLocalDeletion(target, configuration: capturedConfiguration)
+                }
+                await onDeleted()
+                phase = .success(targetCount)
             } catch {
                 phase = .failure(error.localizedDescription)
             }
         }
     }
+
 }
 
 private struct MessageHistoryCleanupHeaderView: View {
@@ -330,6 +356,8 @@ private struct MessageHistoryCleanupRangeCard: View {
 }
 
 private struct MessageHistoryCleanupStatusSheet: View {
+    let rangeTitle: String
+    let targetCount: Int
     let phase: MessageHistoryCleanupPhase
     let onCancel: () -> Void
     let onConfirm: () -> Void
@@ -337,6 +365,8 @@ private struct MessageHistoryCleanupStatusSheet: View {
 
     var body: some View {
         MessageHistoryCleanupStatusContent(
+            rangeTitle: rangeTitle,
+            targetCount: targetCount,
             phase: phase,
             onCancel: onCancel,
             onConfirm: onConfirm,
@@ -365,6 +395,8 @@ private struct MessageHistoryCleanupStatusSheetLayout: ViewModifier {
 private struct MessageHistoryCleanupStatusContent: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
+    let rangeTitle: String
+    let targetCount: Int
     let phase: MessageHistoryCleanupPhase
     let onCancel: () -> Void
     let onConfirm: () -> Void
@@ -406,7 +438,7 @@ private struct MessageHistoryCleanupStatusContent: View {
     private var detail: String {
         switch phase {
         case .confirmation:
-            localizationManager.localized("history_cleanup_confirm_detail")
+            localizationManager.localized("history_cleanup_frozen_confirmation", rangeTitle, targetCount)
         case .cleaning:
             localizationManager.localized("history_cleanup_cleaning_detail")
         case let .success(count):

@@ -1845,13 +1845,7 @@ final class PushGo_macOSUITests: XCTestCase {
         deleteHistory.click()
         XCTAssertTrue(
             deleteRow.waitForNonExistence(timeout: 8),
-            "Delete-history unsubscribe must immediately suppress the subscription row."
-        )
-        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            pendingDeletion.waitForNonExistence(timeout: 15),
-            "Delete-history unsubscribe must reach its production commit deadline."
+            "Confirmed delete-history unsubscribe must remove the subscription row."
         )
 
         openSidebarTab("messages", in: context.app)
@@ -2069,7 +2063,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch() {
+    func testMessageDeletionCancelsThenConfirmsAccurateCanonicalStateAcrossRelaunch() {
         let sessionID = "macos-delete-lifecycle-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
         launchQuality(context, sessionID: sessionID)
@@ -2078,46 +2072,39 @@ final class PushGo_macOSUITests: XCTestCase {
             in: context.app,
             identifier: "message.row.00000000-0000-0000-0000-00000000c002"
         )
-        let restoredRow = element(
+        let retainedRow = element(
             in: context.app,
             identifier: "message.row.00000000-0000-0000-0000-00000000c001"
         )
         XCTAssertTrue(committedRow.waitForExistence(timeout: 8))
-        XCTAssertTrue(restoredRow.exists, "The reversible control message must exist before deletion.")
+        XCTAssertTrue(retainedRow.exists, "The control Message must exist before requesting deletion.")
 
-        restoredRow.click()
+        retainedRow.click()
         XCTAssertTrue(
             context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
             ].waitForExistence(timeout: 8),
-            "The undo path must begin from the exact canonical control detail."
+            "The cancelled path must begin from the exact canonical control detail."
         )
         var delete = element(in: context.app, identifier: "action.message.delete")
         XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
         delete.click()
+        var confirmation = localDeletionConfirmation(in: context.app, summary: "Quality Keep History Message")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue((confirmation.value as? String)?.contains("Quality Keep History Message") == true)
+        let cancel = element(in: context.app, identifier: "action.local_deletion.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        context.app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(
-            restoredRow.waitForNonExistence(timeout: 2),
-            "Scheduling the reversible deletion must immediately suppress its row."
+            confirmation.waitForNonExistence(timeout: 5),
+            "Escape must cancel the native destructive confirmation."
         )
-        var pending = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pending.waitForExistence(timeout: 5))
-        let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
-        XCTAssertTrue(undo.waitForExistence(timeout: 5) && undo.isHittable)
-        undo.click()
-        XCTAssertTrue(
-            restoredRow.waitForExistence(timeout: 8),
-            "Undo must restore the real row, not merely dismiss pending-deletion UI."
-        )
-        XCTAssertTrue(
-            pending.waitForNonExistence(timeout: 5),
-            "Undo must clear the production pending-deletion state."
-        )
-        restoredRow.click()
+        XCTAssertTrue(retainedRow.exists, "Cancellation must never remove or suppress the canonical row.")
         XCTAssertTrue(
             context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
-            ].waitForExistence(timeout: 8),
-            "Undo must restore the exact canonical control content."
+            ].waitForExistence(timeout: 5),
+            "Cancellation must preserve the exact selected Message detail."
         )
 
         committedRow.click()
@@ -2131,23 +2118,20 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
         delete.click()
 
-        XCTAssertTrue(committedRow.waitForNonExistence(timeout: 2))
-        pending = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pending.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
-            "The journey must observe the real undo opportunity before allowing commit."
-        )
-        XCTAssertTrue(
-            pending.waitForNonExistence(timeout: 15),
-            "The production undo deadline did not commit and clear the pending deletion."
-        )
+        confirmation = localDeletionConfirmation(in: context.app, summary: "Quality Delete History Message")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue((confirmation.value as? String)?.contains("Quality Delete History Message") == true)
+        XCTAssertTrue(committedRow.exists, "Requesting deletion must leave the exact row intact until confirmation.")
+        let confirm = element(in: context.app, identifier: "action.local_deletion.confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+        confirm.click()
+        XCTAssertTrue(committedRow.waitForNonExistence(timeout: 8))
         XCTAssertFalse(committedRow.exists, "The committed target must remain absent.")
         XCTAssertTrue(
-            restoredRow.waitForExistence(timeout: 5),
-            "Committing the target must preserve the previously restored control message."
+            retainedRow.waitForExistence(timeout: 5),
+            "Confirming the target must preserve the control Message whose deletion was cancelled."
         )
-        restoredRow.click()
+        retainedRow.click()
         XCTAssertTrue(
             context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
@@ -2165,15 +2149,15 @@ final class PushGo_macOSUITests: XCTestCase {
             ).exists,
             "A committed deletion must not revive after process relaunch."
         )
-        let persistedRestoredRow = element(
+        let persistedRetainedRow = element(
             in: relaunched.app,
             identifier: "message.row.00000000-0000-0000-0000-00000000c001"
         )
         XCTAssertTrue(
-            persistedRestoredRow.waitForExistence(timeout: 8),
-            "The undone canonical message must survive the same process relaunch."
+            persistedRetainedRow.waitForExistence(timeout: 8),
+            "The cancelled canonical Message must survive the same process relaunch."
         )
-        persistedRestoredRow.click()
+        persistedRetainedRow.click()
         XCTAssertTrue(
             relaunched.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
@@ -3091,6 +3075,13 @@ final class PushGo_macOSUITests: XCTestCase {
         let deleteAction = element(in: relaunched.app, identifier: "action.event.delete")
         XCTAssertTrue(deleteAction.waitForExistence(timeout: 5) && deleteAction.isHittable)
         deleteAction.click()
+        let eventConfirmation = localDeletionConfirmation(in: relaunched.app, summary: "P2 Event Active")
+        XCTAssertTrue(eventConfirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue((eventConfirmation.value as? String)?.contains("P2 Event Active") == true)
+        XCTAssertTrue(persistedRow.exists, "The selected Event must remain until deletion is confirmed.")
+        let confirmEventDeletion = element(in: relaunched.app, identifier: "action.local_deletion.confirm")
+        XCTAssertTrue(confirmEventDeletion.waitForExistence(timeout: 5) && confirmEventDeletion.isHittable)
+        confirmEventDeletion.click()
         XCTAssertTrue(
             persistedRow.waitForNonExistence(timeout: 8),
             "Deleting the selected Event must remove its row immediately."
@@ -3244,17 +3235,17 @@ final class PushGo_macOSUITests: XCTestCase {
         let deleteThing = element(in: context.app, identifier: "action.thing.delete")
         XCTAssertTrue(deleteThing.waitForExistence(timeout: 8) && deleteThing.isHittable)
         deleteThing.click()
+        let thingConfirmation = localDeletionConfirmation(in: context.app, summary: "Quality Pump Beta")
+        XCTAssertTrue(thingConfirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(distractorRow.exists, "The exact Thing must remain until deletion is confirmed.")
+        let confirmThingDeletion = element(in: context.app, identifier: "action.local_deletion.confirm")
+        XCTAssertTrue(confirmThingDeletion.waitForExistence(timeout: 5) && confirmThingDeletion.isHittable)
+        confirmThingDeletion.click()
         XCTAssertTrue(
             distractorRow.waitForNonExistence(timeout: 8),
             "Deleting one Thing must immediately remove only that target from the user-visible list."
         )
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
-        let pendingThingDeletion = element(in: context.app, identifier: "state.pending_deletion")
-        XCTAssertTrue(pendingThingDeletion.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            pendingThingDeletion.waitForNonExistence(timeout: 15),
-            "The production undo deadline must commit before the journey continues."
-        )
 
         context.app.terminate()
         // The separate primary-navigation journey owns registered `pushgo://`
@@ -3288,7 +3279,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(
             reopenedDistractorRow.waitForNonExistence(timeout: 8),
-            "The deleted Thing must not return after the production deadline commits and the App relaunches."
+            "The deleted Thing must not return after confirmation commits and the App relaunches."
         )
 
         assertVisibleScreenThroughUI("screen.things.list", in: app, timeout: 8)
@@ -3611,6 +3602,17 @@ final class PushGo_macOSUITests: XCTestCase {
             validKey,
             "Persisted secret material must never be echoed back into the UI."
         )
+        let clearBeforeCancel = element(in: restored.app, identifier: "action.settings.decryption.clear")
+        XCTAssertTrue(clearBeforeCancel.waitForExistence(timeout: 8) && clearBeforeCancel.isHittable)
+        clearBeforeCancel.click()
+        let cancelClear = element(in: restored.app, identifier: "action.settings.decryption.clear.cancel")
+        XCTAssertTrue(cancelClear.waitForExistence(timeout: 5) && cancelClear.isHittable)
+        cancelClear.click()
+        XCTAssertTrue(cancelClear.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(restoredField.exists, "Cancel must keep the protected-key editor open.")
+        XCTAssertEqual(restoredField.elementType, .secureTextField)
+        XCTAssertTrue(clearBeforeCancel.isEnabled, "Cancel must retain the configured key's clear action.")
+        XCTAssertEqual(restoredAction.label, configuredLabel, "Cancel must preserve the exact configured encryption status.")
         element(in: restored.app, identifier: "action.settings.decryption.save").click()
         XCTAssertTrue(restoredField.waitForNonExistence(timeout: 8))
         XCTAssertEqual(
@@ -3627,11 +3629,18 @@ final class PushGo_macOSUITests: XCTestCase {
             in: beforeClear.app,
             identifier: "action.settings.open_decryption"
         )
-        XCTAssertEqual(beforeClearAction.label, configuredLabel)
+        XCTAssertEqual(
+            beforeClearAction.label,
+            configuredLabel,
+            "Cancelling key deletion and a blank save must preserve the configuration after relaunch."
+        )
         beforeClearAction.click()
         let clearAction = element(in: beforeClear.app, identifier: "action.settings.decryption.clear")
         XCTAssertTrue(clearAction.waitForExistence(timeout: 8) && clearAction.isHittable)
         clearAction.click()
+        let confirmClear = element(in: beforeClear.app, identifier: "action.settings.decryption.clear.confirm")
+        XCTAssertTrue(confirmClear.waitForExistence(timeout: 5) && confirmClear.isHittable)
+        confirmClear.click()
         XCTAssertTrue(clearAction.waitForNonExistence(timeout: 8))
         XCTAssertEqual(
             element(in: beforeClear.app, identifier: "action.settings.open_decryption").label,
@@ -4836,7 +4845,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandRequestsConfirmation() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -4850,8 +4859,8 @@ final class PushGo_macOSUITests: XCTestCase {
                 at: context.stateURL,
                 timeout: automationArtifactTimeout,
                 matching: {
-                    $0.totalMessageCount == 0
-                        && $0.lastNotificationAction == "delete"
+                    $0.totalMessageCount == 1
+                        && $0.lastNotificationAction == "delete_requested"
                         && $0.lastNotificationTarget == self.seedMessageId
                 }
             )
@@ -4864,7 +4873,7 @@ final class PushGo_macOSUITests: XCTestCase {
                     guard (event["type"] as? String) == "notification.action",
                           let details = event["details"] as? [String: Any]
                     else { return false }
-                    return (details["action"] as? String) == "delete"
+                    return (details["action"] as? String) == "delete_requested"
                         && (details["target"] as? String) == self.seedMessageId
                 }
             )
@@ -5841,6 +5850,17 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    @MainActor
+    private func localDeletionConfirmation(in app: XCUIApplication, summary: String) -> XCUIElement {
+        // AppKit presents SwiftUI alerts as sheets with message content in AXValue.
+        let messages = [
+            "Permanently delete \(summary) from local storage? This cannot be undone.",
+            "永久删除本地存储中的“\(summary)”？此操作无法撤销。",
+            "永久刪除本機儲存中的「\(summary)」？此操作無法復原。",
+        ]
+        return app.sheets.staticTexts.matching(NSPredicate(format: "value IN %@", messages)).firstMatch
     }
 
     /// Coordinate a diagnostic-only sample from the CI host. The Runner names

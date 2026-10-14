@@ -3799,19 +3799,14 @@ final class PushGoAutomationRuntime {
             _ = try await environment.messageStateCoordinator.markRead(messageId: message.id)
             recordNotificationAction("mark_read", target: message.messageId ?? message.id.uuidString)
         case .delete:
-            if let notificationRequestId {
-                try await environment.messageStateCoordinator.deleteMessage(
-                    notificationRequestId: notificationRequestId,
-                    messageId: messageId
-                )
-                recordNotificationAction("delete", target: messageId ?? notificationRequestId)
-                return
-            }
-            guard let message = try await resolveMessage(messageId: messageId, environment: environment) else {
+            guard let requestId = notificationRequestId ?? messageId else {
                 throw PushGoAutomationError.missingArgument("notification_request_id or message_id")
             }
-            try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
-            recordNotificationAction("delete", target: message.messageId ?? message.id.uuidString)
+            await environment.requestNotificationDeletion(
+                notificationRequestId: requestId,
+                messageId: messageId
+            )
+            recordNotificationAction("delete_requested", target: messageId ?? requestId)
         case .copy:
             guard let message = try await resolveMessage(
                 notificationRequestId: notificationRequestId,

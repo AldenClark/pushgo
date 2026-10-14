@@ -34,6 +34,14 @@
         "toggle.settings.beta_channel": {
           "disposition": "DEFERRED",
           "reason": "Beta selection and its real update candidate effect are residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09."
+        },
+        "action.settings.retry_deletion_recovery": {
+          "disposition": "DEFERRED_NATIVE_ENTRY_WITH_CORE_RECOVERY_EVIDENCE",
+          "reason": "The Settings button directly calls the existing accepted-intent retryRecovery entry. Core deletion tests prove retained original intent, failed recovery and settlement; this batch runs representative native cancellation/confirmation instead. The Settings retry button itself remains native NOT RUN and this identifier review is not product acceptance."
+        },
+        "action.message.delete.confirm": {
+          "disposition": "PLATFORM_CONTROL_REFERENCED_BY_LABEL",
+          "reason": "watchOS presents the confirmation as a system Table and omits the SwiftUI button identifier from its actual accessibility tree. The Watch core journey scopes the Delete label to the Table containing the exact confirmation title, then verifies target deletion and the persisted survivor. The identifier alone is not an execution oracle."
         }
       },
       "test_only_identifiers": {

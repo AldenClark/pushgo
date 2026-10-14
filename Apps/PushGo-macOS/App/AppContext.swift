@@ -15,14 +15,9 @@ extension View {
         )
     }
 
-    func toastOverlay(
-        environment: AppEnvironment,
-        showsPendingDeletionBar: Bool = false
-    ) -> some View {
-        modifier(ToastOverlayModifier(
-            environment: environment,
-            showsPendingDeletionBar: showsPendingDeletionBar
-        ))
+    func toastOverlay(environment: AppEnvironment) -> some View {
+        modifier(ToastOverlayModifier(environment: environment))
+            .modifier(LocalDeletionConfirmationHost(environment: environment))
     }
 }
 
@@ -37,10 +32,9 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     var body: some View {
         storageGuardedContent
             .environment(environment)
-            .environment(environment.pendingLocalDeletionController)
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
-            .toastOverlay(environment: environment, showsPendingDeletionBar: true)
+            .toastOverlay(environment: environment)
 #if DEBUG
             .task {
                 #if !os(watchOS)
@@ -125,73 +119,26 @@ private struct DynamicLocaleWrapper<Content: View>: View {
 
 private struct ToastOverlayModifier: ViewModifier {
     @Bindable var environment: AppEnvironment
-    let showsPendingDeletionBar: Bool
-
-    init(environment: AppEnvironment, showsPendingDeletionBar: Bool) {
-        _environment = Bindable(environment)
-        self.showsPendingDeletionBar = showsPendingDeletionBar
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        ToastOverlayContent(
-            content: content,
-            environment: environment,
-            showsPendingDeletionBar: showsPendingDeletionBar
-        )
-    }
-
-    private struct ToastOverlayContent<Content: View>: View {
-        let content: Content
-        @Bindable var environment: AppEnvironment
-        let showsPendingDeletionBar: Bool
-        @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-        init(
-            content: Content,
-            environment: AppEnvironment,
-            showsPendingDeletionBar: Bool
-        ) {
-            self.content = content
-            _environment = Bindable(environment)
-            self.showsPendingDeletionBar = showsPendingDeletionBar
-        }
-
-        var body: some View {
-            content
-                .overlay(alignment: .bottom) {
-                    if let toast = environment.toastMessage {
-                        Button {
-                            environment.dismissToast(id: toast.id)
-                        } label: {
-                            ToastView(toast: toast)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(LocalizedStringKey("close"))
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 120)
-                        .frame(maxWidth: .infinity)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+        content
+            .overlay(alignment: .bottom) {
+                if let toast = environment.toastMessage {
+                    Button {
+                        environment.dismissToast(id: toast.id)
+                    } label: {
+                        ToastView(toast: toast)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(LocalizedStringKey("close"))
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 112)
+                    .frame(maxWidth: .infinity)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .overlay(alignment: .bottom) {
-                    if showsPendingDeletionBar,
-                       environment.pendingLocalDeletionController.pendingDeletion != nil {
-                        PendingLocalDeletionBar(controller: environment.pendingLocalDeletionController)
-                            // Keep the trailing Undo action inside the window even when
-                            // the split view proposes more width than is visible.
-                            .frame(maxWidth: 640)
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
-                            .frame(maxWidth: .infinity)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
-                .animation(
-                    reduceMotion ? nil : .easeInOut(duration: 0.25),
-                    value: environment.pendingLocalDeletionController.pendingDeletion
-                )
-        }
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
     }
 }
 

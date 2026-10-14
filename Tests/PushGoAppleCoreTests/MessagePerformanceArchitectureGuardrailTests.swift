@@ -42,7 +42,7 @@ struct MessagePerformanceArchitectureGuardrailTests {
         let visiblePageSection = try section(
             in: source,
             from: "private func loadVisiblePage(",
-            to: "private func isLocallySuppressed("
+            to: "private func messageIDsChanged("
         )
 
         #expect(nextPageSection.contains("Set(filteredMessages.map(\\.id))"))
@@ -214,25 +214,6 @@ struct MessagePerformanceArchitectureGuardrailTests {
         #expect(refreshSection.contains("entityViewModel.reloadThings()"))
         #expect(!refreshSection.contains("entityViewModel.reload()"))
         #expect(source.contains(".task(id: isInitialSelectionResolved ? selection : nil)"))
-    }
-
-    @Test
-    func pendingChannelRemovalKeepsRemoteCompensationOnLocalCommitFailure() throws {
-        let source = try readSource("Shared/Application/ChannelSubscriptionController.swift")
-        let pendingSection = try section(
-            in: source,
-            from: "private func finishPendingChannelRemoval(",
-            to: "private func subscribeChannel("
-        )
-        let compensatedSection = try section(
-            in: source,
-            from: "func unsubscribeChannelAndDeleteLocalHistory(",
-            to: "func commitPendingChannelRemoval("
-        )
-
-        #expect(pendingSection.contains("unsubscribeChannelAndDeleteLocalHistory("))
-        #expect(compensatedSection.contains("subscribeWithDeviceKeyRecovery("))
-        #expect(compensatedSection.contains("throw localError"))
     }
 
     private func readSource(_ relativePath: String) throws -> String {

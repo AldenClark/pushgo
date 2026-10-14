@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MessageSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let messageListViewModel: MessageListViewModel
@@ -30,7 +29,7 @@ struct MessageSplitScreen: View {
             Divider()
             messageDetailPane
         }
-        .id(pendingLocalDeletionController.effectiveScope)
+
         .navigationTitle(localizationManager.localized("messages"))
         .environment(searchViewModel)
         .onAppear {
@@ -74,26 +73,12 @@ struct MessageSplitScreen: View {
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
         }
-        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
-            if let selectedMessageSnapshot,
-               isPendingLocalDeletion(selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
-            {
-                selection = nil
-                self.selectedMessageSnapshot = nil
-            }
-            ensureMessagesSelectionIfNeeded()
-            Task { await refreshVisibleMessageData() }
-        }
         .sheet(isPresented: $isHistoryCleanupPresented) {
-            MessageHistoryCleanupRangeSheet { cutoff in
-                let deleted = try await environment.messageStateCoordinator.deleteMessages(
-                    readState: nil,
-                    before: cutoff
-                )
+            MessageHistoryCleanupRangeSheet {
+
                 selection = nil
                 selectedMessageSnapshot = nil
                 await refreshVisibleMessageData()
-                return deleted
             }
         }
     }
@@ -123,7 +108,7 @@ struct MessageSplitScreen: View {
                     Task { await messageListViewModel.markRead(message, isRead: true) }
                 },
                 onDeleteMessage: { message in
-                    Task { await scheduleDeletion(for: message) }
+                    Task { await requestDeletion(for: message) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
@@ -415,7 +400,7 @@ struct MessageSplitScreen: View {
     }
 
     private var visibleFilteredMessages: [PushMessageSummary] {
-        let baseMessages = messageListViewModel.filteredMessages.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
+        let baseMessages = messageListViewModel.filteredMessages
         let selectedTags = messageListViewModel.selectedTags
         guard !selectedTags.isEmpty else {
             return baseMessages
@@ -427,12 +412,9 @@ struct MessageSplitScreen: View {
     }
 
     private var visibleSearchResults: [PushMessageSummary] {
-        searchViewModel.displayedResults.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
+        searchViewModel.displayedResults
     }
 
-    private func isPendingLocalDeletion(_ messageId: UUID, channelId: String?) -> Bool {
-        pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
-    }
 
     private var displayedTagOptions: [String] {
         messageListViewModel.tagSummaries
@@ -459,22 +441,18 @@ struct MessageSplitScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await pendingLocalDeletionController.scheduleItems(
-            [message],
-            identity: { $0.id },
-            title: { $0.title },
-            fallbackSingleSummary: localizationManager.localized("tab_messages"),
-            multipleSummaryTitle: localizationManager.localized("tab_messages"),
-            undoLabel: localizationManager.localized("cancel"),
-            intent: { .messages(ids: $0) }
-        ) else { return }
-
-        if let selectedMessageSnapshot,
-           result.contains(where: { $0.id == selectedMessageSnapshot.id })
-        {
-            selection = nil
-            self.selectedMessageSnapshot = nil
+    private func requestDeletion(for message: PushMessageSummary) async {
+        let title = message.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await environment.requestLocalDeletion(
+            summary: title.isEmpty ? localizationManager.localized("tab_messages") : title,
+            intent: .messages(ids: [message.id])
+        ) {
+            if let selectedMessageSnapshot,
+               selectedMessageSnapshot.id == message.id
+            {
+                selection = nil
+                self.selectedMessageSnapshot = nil
+            }
         }
     }
 
@@ -539,7 +517,7 @@ struct MessageSplitScreen: View {
         ToolbarItem(placement: .secondaryAction) {
             Button(role: .destructive) {
                 if let message = selectedMessageSnapshot, message.id == selection {
-                    Task { await scheduleDeletion(for: PushMessageSummary(message: message)) }
+                    Task { await requestDeletion(for: PushMessageSummary(message: message)) }
                 }
             } label: {
                 Image(systemName: "trash")

@@ -69,7 +69,8 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task {
-            let shouldDropDuplicate = if AppEnvironment.shared.isStandaloneMode {
+            let shouldDropDuplicate = if AppEnvironment.shared.isStandaloneMode,
+                                        response.actionIdentifier != PushGoNotificationActionPolicy.deleteMessageActionIdentifier {
                 await shouldDropDuplicateNotification(response.notification)
             } else {
                 false
@@ -85,8 +86,13 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
             let requestId = response.notification.request.identifier
             let userInfo = response.notification.request.content.userInfo
             let entityTarget = NotificationHandling.entityOpenTargetComponents(from: userInfo)
-            let lightMessage = await resolveLightMessage(for: response.notification)
-            if AppEnvironment.shared.isStandaloneMode {
+            let lightMessage: WatchLightMessage? = if actionID == PushGoNotificationActionPolicy.deleteMessageActionIdentifier {
+                nil
+            } else {
+                await resolveLightMessage(for: response.notification)
+            }
+            if AppEnvironment.shared.isStandaloneMode,
+               actionID != PushGoNotificationActionPolicy.deleteMessageActionIdentifier {
                 await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
             }
 
@@ -113,15 +119,8 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
                     removeDeliveredNotification(requestId: requestId)
                 }
             case PushGoNotificationActionPolicy.deleteMessageActionIdentifier:
-                if let lightMessage {
-                        try? await AppEnvironment.shared.dataStore.deleteWatchLightMessage(
-                            messageId: lightMessage.messageId
-                        )
-                    removeDeliveredNotification(requestId: requestId)
-                    await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
-                } else {
-                    removeDeliveredNotification(requestId: requestId)
-                }
+                await AppEnvironment.shared.requestNotificationDeletion(response.notification)
+                removeDeliveredNotification(requestId: requestId)
             case PushGoNotificationActionPolicy.openEntityActionIdentifier,
                  PushGoNotificationActionPolicy.openRelatedEntityActionIdentifier:
                 if let entityTarget {
@@ -176,36 +175,7 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
     }
 
     private func resolveLightMessage(for notification: UNNotification) async -> WatchLightMessage? {
-        if let messageId = extractMessageId(from: notification.request.content.userInfo),
-           let message = try? await AppEnvironment.shared.dataStore.loadWatchLightMessage(messageId: messageId)
-        {
-            return message
-        }
-        let requestId = notification.request.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !requestId.isEmpty else {
-            return nil
-        }
-        if let message = try? await AppEnvironment.shared.dataStore.loadWatchLightMessage(
-            notificationRequestId: requestId
-        ) {
-            return message
-        }
-        if let messageId = extractMessageId(from: notification.request.content.userInfo),
-           let message = try? await AppEnvironment.shared.dataStore.loadWatchLightMessage(
-            notificationRequestId: messageId
-           )
-        {
-            return message
-        }
-        return nil
-    }
-
-    private func extractMessageId(from payload: [AnyHashable: Any]) -> String? {
-        let mapped = payload.reduce(into: [String: Any]()) { result, element in
-            guard let key = element.key as? String else { return }
-            result[key] = element.value
-        }
-        return MessageIdExtractor.extract(from: mapped)
+        try? await AppEnvironment.shared.loadNotificationMessage(for: notification)
     }
 
 }

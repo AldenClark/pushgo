@@ -15,14 +15,9 @@ extension View {
         )
     }
 
-    func toastOverlay(
-        environment: AppEnvironment,
-        showsPendingDeletionBar: Bool = true
-    ) -> some View {
-        modifier(ToastOverlayModifier(
-            environment: environment,
-            showsPendingDeletionBar: showsPendingDeletionBar
-        ))
+    func toastOverlay(environment: AppEnvironment) -> some View {
+        modifier(ToastOverlayModifier(environment: environment))
+            .modifier(LocalDeletionConfirmationHost(environment: environment))
     }
 }
 
@@ -37,7 +32,6 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     var body: some View {
         storageGuardedContent
             .environment(environment)
-            .environment(environment.pendingLocalDeletionController)
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
             .toastOverlay(environment: environment)
@@ -124,51 +118,11 @@ private struct DynamicLocaleWrapper<Content: View>: View {
 
 private struct ToastOverlayModifier: ViewModifier {
     @Bindable var environment: AppEnvironment
-    let showsPendingDeletionBar: Bool
-
-    init(environment: AppEnvironment, showsPendingDeletionBar: Bool) {
-        _environment = Bindable(environment)
-        self.showsPendingDeletionBar = showsPendingDeletionBar
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        ToastOverlayContent(
-            content: content,
-            environment: environment,
-            showsPendingDeletionBar: showsPendingDeletionBar
-        )
-    }
-
-    private struct ToastOverlayContent<Content: View>: View {
-        let content: Content
-        @Bindable var environment: AppEnvironment
-        let showsPendingDeletionBar: Bool
-        @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-        init(
-            content: Content,
-            environment: AppEnvironment,
-            showsPendingDeletionBar: Bool
-        ) {
-            self.content = content
-            _environment = Bindable(environment)
-            self.showsPendingDeletionBar = showsPendingDeletionBar
-        }
-
-        var body: some View {
-            ZStack(alignment: .bottom) {
-                content
-                feedbackStack
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.25),
-                value: environment.pendingLocalDeletionController.pendingDeletion
-            )
-        }
-
-        private var feedbackStack: some View {
-            VStack(spacing: 8) {
+        content
+            .overlay(alignment: .bottom) {
                 if let toast = environment.toastMessage {
                     Button {
                         environment.dismissToast(id: toast.id)
@@ -178,31 +132,12 @@ private struct ToastOverlayModifier: ViewModifier {
                     .buttonStyle(.plain)
                     .accessibilityLabel(LocalizedStringKey("close"))
                     .padding(.horizontal, 24)
+                    .padding(.bottom, 112)
                     .frame(maxWidth: .infinity)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(1000)
-                }
-
-                if showsPendingDeletionBar,
-                   environment.pendingLocalDeletionController.pendingDeletion != nil {
-                    PendingLocalDeletionBar(controller: environment.pendingLocalDeletionController)
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .zIndex(999)
                 }
             }
-            .padding(.bottom, bottomPadding)
-            .frame(maxWidth: .infinity)
-        }
-
-        private var bottomPadding: CGFloat {
-            if showsPendingDeletionBar,
-               environment.pendingLocalDeletionController.pendingDeletion != nil {
-                return 54
-            }
-            return 112
-        }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
     }
 }
 

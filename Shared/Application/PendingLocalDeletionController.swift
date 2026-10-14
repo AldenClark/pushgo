@@ -1,45 +1,14 @@
 import Foundation
 import Observation
 
-struct PendingLocalDeletionScope: Codable, Equatable, Hashable, Sendable {
-    let messageIDs: Set<UUID>
-    let eventIDs: Set<String>
-    let thingIDs: Set<String>
-    let channelIDs: Set<String>
-
-    init(
-        messageIDs: Set<UUID> = [],
-        eventIDs: Set<String> = [],
-        thingIDs: Set<String> = [],
-        channelIDs: Set<String> = []
-    ) {
-        self.messageIDs = messageIDs
-        self.eventIDs = eventIDs
-        self.thingIDs = thingIDs
-        self.channelIDs = Set(channelIDs.compactMap(Self.normalizeChannelID))
-    }
-
-    func suppressesMessage(id: UUID, channelId: String?) -> Bool {
-        messageIDs.contains(id) || containsChannel(channelId)
-    }
-
-    func suppressesEvent(id: String, channelId: String?) -> Bool {
-        eventIDs.contains(id) || containsChannel(channelId)
-    }
-
-    func suppressesThing(id: String, channelId: String?) -> Bool {
-        thingIDs.contains(id) || containsChannel(channelId)
-    }
-
-    private func containsChannel(_ channelId: String?) -> Bool {
-        guard let normalized = Self.normalizeChannelID(channelId) else { return false }
-        return channelIDs.contains(normalized)
-    }
-
-    private static func normalizeChannelID(_ channelId: String?) -> String? {
-        let trimmed = channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
-    }
+struct PendingChannelRemovalTarget: Codable, Equatable, Sendable {
+    let channelID: String
+    let originalConfig: ServerConfig
+    let expectedUpdatedAt: Date
+    let password: String
+    var originalDeviceKey: String? = nil
+    var historySnapshot: [String]? = nil
+    var keepHistory: Bool
 }
 
 enum PendingLocalDeletionIntent: Codable, Equatable, Sendable {
@@ -47,19 +16,7 @@ enum PendingLocalDeletionIntent: Codable, Equatable, Sendable {
     case events(ids: [String])
     case things(ids: [String])
     case channelHistory(channelID: String, expectedGateway: String, expectedUpdatedAt: Date)
-
-    var scope: PendingLocalDeletionScope {
-        switch self {
-        case let .messages(ids):
-            return PendingLocalDeletionScope(messageIDs: Set(ids))
-        case let .events(ids):
-            return PendingLocalDeletionScope(eventIDs: Set(ids))
-        case let .things(ids):
-            return PendingLocalDeletionScope(thingIDs: Set(ids))
-        case let .channelHistory(channelID, _, _):
-            return PendingLocalDeletionScope(channelIDs: [channelID])
-        }
-    }
+    case channelRemoval(target: PendingChannelRemovalTarget)
 
     var deduplicationKey: String {
         switch self {
@@ -69,6 +26,8 @@ enum PendingLocalDeletionIntent: Codable, Equatable, Sendable {
             return "events:" + normalized(ids).sorted().joined(separator: ",")
         case let .things(ids):
             return "things:" + normalized(ids).sorted().joined(separator: ",")
+        case let .channelRemoval(target):
+            return "remote-channel:\(target.originalConfig.gatewayKey):\(target.channelID):\(target.expectedUpdatedAt.timeIntervalSince1970):\(target.keepHistory)"
         case let .channelHistory(channelID, gateway, updatedAt):
             let normalizedGateway = gateway.trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedChannel = channelID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -81,6 +40,15 @@ enum PendingLocalDeletionIntent: Codable, Equatable, Sendable {
     }
 }
 
+/// An ephemeral, read-only confirmation. Its snapshot is validated inside the deletion transaction.
+struct LocalDeletionConfirmation: Sendable {
+    let id = UUID()
+    let intent: PendingLocalDeletionIntent
+    let snapshot: [String]
+    let summary: String
+    let persistedConfiguration: ServerConfig?
+}
+
 enum PendingLocalDeletionState: String, Codable, Equatable, Sendable {
     case queued
     case undoable
@@ -89,9 +57,6 @@ enum PendingLocalDeletionState: String, Codable, Equatable, Sendable {
     case cleanupPending = "cleanup_pending"
     case reconciliationRequired = "reconciliation_required"
 
-    var suppressesContent: Bool {
-        self != .reconciliationRequired
-    }
 }
 
 struct PendingLocalDeletionCleanup: Codable, Equatable, Sendable {
@@ -124,8 +89,6 @@ struct PendingLocalDeletionRecord: Codable, Equatable, Identifiable, Sendable {
 @MainActor
 @Observable
 final class PendingLocalDeletionController {
-    typealias Scope = PendingLocalDeletionScope
-    typealias CompletionHandler = @MainActor (Result<Void, Error>) -> Void
     typealias ChannelCommitHandler = @Sendable (
         _ record: PendingLocalDeletionRecord,
         _ leaseOwner: String
@@ -133,20 +96,7 @@ final class PendingLocalDeletionController {
     typealias CleanupHandler = @Sendable (PendingLocalDeletionCleanup) async -> Void
     typealias FailureHandler = @MainActor (Error) -> Void
 
-    struct PendingDeletion: Identifiable, Equatable {
-        let id: UUID
-        let summary: String
-        let undoLabel: String
-        let deadline: Date
-        let scope: Scope
-
-        func timeRemaining(at date: Date) -> TimeInterval {
-            max(0, deadline.timeIntervalSince(date))
-        }
-    }
-
     private let dataStore: LocalDataStore
-    private let timeout: TimeInterval
     private let leaseDuration: TimeInterval
     private let channelCommitHandler: ChannelCommitHandler?
     private let cleanupHandler: CleanupHandler?
@@ -157,15 +107,13 @@ final class PendingLocalDeletionController {
     @ObservationIgnored private var wakeTask: Task<Void, Never>?
     @ObservationIgnored private var drainTask: Task<Void, Never>?
     @ObservationIgnored private var records: [PendingLocalDeletionRecord] = []
-    @ObservationIgnored private var completionHandlers: [UUID: CompletionHandler] = [:]
 
-    private(set) var pendingDeletion: PendingDeletion?
-    private(set) var effectiveScope = Scope()
-    private(set) var isUndoInFlight = false
+    private(set) var isDormant = false
+    private(set) var recoveryRequiredCount = 0
+    private(set) var recoveryErrorCodes: [String] = []
 
     init(
         dataStore: LocalDataStore,
-        timeout: TimeInterval = 5,
         leaseDuration: TimeInterval = 30,
         dateProvider: @escaping @Sendable () -> Date = { Date() },
         channelCommitHandler: ChannelCommitHandler? = nil,
@@ -173,7 +121,6 @@ final class PendingLocalDeletionController {
         failureHandler: FailureHandler? = nil
     ) {
         self.dataStore = dataStore
-        self.timeout = max(0, timeout)
         self.leaseDuration = max(1, leaseDuration)
         self.dateProvider = dateProvider
         self.channelCommitHandler = channelCommitHandler
@@ -186,128 +133,46 @@ final class PendingLocalDeletionController {
         drainTask?.cancel()
     }
 
-    @discardableResult
-    func schedule(
-        summary: String,
-        undoLabel: String,
-        intent: PendingLocalDeletionIntent,
-        onCompletion: CompletionHandler? = nil
-    ) async -> Bool {
-        do {
-            let record = try await dataStore.enqueuePendingLocalDeletion(
-                summary: summary,
-                undoLabel: undoLabel,
-                intent: intent,
-                timeout: timeout,
-                now: dateProvider()
-            )
-            if let onCompletion {
-                completionHandlers[record.id] = onCompletion
-            }
-            await reloadAndArmWakeTask()
-            return true
-        } catch {
-            failureHandler?(error)
-            onCompletion?(.failure(error))
-            return false
-        }
-    }
-
-    @discardableResult
-    func scheduleItems<Item, ID: Hashable & Sendable>(
-        _ items: [Item],
-        identity: (Item) -> ID,
-        title: (Item) -> String,
-        fallbackSingleSummary: String,
-        multipleSummaryTitle: String,
-        undoLabel: String,
-        intent: ([ID]) -> PendingLocalDeletionIntent,
-        onCompletion: CompletionHandler? = nil
-    ) async -> [Item]? {
-        let uniqueItems = uniquePreservingOrder(items, identity: identity)
-        guard !uniqueItems.isEmpty else { return nil }
-        let summary: String
-        if uniqueItems.count == 1, let first = uniqueItems.first {
-            let resolved = title(first).trimmingCharacters(in: .whitespacesAndNewlines)
-            summary = resolved.isEmpty ? fallbackSingleSummary : resolved
-        } else {
-            summary = "\(uniqueItems.count) × \(multipleSummaryTitle)"
-        }
-        let scheduled = await schedule(
-            summary: summary,
-            undoLabel: undoLabel,
-            intent: intent(uniqueItems.map(identity)),
-            onCompletion: onCompletion
-        )
-        return scheduled ? uniqueItems : nil
-    }
-
     func restoreAndReconcile() async {
         await restorePendingState()
         await processDueDeletions()
     }
 
-    /// Restores the suppression scope needed to render cached content safely.
-    /// Executing due deletions is intentionally separate so launch can present
-    /// the restored local state before reconciliation performs I/O or networking.
+    /// Legacy entry point only: old accepted intents become due immediately.
     func restorePendingState() async {
-        await reloadAndArmWakeTask()
-    }
-
-    func sceneBecameActive() async {
-        await reloadAndArmWakeTask()
-        await processDueDeletions()
-    }
-
-    func commitAllForBackground() async {
+        guard !isDormant else { return }
         do {
             try await dataStore.forcePendingLocalDeletionsDue(now: dateProvider())
             await reloadAndArmWakeTask()
-            await processDueDeletions()
-        } catch {
-            failureHandler?(error)
-        }
+        } catch { failureHandler?(error) }
+    }
+
+    func sceneBecameActive() async {
+        guard !isDormant else { return }
+        await restoreAndReconcile()
+    }
+
+    func commitAllForBackground() async {
+        guard !isDormant else { return }
+        await restoreAndReconcile()
+    }
+
+    /// New canonical commits only create cleanup receipts, never delayed deletion intents.
+    func reconcileCommittedCleanup() async {
+        isDormant = false
+        await processDueDeletions()
+    }
+
+    func retryRecovery() async {
+        do {
+            try await dataStore.retryPendingLocalDeletionRecovery(now: dateProvider())
+            isDormant = false
+            await restoreAndReconcile()
+        } catch { failureHandler?(error) }
     }
 
     func cancelExecution() {
         drainTask?.cancel()
-    }
-
-    func undoCurrent() {
-        guard let id = pendingDeletion?.id, !isUndoInFlight else { return }
-        isUndoInFlight = true
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.isUndoInFlight = false }
-            do {
-                let undone = try await self.dataStore.undoPendingLocalDeletion(
-                    id: id,
-                    timeout: self.timeout,
-                    now: self.dateProvider()
-                )
-                if undone { self.completionHandlers.removeValue(forKey: id) }
-                await self.reloadAndArmWakeTask()
-                if !undone { await self.processDueDeletions() }
-            } catch {
-                self.failureHandler?(error)
-                await self.reloadAndArmWakeTask()
-            }
-        }
-    }
-
-    func commitCurrentIfNeeded() async {
-        guard let id = pendingDeletion?.id else { return }
-        do {
-            _ = try await dataStore.forcePendingLocalDeletionDue(
-                id: id,
-                timeout: timeout,
-                now: dateProvider()
-            )
-        } catch {
-            failureHandler?(error)
-        }
-        await reloadAndArmWakeTask()
-        await processDueDeletions()
     }
 
     func processDueDeletions() async {
@@ -324,18 +189,6 @@ final class PendingLocalDeletionController {
         drainTask = nil
     }
 
-    func suppressesMessage(id: UUID, channelId: String?) -> Bool {
-        effectiveScope.suppressesMessage(id: id, channelId: channelId)
-    }
-
-    func suppressesEvent(id: String, channelId: String?) -> Bool {
-        effectiveScope.suppressesEvent(id: id, channelId: channelId)
-    }
-
-    func suppressesThing(id: String, channelId: String?) -> Bool {
-        effectiveScope.suppressesThing(id: id, channelId: channelId)
-    }
-
     private func drainUntilIdle() async {
         while !Task.isCancelled {
             do {
@@ -346,7 +199,6 @@ final class PendingLocalDeletionController {
                 guard let claimed = try await dataStore.claimNextPendingLocalDeletion(
                     owner: leaseOwner,
                     leaseDuration: leaseDuration,
-                    timeout: timeout,
                     now: dateProvider()
                 ) else { break }
                 await reloadAndArmWakeTask()
@@ -363,7 +215,7 @@ final class PendingLocalDeletionController {
         do {
             let cleanup: PendingLocalDeletionCleanup
             switch record.intent {
-            case .channelHistory:
+            case .channelHistory, .channelRemoval:
                 guard let channelCommitHandler else {
                     throw AppError.localStore("Channel deletion executor is unavailable.")
                 }
@@ -386,13 +238,7 @@ final class PendingLocalDeletionController {
             return false
         } catch {
             let appError = error as? AppError
-            if let appError, Self.abandonsIntent(errorCode: appError.code) {
-                try? await dataStore.abandonClaimedPendingLocalDeletion(id: record.id, owner: leaseOwner)
-                completionHandlers.removeValue(forKey: record.id)?(.failure(error))
-                failureHandler?(error)
-                return true
-            }
-            if let appError, appError.code == "channel_removal_reconciliation_required" {
+            if let appError, Self.requiresReconciliation(errorCode: appError.code) {
                 try? await dataStore.markPendingLocalDeletionReconciliationRequired(
                     id: record.id,
                     owner: leaseOwner,
@@ -407,7 +253,6 @@ final class PendingLocalDeletionController {
                     errorCode: appError?.code ?? "pending_deletion_failed"
                 )
             }
-            completionHandlers.removeValue(forKey: record.id)?(.failure(error))
             failureHandler?(error)
             return true
         }
@@ -429,7 +274,6 @@ final class PendingLocalDeletionController {
             try await dataStore.reconcilePendingLocalDeletionCleanup(cleanup)
             await cleanupHandler?(cleanup)
             try await dataStore.completePendingLocalDeletionCleanup(id: record.id)
-            completionHandlers.removeValue(forKey: record.id)?(.success(()))
             return true
         } catch {
             failureHandler?(error)
@@ -440,36 +284,22 @@ final class PendingLocalDeletionController {
     private func reloadAndArmWakeTask() async {
         do {
             records = try await dataStore.loadPendingLocalDeletions(now: dateProvider())
-            publishState()
+            recoveryRequiredCount = try await dataStore.pendingLocalDeletionRecoveryCount()
+            recoveryErrorCodes = try await dataStore.pendingLocalDeletionRecoveryErrorCodes()
+            isDormant = records.isEmpty && recoveryRequiredCount == 0
+            if recoveryRequiredCount > 0 {
+                let key = recoveryErrorCodes.contains("channel_history_changed_during_removal")
+                    ? "channel_removal_reconfirmation_required" : "local_deletion_recovery_required"
+                failureHandler?(AppError.typedLocal(code: "pending_deletion_recovery_required", category: .local,
+                    message: LocalizationManager.shared.localized(key)))
+            }
             armWakeTask()
         } catch {
             records = []
-            publishState()
             wakeTask?.cancel()
             wakeTask = nil
             failureHandler?(error)
         }
-    }
-
-    private func publishState() {
-        if let current = records.first(where: { $0.state == .undoable }), let deadline = current.deadline {
-            pendingDeletion = PendingDeletion(
-                id: current.id,
-                summary: current.summary,
-                undoLabel: current.undoLabel,
-                deadline: deadline,
-                scope: current.intent.scope
-            )
-        } else {
-            pendingDeletion = nil
-        }
-        let scopes = records.filter { $0.state.suppressesContent }.map { $0.intent.scope }
-        effectiveScope = Scope(
-            messageIDs: scopes.reduce(into: Set<UUID>()) { $0.formUnion($1.messageIDs) },
-            eventIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.eventIDs) },
-            thingIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.thingIDs) },
-            channelIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.channelIDs) }
-        )
     }
 
     private func armWakeTask() {
@@ -478,11 +308,11 @@ final class PendingLocalDeletionController {
         let now = dateProvider()
         let dates = records.compactMap { record -> Date? in
             switch record.state {
-            case .undoable: return record.deadline
+            case .undoable, .queued: return now
             case .retryWaiting: return record.retryAfter
             case .executing: return record.leaseUntil
             case .cleanupPending: return now.addingTimeInterval(2)
-            case .queued, .reconciliationRequired: return nil
+            case .reconciliationRequired: return nil
             }
         }
         guard let wakeDate = dates.min() else { return }
@@ -498,8 +328,10 @@ final class PendingLocalDeletionController {
         }
     }
 
-    private static func abandonsIntent(errorCode: String) -> Bool {
+    private static func requiresReconciliation(errorCode: String) -> Bool {
         [
+            "channel_history_changed_during_removal",
+            "channel_removal_reconciliation_required",
             "gateway_changed_during_channel_removal",
             "channel_subscription_changed_during_removal",
             "channel_password_missing",
@@ -507,11 +339,4 @@ final class PendingLocalDeletionController {
         ].contains(errorCode)
     }
 
-    private func uniquePreservingOrder<Item, ID: Hashable>(
-        _ items: [Item],
-        identity: (Item) -> ID
-    ) -> [Item] {
-        var seen = Set<ID>()
-        return items.filter { seen.insert(identity($0)).inserted }
-    }
 }

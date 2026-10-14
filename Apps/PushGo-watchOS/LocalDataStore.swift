@@ -98,7 +98,18 @@ actor LocalDataStore {
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) {
         KeychainSharedAccessMigration.migrateLegacyItemsToSharedAccessGroup()
+#if DEBUG
+        if WatchQualityRuntime.isHermeticRequested,
+           let qualityRoot = PushGoAutomationContext.storageRootURL {
+            // Watch's existing sandbox-tmp session isolates SQLite and credentials;
+            // give its settings the same lifetime and ownership across relaunches.
+            defaults = UserDefaults(suiteName: "\(appGroupIdentifier).watch-quality.\(qualityRoot.lastPathComponent)") ?? .standard
+        } else {
+            defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        }
+#else
         defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+#endif
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
 
@@ -600,9 +611,31 @@ actor LocalDataStore {
         return try sqliteStore.markWatchLightMessageRead(messageId: messageId)
     }
 
-    func deleteWatchLightMessage(messageId: String) async throws {
+    func deleteWatchLightMessage(matching message: WatchLightMessage, context: WatchControlContext, config: ServerConfig?) async throws -> Bool {
+        // Read settings synchronously: no actor reentrancy between scope validation and DELETE.
+        let settings: WatchLocalSettings
+        if let data = defaults.data(forKey: Self.settingsKey),
+           let decoded = try? decoder.decode(WatchLocalSettings.self, from: data) {
+            settings = decoded
+        } else {
+            settings = .default
+        }
+        guard settings.watchMode == context.mode,
+              settings.watchSyncGenerations.controlGeneration == context.controlGeneration,
+              settings.watchSyncGenerations.standaloneProvisioningGeneration == context.standaloneProvisioningGeneration
+        else {
+#if DEBUG
+            WatchQualityRuntime.recordDeletionDiagnostic([
+                "stage": "store.scope", "mode_matches": settings.watchMode == context.mode,
+                "control_matches": settings.watchSyncGenerations.controlGeneration == context.controlGeneration,
+                "provisioning_matches": settings.watchSyncGenerations.standaloneProvisioningGeneration == context.standaloneProvisioningGeneration
+            ])
+#endif
+            return false
+        }
         let sqliteStore = try requireSQLiteStore()
-        try sqliteStore.deleteWatchLightMessage(messageId: messageId)
+        let localConfig = try? localConfigStore.loadServerConfig()?.normalized()
+        return try sqliteStore.deleteWatchLightMessage(matching: message, config: config, localConfig: localConfig)
     }
 
     func deleteAllMessages() async throws {
@@ -1122,14 +1155,30 @@ private final class WatchLocalSQLiteStore {
         return try loadWatchLightMessage(messageId: normalized)
     }
 
-    func deleteWatchLightMessage(messageId: String) throws {
-        let normalized = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        let statement = try prepare("DELETE FROM watch_light_messages WHERE message_id = ?;")
-        defer { sqlite3_finalize(statement) }
-        try bindText(statement, index: 1, value: normalized)
-        try stepDone(statement)
-        DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
+    func deleteWatchLightMessage(matching message: WatchLightMessage, config: ServerConfig?, localConfig: ServerConfig?) throws -> Bool {
+        let deleted = try writeTransaction {
+            let currentConfig = try localConfig ?? loadProvisioningServerConfig()?.normalized()
+            guard currentConfig == config else {
+#if DEBUG
+                WatchQualityRuntime.recordDeletionDiagnostic(["stage": "sqlite.configuration", "current_present": currentConfig != nil, "captured_present": config != nil])
+#endif
+                return false
+            }
+            guard let current = try loadWatchLightMessage(messageId: message.messageId),
+                  current.matchesDeletionContent(message) else {
+#if DEBUG
+                WatchQualityRuntime.recordDeletionDiagnostic(["stage": "sqlite.content"])
+#endif
+                return false
+            }
+            let statement = try prepare("DELETE FROM watch_light_messages WHERE message_id = ?;")
+            defer { sqlite3_finalize(statement) }
+            try bindText(statement, index: 1, value: message.messageId)
+            try stepDone(statement)
+            return true
+        }
+        if deleted { DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName) }
+        return deleted
     }
 
     private func loadAppSetting(column: String) throws -> String? {

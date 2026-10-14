@@ -346,13 +346,13 @@ PY
         run_preparation_contract
         ;;
       apple-store-migration-reopen)
-        selected_claims+=("old Store migration preserves a pending user action's identity, state, deadline, and Undo semantics through migration and reopen")
+        selected_claims+=("old Store migration preserves a pending user action's identity, accepted state, and legacy payload through migration through migration and reopen")
         "$repo_root/scripts/run_apple_core_tests.sh" --filter currentV24StorePreservesPendingDeletionThroughV25AndReopen
-        claims+=("old Store migration preserves a pending user action's identity, state, deadline, and Undo semantics through migration and reopen")
+        claims+=("old Store migration preserves a pending user action's identity, accepted state, and legacy payload through migration through migration and reopen")
         ;;
       apple-ios-message-unavailable-route)
         selected_claims+=("iOS stale Message route returns to a usable declared fallback")
-        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch" \
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteConfirmationPermanentlyRemovesOnlyTargetAcrossRelaunch" \
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
         claims+=("iOS stale Message route returns to a usable declared fallback")
@@ -399,26 +399,26 @@ PY
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
         claims+=("macOS initial Message-load failure recovers to the requested canonical detail")
         ;;
-      apple-ios-message-delete-undo)
-        selected_claims+=("iOS Message deletion Undo restores the exact canonical object after relaunch")
-        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch" \
+      apple-ios-message-delete-cancel)
+        selected_claims+=("iOS Message deletion cancellation preserves the exact canonical object without a persisted draft across relaunch")
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch" \
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-        claims+=("iOS Message deletion Undo restores the exact canonical object after relaunch")
+        claims+=("iOS Message deletion cancellation preserves the exact canonical object without a persisted draft across relaunch")
         ;;
       apple-ios-message-delete-commit)
         selected_claims+=("iOS Message deletion commits only its target and keeps control data across relaunch")
-        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch" \
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteConfirmationPermanentlyRemovesOnlyTargetAcrossRelaunch" \
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
         claims+=("iOS Message deletion commits only its target and keeps control data across relaunch")
         ;;
       apple-macos-message-delete-lifecycle)
-        selected_claims+=("macOS Message deletion Undo and deadline commit preserve canonical data across relaunch")
-        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch" \
+        selected_claims+=("macOS Message deletion cancellation and confirmed transaction preserve exact scope across relaunch")
+        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionCancelsThenConfirmsAccurateCanonicalStateAcrossRelaunch" \
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
-        claims+=("macOS Message deletion Undo and deadline commit preserve canonical data across relaunch")
+        claims+=("macOS Message deletion cancellation and confirmed transaction preserve exact scope across relaunch")
         ;;
       apple-ios-channel-positive)
         selected_claims+=("iOS impact-selected Channel positive lifecycle")
@@ -504,13 +504,13 @@ PY
 }
 
 # PR spends device minutes on one broad positive representative per user-purpose
-# family. Failure injection, deadline behavior, corruption, and compensation stay
+# family. Failure injection, deletion confirmation, corruption, and compensation stay
 # in Nightly/Release or run focused when their owning production code changes.
 pr_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch"
 macos_pr_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/testSidebarNavigationCoversPrimaryScreens"
 extended_positive_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testMarkdownFixtureRendersMajorStructuresInTheRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testThingLifecycleFiltersRelationsAndUnavailableTargetFallback,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"
 positive_ui_scopes="$pr_ui_scopes,$extended_positive_ui_scopes"
-nightly_negative_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState,PushGo-iOSUITests/PushGo_iOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelRemoteRejectionStaysInSheetAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateLocalFailureCompensatesRemoteBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testExistingChannelLocalFailureDoesNotCompensateBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
+nightly_negative_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteConfirmationPermanentlyRemovesOnlyTargetAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState,PushGo-iOSUITests/PushGo_iOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelRemoteRejectionStaysInSheetAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateLocalFailureCompensatesRemoteBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testExistingChannelLocalFailureDoesNotCompensateBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
 accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
 nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"
 watch_ui_scopes="PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testLegacyWatchStoreMigratesAccurateMessageAndKeepsNewDataAcrossRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testInvalidHermeticScenarioFailsReadinessExplicitly,PushGo-watchOSUITests/PushGo_watchOSUITests/testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"
@@ -742,8 +742,9 @@ run_ios_positive_then_risk() {
 run_system_notification_journey() {
   local cold_launch_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
   local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
+  local delete_cancel_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteCancelPreservesUnreadTargetAfterRelaunch"
   local mark_read_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationMarkReadActionPersistsAccurateReadTarget"
-  selected_claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
+  selected_claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and foreground delete confirmation/cancellation/control/relaunch journeys")
   MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
   SYSTEM_NOTIFICATION_TEST_SCOPE="$cold_launch_scope" \
@@ -754,11 +755,15 @@ run_system_notification_journey() {
     PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
+  SYSTEM_NOTIFICATION_TEST_SCOPE="$delete_cancel_scope" \
+    PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
   SYSTEM_NOTIFICATION_TEST_SCOPE="$mark_read_action_scope" \
     PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
-  claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
+  claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and foreground delete confirmation/cancellation/control/relaunch journeys")
 }
 
 run_impact_contracts

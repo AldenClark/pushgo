@@ -477,6 +477,54 @@
         }
       }
     },
+    "history_cleanup_frozen_confirmation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@: permanently delete %d matching local messages. This cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@：永久删除符合条件的 %d 条本地消息。此操作无法撤销。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%@：永久刪除符合條件的 %d 則本機訊息。此操作無法復原。" } }
+      }
+    },
+    "clear_decryption_key_confirmation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete the saved decryption key? This cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除已保存的解密密钥？此操作无法撤销。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除已儲存的解密金鑰？此操作無法復原。" } }
+      }
+    },
+    "retry_unfinished_deletions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry unfinished deletions" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试未完成的删除" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重試未完成的刪除" } }
+      }
+    },
+    "channel_removal_reconfirmation_required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Channel content changed. Open the unsubscribe confirmation again. The new content has been preserved." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "频道内容已变化，请重新打开退订确认。新内容已保留。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "頻道內容已變更，請重新開啟取消訂閱確認。新內容已保留。" } }
+      }
+    },
+    "local_deletion_recovery_required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A previously accepted deletion could not finish. The original data is preserved. Retry it in Settings." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此前确认的删除尚未完成，原数据已保留。请在设置中重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "先前確認的刪除尚未完成，原資料已保留。請在設定中重試。" } }
+      }
+    },
+    "local_deletion_confirmation_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Permanently delete %@ from local storage? This cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "永久删除本地存储中的“%@”？此操作无法撤销。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "永久刪除本機儲存中的「%@」？此操作無法復原。" } }
+      }
+    },
     "are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered" : {
       "extractionState" : "manual",
       "localizations" : {

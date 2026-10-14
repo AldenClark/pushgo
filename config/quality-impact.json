@@ -150,8 +150,8 @@
     },
     {
       "id": "messages-search-delete",
-      "paths": ["Shared/Models/PushMessage*.swift", "Shared/Models/MessageFilter.swift", "Shared/Repositories/MessageSearchIndex.swift", "Shared/Services/MessageStateCoordinator.swift", "Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/Message*.swift", "Shared/UI/PendingLocalDeletionBar.swift", "Shared/Utilities/SearchQuerySemantics.swift", "Apps/*/UI/Components/MessageRowView.swift", "Apps/*/UI/Screens/Message*.swift"],
-      "capabilities": ["messages", "message-detail", "search-filter", "delete-undo"],
+      "paths": ["Shared/Models/PushMessage*.swift", "Shared/Models/MessageFilter.swift", "Shared/Repositories/MessageSearchIndex.swift", "Shared/Services/MessageStateCoordinator.swift", "Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/Message*.swift", "Shared/UI/LocalDeletionConfirmationHost.swift", "Shared/Application/LocalDeletionConfirmationController.swift", "Shared/UI/PendingLocalDeletionBar.swift", "Shared/Utilities/SearchQuerySemantics.swift", "Apps/*/UI/Components/MessageRowView.swift", "Apps/*/UI/Screens/Message*.swift"],
+      "capabilities": ["messages", "message-detail", "search-filter", "delete-confirmation"],
       "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys", "iOS provider refresh new-result/failure-recovery UI journeys"],
       "lane": "pr",
       "known_evidence_gaps": ["representative iOS/macOS local-cached media decode/click/preview, pagination/read, and slow, new-result, and failure-recovery refresh workflows are protected; multi-image, animation, share, cache eviction, and media performance remain incomplete."]
@@ -178,13 +178,13 @@
     },
     {
       "id": "message-deletion-lifecycle",
-      "paths": ["Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/PendingLocalDeletionBar.swift"],
-      "capabilities": ["messages", "message-detail", "delete-undo"],
-      "minimum_evidence": ["a real deletion immediately suppresses only its target", "Undo restores the exact canonical object", "an explicit iOS XCTest process termination preserves the pending scope for a new process, where a real Undo restores the exact canonical object", "deadline commit and relaunch keep the target absent while an unrelated message remains readable"],
-      "required_checks": ["apple-ios-message-delete-undo", "apple-ios-message-delete-commit", "apple-macos-message-delete-lifecycle"],
+      "paths": ["Shared/Application/PendingLocalDeletionController.swift", "Shared/Application/LocalDeletionConfirmationController.swift", "Shared/UI/LocalDeletionConfirmationHost.swift", "Shared/UI/PendingLocalDeletionBar.swift"],
+      "capabilities": ["messages", "message-detail", "delete-confirmation"],
+      "minimum_evidence": ["cancel and interruption before confirmation preserve exact canonical data without a deletion intent", "confirmation commits only the frozen target and rejects stale object/configuration", "confirmed deletion and relaunch keep the target absent while an unrelated message remains readable", "already accepted legacy intents and derived cleanup settle without an Undo window"],
+      "required_checks": ["apple-ios-message-delete-cancel", "apple-ios-message-delete-commit", "apple-macos-message-delete-lifecycle"],
       "lane": "pr",
-      "known_evidence_gaps": ["This representative lifecycle does not claim multiple pending deletions, process death during claim, remote deletion conflicts, or backoff behavior."],
-      "escalation_reasons": ["Deletion ownership is irreversible after its deadline and must protect both restoration and durable commit, not merely the visible undo bar."]
+      "known_evidence_gaps": ["Native journeys are representative; Core tests separately cover stale targets, transaction rollback, legacy claims and recovery. Physical-device/system interruption remains unverified."],
+      "escalation_reasons": ["Deletion requires an explicit foreground confirmation before effects; immediate transactions and the remaining accepted-intent recovery must preserve exact scope and failure outcomes."]
     },
     {
       "id": "events-things-core",

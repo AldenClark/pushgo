@@ -143,6 +143,8 @@ enum WatchQualityRuntime {
         }
         let scenario = normalizedEnvironmentValue(scenarioEnvironmentKey)
         guard scenario == "watch.standard"
+                || scenario == "watch.delete-guards"
+                || scenario == "watch.notification-delete-confirmation"
                 || scenario == "watch.migration"
                 || scenario == "watch.message-load-failure"
                 || scenario == "watch.gateway-cleanup-seed"
@@ -280,11 +282,62 @@ enum WatchQualityRuntime {
             defaults.set(sessionID, forKey: preparedSessionDefaultsKey)
         }
 
+        if scenario == "watch.delete-guards" {
+            try await verifyDeletionGuards(store: environment.dataStore)
+        }
+
         if scenario == "watch.message-load-failure" {
             await environment.dataStore.enableQualityWatchMessageLoadFailure()
         }
 
         await environment.refreshWatchLightCountsAndNotify()
+        if scenario == "watch.notification-delete-confirmation",
+           let message = try await environment.dataStore.loadWatchLightMessage(messageId: "quality-watch-message-001") {
+            environment.handleNotificationDelete(message)
+        }
+    }
+
+    static func recordDeletionDiagnostic(_ evidence: [String: Any]) {
+        guard isHermeticRequested, let root = PushGoAutomationContext.storageRootURL,
+              let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys]) else { return }
+        try? data.write(to: root.appendingPathComponent("watch-delete-diagnostic.json"), options: .atomic)
+    }
+
+    private static func verifyDeletionGuards(store: LocalDataStore) async throws {
+        let original = standardSnapshot().messages[0]
+        let config = try await store.loadServerConfig()?.normalized()
+        let mode = await store.loadWatchMode()
+        let generations = await store.loadWatchSyncGenerationState()
+        let context = WatchControlContext(
+            mode: mode, controlGeneration: generations.controlGeneration,
+            standaloneProvisioningGeneration: generations.standaloneProvisioningGeneration
+        )
+        let changed = WatchLightMessage(
+            messageId: original.messageId, title: "Replacement must survive", body: "New content under the same ID.",
+            imageURL: original.imageURL, url: original.url, severity: original.severity,
+            receivedAt: original.receivedAt, isRead: original.isRead, entityType: original.entityType,
+            entityId: original.entityId, notificationRequestId: original.notificationRequestId
+        )
+        try await store.upsertWatchLightPayload(.message(changed))
+        guard try await !store.deleteWatchLightMessage(matching: original, context: context, config: config),
+              try await store.loadWatchLightMessage(messageId: original.messageId) == changed else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("Stale confirmation deleted replacement content")
+        }
+        let staleContext = WatchControlContext(
+            mode: mode, controlGeneration: generations.controlGeneration + 1,
+            standaloneProvisioningGeneration: generations.standaloneProvisioningGeneration
+        )
+        guard try await !store.deleteWatchLightMessage(matching: changed, context: staleContext, config: config),
+              try await store.loadWatchLightMessage(messageId: original.messageId) == changed else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("Stale Watch configuration deleted content")
+        }
+        guard try await store.deleteWatchLightMessage(matching: changed, context: context, config: config),
+              try await store.loadWatchLightMessage(messageId: original.messageId) == nil,
+              try await !store.deleteWatchLightMessage(matching: changed, context: context, config: config),
+              try await store.loadWatchLightMessage(messageId: standardSnapshot().messages[1].messageId) == standardSnapshot().messages[1] else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("Confirmed direct delete did not preserve independent content")
+        }
+        try await store.upsertWatchLightPayload(.message(original))
     }
 
     private static func writeGatewayRouteResult(

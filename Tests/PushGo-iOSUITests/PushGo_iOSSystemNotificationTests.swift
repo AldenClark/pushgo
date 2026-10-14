@@ -24,7 +24,7 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         assertQualityRuntimeReady(in: app, timeout: 15)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        authorizeNotificationsIfNeeded(in: springboard)
+        guard authorizeNotificationsIfNeeded(in: app, springboard: springboard) else { return }
         background(app)
         let readinessURL = try publishReadiness(
             title: title,
@@ -113,7 +113,7 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         assertQualityRuntimeReady(in: app, timeout: 15)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        authorizeNotificationsIfNeeded(in: springboard)
+        guard authorizeNotificationsIfNeeded(in: app, springboard: springboard) else { return }
         background(app)
         let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
         defer { try? FileManager.default.removeItem(at: readinessURL) }
@@ -182,6 +182,14 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
     }
 
     func testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists() throws {
+        try runSystemNotificationDeleteJourney(confirmDeletion: true)
+    }
+
+    func testSystemNotificationDeleteCancelPreservesUnreadTargetAfterRelaunch() throws {
+        try runSystemNotificationDeleteJourney(confirmDeletion: false)
+    }
+
+    private func runSystemNotificationDeleteJourney(confirmDeletion: Bool) throws {
         let runID = UUID().uuidString.lowercased()
         let title = "Quality iOS notification delete \(runID.prefix(8))"
         let body = "Exact iOS notification delete body \(runID)."
@@ -197,7 +205,7 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         )
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        authorizeNotificationsIfNeeded(in: springboard)
+        guard authorizeNotificationsIfNeeded(in: app, springboard: springboard) else { return }
         background(app)
         let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
         defer { try? FileManager.default.removeItem(at: readinessURL) }
@@ -225,8 +233,49 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
             "The handled notification remained visible after its Delete action"
         )
 
-        activateAndAwaitForeground(app)
+        let foregrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.runningForeground.rawValue),
+            object: app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [foregrounded], timeout: 10),
+            .completed,
+            "The notification Delete action must foreground PushGo for confirmation"
+        )
         assertQualityRuntimeReady(in: app, timeout: 15)
+        let confirmation = localDeletionConfirmation(in: app, summary: title)
+        XCTAssertTrue(
+            confirmation.waitForExistence(timeout: 8),
+            "The notification action must request confirmation before deleting its canonical target"
+        )
+        XCTAssertTrue(
+            confirmation.label.contains(title),
+            "The confirmation must identify the exact notification target"
+        )
+        if !confirmDeletion {
+            tapWhenHittable(
+                app.alerts.buttons.matching(identifier: "action.local_deletion.cancel").firstMatch,
+                timeout: 8,
+                message: "The notification Delete confirmation must support cancellation"
+            )
+            XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+            assertUnreadMessage(title: title, body: body, in: app)
+            XCTAssertTrue(app.staticTexts[controlTitle].waitForExistence(timeout: 5))
+
+            app.terminate()
+            launch(app)
+            assertQualityRuntimeReady(in: app, timeout: 15)
+            assertUnreadMessage(title: title, body: body, in: app)
+            XCTAssertTrue(app.staticTexts[controlTitle].waitForExistence(timeout: 5))
+            XCTAssertFalse(confirmation.exists, "A cancelled Delete request must not survive relaunch")
+            return
+        }
+        tapWhenHittable(
+            app.alerts.buttons.matching(identifier: "action.local_deletion.confirm").firstMatch,
+            timeout: 8,
+            message: "The notification target must be deleted only after explicit confirmation"
+        )
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
         assertControlMessage(
             title: controlTitle,
             body: controlBody,
@@ -255,7 +304,7 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         assertQualityRuntimeReady(in: app, timeout: 15)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        authorizeNotificationsIfNeeded(in: springboard)
+        guard authorizeNotificationsIfNeeded(in: app, springboard: springboard) else { return }
         background(app)
         let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
         defer { try? FileManager.default.removeItem(at: readinessURL) }
@@ -332,26 +381,107 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         return data.base64EncodedString()
     }
 
-    private func authorizeNotificationsIfNeeded(in springboard: XCUIApplication) {
+    private func authorizeNotificationsIfNeeded(
+        in app: XCUIApplication,
+        springboard: XCUIApplication
+    ) -> Bool {
+        // Quality sessions intentionally skip automatic provider bootstrap. Request real
+        // system permission through Settings before publishing readiness for simctl push.
+        tapWhenHittable(
+            tabButton(in: app, identifier: "tab.channels", labels: ["Channels", "频道", "頻道"]),
+            timeout: 8,
+            message: "QUALITY_PRECONDITION: Channels must be available to open notification settings"
+        )
+        let settingsButton = element(in: app, identifier: "action.channels.settings")
+        guard settingsButton.waitForExistence(timeout: 8) else {
+            XCTFail("QUALITY_PRECONDITION: the Channels settings action did not appear")
+            return false
+        }
+        tapWhenHittable(
+            settingsButton,
+            timeout: 8,
+            message: "QUALITY_PRECONDITION: notification settings must be reachable"
+        )
+        let settingsScreen = element(in: app, identifier: "screen.settings")
+        guard settingsScreen.waitForExistence(timeout: 8),
+              element(in: app, identifier: "action.settings.server_management").waitForExistence(timeout: 8)
+        else {
+            XCTFail("QUALITY_PRECONDITION: Settings did not finish loading")
+            return false
+        }
+        let requestPermission = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+            "Request notification permission", "申请通知权限", "申請通知權限"
+        )).firstMatch
+        let deniedPermission = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+            "Please enable notification permission in system settings first",
+            "请先在系统设置中打开通知权限", "請先在系統設定中開啟通知權限"
+        )).firstMatch
+        guard !deniedPermission.exists else {
+            XCTFail("QUALITY_PRECONDITION: system notification permission was already denied")
+            return false
+        }
+
         let authorizationAlert = springboard.alerts.firstMatch
-        // XCTest may consume the launch-time permission interruption before a SpringBoard
-        // query observes it. If it is still present, choose Allow explicitly. Either way,
-        // the exact notification appearing in SpringBoard is the decisive authorization oracle.
-        if authorizationAlert.waitForExistence(timeout: 2) {
+        if requestPermission.exists {
+            tapWhenHittable(
+                requestPermission,
+                timeout: 8,
+                message: "QUALITY_PRECONDITION: the real notification permission action was unavailable"
+            )
+            guard authorizationAlert.waitForExistence(timeout: 2) else {
+                XCTFail("QUALITY_PRECONDITION: requesting notification permission did not show the native prompt")
+                return false
+            }
             let allowButton = authorizationAlert.buttons
                 .matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "允許"]))
                 .firstMatch
-            XCTAssertTrue(
-                allowButton.waitForExistence(timeout: 3),
-                "QUALITY_PRECONDITION: the iOS Allow action was unavailable"
-            )
-            guard allowButton.exists else { return }
+            guard allowButton.waitForExistence(timeout: 3) else {
+                XCTFail("QUALITY_PRECONDITION: the iOS Allow action was unavailable")
+                return false
+            }
             allowButton.tap()
-            XCTAssertTrue(
-                authorizationAlert.waitForNonExistence(timeout: 8),
-                "QUALITY_PRECONDITION: the iOS authorization prompt did not dismiss after allowing notifications"
-            )
+            guard authorizationAlert.waitForNonExistence(timeout: 8) else {
+                XCTFail("QUALITY_PRECONDITION: the iOS authorization prompt did not dismiss after allowing notifications")
+                return false
+            }
         }
+        // The authorized Settings branch has neither permission card. Keep the loaded
+        // screen in view so absent cards cannot be mistaken for an absent Settings UI.
+        guard settingsScreen.exists,
+              requestPermission.waitForNonExistence(timeout: 8),
+              !deniedPermission.exists,
+              !authorizationAlert.exists
+        else {
+            XCTFail("QUALITY_PRECONDITION: Settings did not confirm authorized notifications")
+            return false
+        }
+        tapWhenHittable(
+            app.navigationBars.buttons.firstMatch,
+            timeout: 8,
+            message: "QUALITY_PRECONDITION: notification settings must be dismissible"
+        )
+        guard settingsScreen.waitForNonExistence(timeout: 8) else {
+            XCTFail("QUALITY_PRECONDITION: Settings remained open after navigating back")
+            return false
+        }
+        tapWhenHittable(
+            tabButton(in: app, identifier: "tab.messages", labels: ["Messages", "消息", "訊息"]),
+            timeout: 8,
+            message: "QUALITY_PRECONDITION: Messages must be available after notification authorization"
+        )
+        let returnedToMessages = element(in: app, identifier: "screen.messages.list").waitForExistence(timeout: 8)
+        XCTAssertTrue(returnedToMessages, "QUALITY_PRECONDITION: notification preparation did not return to Messages")
+        return returnedToMessages
+    }
+
+    private func tabButton(in app: XCUIApplication, identifier: String, labels: [String]) -> XCUIElement {
+        let identifiedTab = app.tabBars.buttons[identifier]
+        if identifiedTab.exists {
+            return identifiedTab
+        }
+        return app.tabBars.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
     }
 
     private func background(_ app: XCUIApplication) {
@@ -471,6 +601,25 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         )
     }
 
+    private func assertUnreadMessage(title: String, body: String, in app: XCUIApplication) {
+        let row = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "message.row.", title)
+        ).firstMatch
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 10),
+            "Cancelling notification deletion must retain the exact canonical message"
+        )
+        XCTAssertTrue(
+            row.label.localizedCaseInsensitiveContains("unread"),
+            "Requesting or cancelling deletion must not mark the target message read"
+        )
+        XCTAssertEqual(
+            row.value as? String,
+            body,
+            "Cancelling notification deletion must preserve the exact canonical message body"
+        )
+    }
+
     private func launch(_ app: XCUIApplication) {
         let key = "PUSHGO_QUALITY_SESSION_BASE64"
         var arguments = app.launchArguments
@@ -489,6 +638,16 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
 
     private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    private func localDeletionConfirmation(in app: XCUIApplication, summary: String) -> XCUIElement {
+        // Native alerts preserve the message label but omit the SwiftUI Text identifier.
+        let messages = [
+            "Permanently delete \(summary) from local storage? This cannot be undone.",
+            "永久删除本地存储中的“\(summary)”？此操作无法撤销。",
+            "永久刪除本機儲存中的「\(summary)」？此操作無法復原。",
+        ]
+        return app.alerts.staticTexts.matching(NSPredicate(format: "label IN %@", messages)).firstMatch
     }
 
     private func tapWhenHittable(

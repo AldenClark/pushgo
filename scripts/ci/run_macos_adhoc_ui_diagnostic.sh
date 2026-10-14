@@ -108,7 +108,7 @@ case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
     test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
     ;;
   message-deletion-route)
-    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch')
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionCancelsThenConfirmsAccurateCanonicalStateAcrossRelaunch')
     ;;
   message-list)
     test_scopes=(

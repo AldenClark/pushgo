@@ -4,7 +4,6 @@ import SwiftUI
 struct ThingStoreDetailScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager
-    @Environment(PendingLocalDeletionController.self) private var pendingDeletion
 
     let thingId: String
     let viewModel: EntityProjectionViewModel
@@ -44,9 +43,7 @@ struct ThingStoreDetailScreen: View {
             do {
                 let loaded = try await viewModel.loadThingDetail(thingId: thingId)
                 guard !Task.isCancelled else { return }
-                guard let loaded,
-                      !pendingDeletion.suppressesThing(id: loaded.id, channelId: loaded.channelId)
-                else {
+                guard let loaded else {
                     onUnavailable()
                     return
                 }
@@ -56,12 +53,6 @@ struct ThingStoreDetailScreen: View {
                 guard !Task.isCancelled else { return }
                 loadError = error.localizedDescription
             }
-        }
-        .onChange(of: pendingDeletion.effectiveScope) { _, _ in
-            guard let snapshot,
-                  pendingDeletion.suppressesThing(id: snapshot.id, channelId: snapshot.channelId)
-            else { return }
-            onPrepareDelete()
         }
     }
 }
@@ -99,7 +90,7 @@ struct ThingDetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if onCommitDelete != nil {
                 Button(role: .destructive) {
-                    Task { await scheduleDeletion() }
+                    Task { await requestDeletion() }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -110,22 +101,20 @@ struct ThingDetailScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion() async {
+    private func requestDeletion() async {
         guard onCommitDelete != nil else { return }
         let trimmedTitle = thing.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = trimmedTitle.isEmpty
             ? localizationManager.localized("push_type_thing")
             : trimmedTitle
 
-        let scheduled = await environment.pendingLocalDeletionController.schedule(
+        await environment.requestLocalDeletion(
             summary: summary,
-            undoLabel: localizationManager.localized("cancel"),
             intent: .things(ids: [thing.id])
-        )
-        guard scheduled else { return }
-
-        onPrepareDelete?()
-        dismiss()
+        ) {
+            onPrepareDelete?()
+            dismiss()
+        }
     }
 }
 
@@ -311,16 +300,16 @@ private struct ThingDetailPanel: View {
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(event: event)
-                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                .toastOverlay(environment: environment)
         }
         .sheet(item: $selectedMessage) { message in
             MessageDetailScreen(messageId: message.id, message: nil)
-                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                .toastOverlay(environment: environment)
                 .pushgoSheetSizing(.detail)
         }
         .sheet(item: $selectedUpdate) { update in
             ThingRelatedUpdateDetailScreen(update: update)
-                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                .toastOverlay(environment: environment)
                 .pushgoSheetSizing(.detail)
         }
         .sheet(isPresented: $showMetadataSheet) {
@@ -328,7 +317,7 @@ private struct ThingDetailPanel: View {
                 title: localizationManager.localized("metadata"),
                 entries: metadataEntries
             )
-            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+            .toastOverlay(environment: environment)
             .pushgoSheetSizing(.detail)
         }
     }

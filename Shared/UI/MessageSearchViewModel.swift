@@ -353,13 +353,10 @@ final class MessageSearchViewModel {
                     sortMode: self.sortMode
                 )
             },
-            isVisible: self.isVisible
+            isVisible: { _ in true }
         )
     }
 
-    private func isVisible(_ message: PushMessageSummary) -> Bool {
-        !environment.pendingLocalDeletionController.suppressesMessage(id: message.id, channelId: message.channel)
-    }
 
     private func messageIDsChanged(
         from previous: [PushMessageSummary],

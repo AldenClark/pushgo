@@ -19,8 +19,4 @@ struct FeedbackPresentationPolicyTests {
         #expect(FeedbackPresentationPolicy.presentation(for: .mutationSuccess) == .toast)
     }
 
-    @Test
-    func destructiveUndoUsesDedicatedPendingDeletionBar() {
-        #expect(FeedbackPresentationPolicy.presentation(for: .destructiveUndoAvailable) == .pendingLocalDeletionBar)
-    }
 }

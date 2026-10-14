@@ -80,7 +80,7 @@ case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
     test_scopes=(
       'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
       'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail'
-      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch'
+      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch'
     )
     expected_test_count=3
     ;;

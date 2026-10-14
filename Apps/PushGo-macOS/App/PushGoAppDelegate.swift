@@ -159,10 +159,14 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
                 await markNotificationMessageRead(requestId: requestId, messageId: messageId)
                 completionHandler()
             }
-        case PushGoNotificationActionPolicy.deleteMessageActionIdentifier:
+        case PushGoNotificationActionPolicy.deleteMessageActionIdentifier,
+             PushGoNotificationActionPolicy.deleteEntityReminderActionIdentifier:
             Task {
-                _ = await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                await deleteNotificationMessage(requestId: requestId, messageId: messageId)
+                await AppEnvironment.shared.requestNotificationDeletion(
+                    notificationRequestId: requestId,
+                    messageId: messageId,
+                    notification: response.notification
+                )
                 completionHandler()
             }
         case PushGoNotificationActionPolicy.openEntityActionIdentifier,
@@ -206,15 +210,6 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
             _ = try await AppEnvironment.shared.messageStateCoordinator
                 .markRead(notificationRequestId: requestId, messageId: messageId)
         } catch {
-        }
-    }
-
-    private func deleteNotificationMessage(requestId: String, messageId: String?) async {
-        do {
-            try await AppEnvironment.shared.messageStateCoordinator
-                .deleteMessage(notificationRequestId: requestId, messageId: messageId)
-        } catch {
-            removeDeliveredNotification(requestId: requestId)
         }
     }
 

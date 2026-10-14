@@ -301,7 +301,7 @@ struct RuntimeQualityLargeScaleTests {
                 spotlightIndexer: nil
             )
             let now = Date(timeIntervalSince1970: 1_768_500_000)
-            let pending = try await v24Store.enqueuePendingLocalDeletion(
+            let pending = try await v24Store.seedLegacyPendingLocalDeletion(
                 summary: "Delete migrated event",
                 undoLabel: "Undo",
                 intent: .events(ids: ["migration-event-v24"]),

@@ -3,9 +3,10 @@ import SwiftUI
 
 struct ChannelManagementView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
-    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var pendingRemoval: ChannelSubscription?
+    @State private var pendingRemovalTarget: PendingChannelRemovalTarget?
+    @State private var isPreparingRemoval = false
     @State private var isRemoving = false
     @State private var pendingRename: ChannelSubscription?
     @State private var renameAlias: String = ""
@@ -72,7 +73,7 @@ struct ChannelManagementView: View {
                 titleVisibility: .visible
             ) {
                 Button(role: .destructive) {
-                    if let target = pendingRemoval {
+                    if let target = pendingRemovalTarget {
                         Task { await removeChannel(target, deleteHistory: true) }
                     }
                 } label: {
@@ -80,7 +81,7 @@ struct ChannelManagementView: View {
                 }
                 .accessibilityIdentifier("action.channel.unsubscribe.delete_history")
                 Button {
-                    if let target = pendingRemoval {
+                    if let target = pendingRemovalTarget {
                         Task { await removeChannel(target, deleteHistory: false) }
                     }
                 } label: {
@@ -99,10 +100,11 @@ struct ChannelManagementView: View {
             .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
                 if !isPresented {
                     pendingRemoval = nil
+                    pendingRemovalTarget = nil
                 }
             }
         }
-        .id(pendingLocalDeletionController.effectiveScope)
+
         .accessibilityIdentifier("screen.channels")
         .sheet(
             isPresented: $isChannelEntrySheetPresented,
@@ -142,10 +144,7 @@ struct ChannelManagementView: View {
     }
 
     private var visibleChannelSubscriptions: [ChannelSubscription] {
-        let suppressed = pendingLocalDeletionController.effectiveScope.channelIDs
-        return environment.channelSubscriptions.filter {
-            !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
+        environment.channelSubscriptions
     }
 
     private func channelRow(_ subscription: ChannelSubscription) -> some View {
@@ -211,8 +210,7 @@ struct ChannelManagementView: View {
                 .accessibilityIdentifier("action.channel.\(channelId).rename")
 
                 Button(role: .destructive) {
-                    pendingRemoval = subscription
-                    isShowingRemovalConfirmation = true
+                    Task { await prepareRemoval(subscription) }
                 } label: {
                     Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
                 }
@@ -240,7 +238,7 @@ struct ChannelManagementView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.appCardBorder, lineWidth: 1)
         )
-        .disabled(isRemoving || isRenaming)
+        .disabled(isRemoving || isRenaming || isPreparingRemoval)
     }
 
     private var canSubmitChannelEntry: Bool {
@@ -479,55 +477,50 @@ struct ChannelManagementView: View {
             channelEntryErrorMessage = message
         case .toast:
             environment.showToast(message: message, style: .error, duration: 2.5)
-        case .pendingLocalDeletionBar, .none:
+        case .none:
             break
         }
     }
 
     @MainActor
-    private func removeChannel(_ subscription: ChannelSubscription, deleteHistory: Bool) async {
-        guard !isRemoving else { return }
-        isRemoving = true
-        defer {
-            pendingRemoval = nil
-            isRemoving = false
-        }
-        pendingRename = nil
-
+    private func prepareRemoval(_ subscription: ChannelSubscription) async {
+        guard !isPreparingRemoval, !isRemoving, pendingRemoval == nil else { return }
+        isPreparingRemoval = true
+        defer { isPreparingRemoval = false }
         do {
-            if deleteHistory {
-                let summary = channelDeletionSummary(for: subscription)
-                let channelId = subscription.channelId
-                let expectedGateway = subscription.gateway
-                let expectedUpdatedAt = subscription.updatedAt
-                _ = await environment.pendingLocalDeletionController.schedule(
-                    summary: summary,
-                    undoLabel: localizationManager.localized("cancel"),
-                    intent: .channelHistory(
-                        channelID: channelId,
-                        expectedGateway: expectedGateway,
-                        expectedUpdatedAt: expectedUpdatedAt
-                    )
-                )
-            } else {
-                try await environment.unsubscribeChannel(channelId: subscription.channelId)
-                environment.showToast(
-                    message: localizationManager.localized("channel_unsubscribed"),
-                    style: .success,
-                    duration: 1.5
-                )
-            }
+            let target = try await environment.prepareChannelRemoval(
+                subscription: subscription,
+                keepHistory: false
+            )
+            pendingRemoval = subscription
+            pendingRemovalTarget = target
+            isShowingRemovalConfirmation = true
         } catch {
             environment.showErrorToast(error, duration: 2.5)
         }
     }
 
-    private func channelDeletionSummary(for subscription: ChannelSubscription) -> String {
-        let displayName = subscription.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !displayName.isEmpty {
-            return displayName
+    @MainActor
+    private func removeChannel(_ capturedTarget: PendingChannelRemovalTarget, deleteHistory: Bool) async {
+        guard !isRemoving else { return }
+        var target = capturedTarget
+        // Consume the frozen draft before awaiting durable acceptance.
+        pendingRemoval = nil
+        pendingRemovalTarget = nil
+        pendingRename = nil
+        isRemoving = true
+        defer { isRemoving = false }
+        target.keepHistory = !deleteHistory
+        do {
+            try await environment.confirmChannelRemoval(target)
+            environment.showToast(
+                message: localizationManager.localized("channel_unsubscribed"),
+                style: .success,
+                duration: 1.5
+            )
+        } catch {
+            environment.showErrorToast(error, duration: 2.5)
         }
-        return subscription.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var renameSheet: some View {

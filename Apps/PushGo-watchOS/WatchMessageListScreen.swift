@@ -116,6 +116,9 @@ struct WatchMessageListScreen: View {
     private func openPendingMessageIfNeeded() {
         let trimmed = environment.pendingMessageToOpen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else { return }
+        // A pending notification route can precede the first Store-backed reload.
+        // Keep it until that reload exposes the target instead of interpreting the
+        // initial empty projection as a missing persisted message.
         guard viewModel.messages.contains(where: { $0.messageId == trimmed }) else { return }
         navigationPath = [trimmed]
         environment.pendingMessageToOpen = nil

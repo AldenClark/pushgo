@@ -547,6 +547,78 @@ final class PushGo_iOSUITests: XCTestCase {
         self.assertEqual([], plan["required_ui_test_scopes"]["ios"])
         self.assertIn("removed or renamed", plan["selection_blockers"][0])
 
+    def test_delete_confirmation_retirement_selects_real_replacement_in_same_class(self):
+        for path, replacements in QUALITY_IMPACT.DELETE_CONFIRMATION_TEST_REPLACEMENTS.items():
+            platform, target = QUALITY_IMPACT.UI_TEST_SUITES[path]
+            class_name = "PushGo_iOSUITests" if platform == "ios" else "PushGo_macOSUITests"
+            for old_method, new_method in replacements.items():
+                with self.subTest(path=path, old_method=old_method):
+                    self.assertIn(
+                        new_method,
+                        QUALITY_IMPACT.swift_test_method_ranges((REPO / path).read_text()),
+                        "The registered replacement must exist in the real current test source.",
+                    )
+                    old_source = self.swift_ui_test_source(method=old_method).replace(
+                        "PushGo_iOSUITests", class_name
+                    )
+                    new_source = old_source.replace(old_method, new_method)
+                    patch = "\n".join(difflib.unified_diff(
+                        old_source.splitlines(), new_source.splitlines(), n=0
+                    ))
+                    impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+                        path, old_source, new_source, patch
+                    )
+                    plan = QUALITY_IMPACT.build_plan(
+                        [path], self.manifest, "unit-test", {path: impact}
+                    )
+                    expected_scope = f"{target}/{class_name}/{new_method}"
+                    self.assertEqual("exact-method", impact["selection"])
+                    self.assertEqual([expected_scope], impact["scopes"])
+                    self.assertEqual(1, impact["expected_test_count"])
+                    self.assertEqual("READY", plan["plan_status"])
+                    self.assertEqual("changed-tests", plan["recommended_lane"])
+                    self.assertEqual([expected_scope], plan["required_ui_test_scopes"][platform])
+
+    def test_delete_confirmation_retirement_does_not_bypass_missing_or_unowned_changes(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_method = "testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch"
+        new_method = "testQualityMessageDeleteCancellationKeepsTheSameObjectAcrossRelaunch"
+        old_source = self.swift_ui_test_source(method=old_method)
+        cases = (
+            ("missing-replacement", old_source.replace(old_method, "testUnrelatedReplacement"), "blocked"),
+            (
+                "unowned-helper-change",
+                old_source.replace(old_method, new_method).replace('"fixture"', '"changed fixture"'),
+                "changed-class",
+            ),
+        )
+        for name, new_source, expected_selection in cases:
+            with self.subTest(name=name):
+                patch = "\n".join(difflib.unified_diff(
+                    old_source.splitlines(), new_source.splitlines(), n=0
+                ))
+                impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+                    path, old_source, new_source, patch
+                )
+                plan = QUALITY_IMPACT.build_plan(
+                    [path], self.manifest, "unit-test", {path: impact}
+                )
+                self.assertEqual(expected_selection, impact["selection"])
+                if expected_selection == "blocked":
+                    self.assertEqual("BLOCKED", plan["plan_status"])
+                    self.assertEqual([], plan["required_ui_test_scopes"]["ios"])
+                    self.assertIn("removed or renamed", plan["selection_blockers"][0])
+                else:
+                    self.assertEqual("changed-tests", plan["recommended_lane"])
+                    self.assertEqual(2, impact["expected_test_count"])
+                    self.assertEqual(
+                        {
+                            f"PushGo-iOSUITests/PushGo_iOSUITests/{new_method}",
+                            "PushGo-iOSUITests/PushGo_iOSUITests/testStablePurpose",
+                        },
+                        set(impact["scopes"]),
+                    )
+
     def test_changed_ui_test_platforms_keep_separate_native_runner_scopes(self):
         ios_path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
         mac_path = "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift"
@@ -654,10 +726,10 @@ final class PushGo_iOSUITests: XCTestCase {
 
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
-        self.assertIn("delete-undo", plan["impacted_capabilities"])
+        self.assertIn("delete-confirmation", plan["impacted_capabilities"])
         self.assertEqual(
             {
-                "apple-ios-message-delete-undo",
+                "apple-ios-message-delete-cancel",
                 "apple-ios-message-delete-commit",
                 "apple-macos-message-delete-lifecycle",
             },
@@ -1181,7 +1253,7 @@ final class PushGo_iOSUITests: XCTestCase {
         self.assertIn("accessibility-localization", plan["impacted_capabilities"])
         self.assertIn("gateway-settings", plan["impacted_capabilities"])
         self.assertIn("message-detail", plan["impacted_capabilities"])
-        self.assertNotIn("delete-undo", plan["impacted_capabilities"])
+        self.assertNotIn("delete-confirmation", plan["impacted_capabilities"])
         self.assertNotIn("message-media", plan["impacted_capabilities"])
 
     def test_shared_image_preview_owner_uses_existing_ios_pr_and_one_macos_positive(self):

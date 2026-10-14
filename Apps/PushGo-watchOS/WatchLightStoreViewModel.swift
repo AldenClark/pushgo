@@ -119,14 +119,43 @@ final class WatchLightStoreViewModel {
         }
     }
 
-    func deleteMessage(_ message: WatchLightMessage) async {
+    private(set) var deletionInProgress = false
+
+    func deleteMessage(_ target: WatchMessageDeletionTarget) async {
+        guard !deletionInProgress else { return }
+        deletionInProgress = true
+        defer { deletionInProgress = false }
+
         do {
-            try await dataStore.deleteWatchLightMessage(messageId: message.messageId)
+#if DEBUG
+            WatchQualityRuntime.recordDeletionDiagnostic([
+                "stage": "viewModel.confirm", "scope_matches": target.context == environment.messageDeletionContext,
+                "configuration_matches": target.config == environment.serverConfig?.normalized()
+            ])
+#endif
+            guard target.context == environment.messageDeletionContext,
+                  target.config == environment.serverConfig?.normalized(),
+                  try await dataStore.deleteWatchLightMessage(matching: target.message, context: target.context, config: target.config)
+            else {
+                messageError = AppError.wrap(
+                    NSError(domain: "WatchMessageDeletion", code: 1),
+                    fallbackMessage: environment.localizationManager.localized("operation_failed"),
+                    code: "watch_light_delete_target_changed",
+                    category: .local
+                )
+                return
+            }
             await environment.refreshWatchLightCountsAndNotify()
             await reload()
         } catch let appError as AppError {
+#if DEBUG
+            WatchQualityRuntime.recordDeletionDiagnostic(["stage": "viewModel.error", "error": String(describing: appError)])
+#endif
             messageError = appError
         } catch {
+#if DEBUG
+            WatchQualityRuntime.recordDeletionDiagnostic(["stage": "viewModel.error", "error": String(describing: error)])
+#endif
             messageError = AppError.wrap(
                 error,
                 fallbackMessage: environment.localizationManager.localized("operation_failed"),
@@ -134,5 +163,23 @@ final class WatchLightStoreViewModel {
                 category: .local
             )
         }
+    }
+}
+
+// A confirmation belongs to the displayed content and current Watch configuration.
+// Read status is independent of destructive identity and can change on detail open.
+struct WatchMessageDeletionTarget: Identifiable {
+    let id = UUID()
+    let message: WatchLightMessage
+    let context: WatchControlContext
+    let config: ServerConfig?
+}
+
+extension WatchLightMessage {
+    func matchesDeletionContent(_ other: WatchLightMessage) -> Bool {
+        messageId == other.messageId && title == other.title && body == other.body
+            && imageURL == other.imageURL && url == other.url && severity == other.severity
+            && receivedAt == other.receivedAt && entityType == other.entityType
+            && entityId == other.entityId && notificationRequestId == other.notificationRequestId
     }
 }

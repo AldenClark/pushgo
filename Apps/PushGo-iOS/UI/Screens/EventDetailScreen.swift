@@ -92,7 +92,7 @@ struct EventDetailScreen: View {
 
             if onCommitDelete != nil {
                 Button(role: .destructive) {
-                    Task { await scheduleDeletion() }
+                    Task { await requestDeletion() }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -124,21 +124,19 @@ struct EventDetailScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion() async {
+    private func requestDeletion() async {
         guard onCommitDelete != nil else { return }
         let trimmedTitle = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = trimmedTitle.isEmpty
             ? localizationManager.localized("push_type_event")
             : trimmedTitle
-        let scheduled = await environment.pendingLocalDeletionController.schedule(
+        await environment.requestLocalDeletion(
             summary: summary,
-            undoLabel: localizationManager.localized("cancel"),
             intent: .events(ids: [event.id])
-        )
-        guard scheduled else { return }
-
-        onPrepareDelete?()
-        dismiss()
+        ) {
+            onPrepareDelete?()
+            dismiss()
+        }
     }
 }
 

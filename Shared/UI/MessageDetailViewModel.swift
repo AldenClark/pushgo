@@ -77,21 +77,6 @@ final class MessageDetailViewModel {
         await markRead(true)
     }
 
-    func deleteMessage() async {
-        guard let message else { return }
-        do {
-            try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
-            self.message = nil
-            hasResolvedMessage = true
-            MessageDetailSnapshotCache.shared.removeAll(for: message.id)
-        } catch {
-            alertMessage = AppError.wrap(
-                error,
-                fallbackMessage: localizationManager.localized("operation_failed"),
-                code: "message_delete_failed"
-            ).errorDescription
-        }
-    }
 
     func copyBody() {
         guard let message else { return }

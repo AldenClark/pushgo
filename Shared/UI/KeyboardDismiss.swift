@@ -511,7 +511,7 @@ private struct PushgoImagePreviewOverlay: View {
         .sheet(item: $sharePayload) { payload in
             PushGoShareSheet(activityItems: [payload.fileURL])
         }
-        .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+        .toastOverlay(environment: environment)
 #else
         .toastOverlay(environment: environment)
 #endif

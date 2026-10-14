@@ -108,6 +108,13 @@ fi
 run_id="$(date +%Y%m%d-%H%M%S)"
 log_file="$results_root/system-notification-$run_id.log"
 result_bundle="$results_root/system-notification-$run_id.xcresult"
+# A failed XCTest may terminate before its defer removes the readiness file.
+# Retain that receipt, then require this run to publish readiness after backgrounding.
+runner_container="$(xcrun simctl get_app_container "$target" "$runner_bundle_identifier" data 2>/dev/null || true)"
+if [[ -n "$runner_container" && -f "$runner_container/tmp/$readiness_filename" ]]; then
+  cp "$runner_container/tmp/$readiness_filename" "$results_root/readiness-before-run-$run_id.json"
+  rm "$runner_container/tmp/$readiness_filename"
+fi
 echo "==> test-without-building and wait for App-owned background readiness"
 xcodebuild "${common_args[@]}" \
   -resultBundlePath "$result_bundle" \
@@ -166,7 +173,9 @@ if [[ -z "$readiness_path" || ! -f "$readiness_path" ]]; then
   exit 2
 fi
 
-if ! payload="$(python3 - "$readiness_path" <<'PY'
+readiness_receipt="$results_root/readiness-contract-$run_id.json"
+cp "$readiness_path" "$readiness_receipt"
+if ! payload="$(python3 - "$readiness_receipt" <<'PY'
 import json
 import pathlib
 import sys

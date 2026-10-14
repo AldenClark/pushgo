@@ -32,8 +32,12 @@ final class ChannelSyncController {
     @ObservationIgnored private let platform: String
     @ObservationIgnored private var subscriptionSyncTask: Task<Void, Error>?
     @ObservationIgnored private var subscriptionSyncTaskKey: String?
+    @ObservationIgnored private var subscriptionSyncTaskID: UUID?
     @ObservationIgnored private var lastSubscriptionSyncKey: String?
     @ObservationIgnored private var lastSubscriptionSyncAt: Date = .distantPast
+    @ObservationIgnored private var channelRemovalWindowCount = 0
+    @ObservationIgnored private var channelRemovalGeneration: UInt64 = 0
+    @ObservationIgnored private var subscriptionSyncDeferredByRemoval = false
 
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     @ObservationIgnored private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
@@ -214,7 +218,7 @@ final class ChannelSyncController {
             showChannelEntryFeedback(message)
         case .toast:
             showToast(message)
-        case .pendingLocalDeletionBar, .none:
+        case .none:
             break
         }
     }
@@ -229,73 +233,121 @@ final class ChannelSyncController {
         return token
     }
 
+    /// A removal must follow an already-sent subscription sync. Preparations
+    /// still awaiting credentials/token will discard their snapshot and defer.
+    func beginChannelRemovalWindow() async {
+        channelRemovalWindowCount += 1
+        channelRemovalGeneration &+= 1
+        if let task = subscriptionSyncTask {
+            _ = try? await task.value
+        }
+    }
+
+    func endChannelRemovalWindow() {
+        channelRemovalWindowCount -= 1
+        guard channelRemovalWindowCount == 0, subscriptionSyncDeferredByRemoval else { return }
+        subscriptionSyncDeferredByRemoval = false
+        lastSubscriptionSyncKey = nil
+        Task { @MainActor [weak self] in
+            await self?.syncSubscriptionsOnLaunch()
+        }
+    }
+
+#if DEBUG
+    var testingChannelRemovalWindowIsActive: Bool { channelRemovalWindowCount > 0 }
+#endif
+
     func syncSubscriptionsIfNeeded() async throws {
-        guard let config = serverConfigProvider() else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
+        // A removal can start and finish during either preparation await.
+        // Restart from the current credentials instead of sending that old list.
+        while true {
+            guard channelRemovalWindowCount == 0 else {
+                subscriptionSyncDeferredByRemoval = true
+                return
+            }
+            let preparationGeneration = channelRemovalGeneration
+            guard let config = serverConfigProvider() else { throw AppError.noServer }
+            let gatewayKey = config.gatewayKey
 
-        let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
-        // An app-owned quality round trip is the provider boundary for this
-        // lane.  Do not contact APNs or mutate a real provider route merely to
-        // prepare the local sync call; the round trip itself still validates
-        // the gateway and returns the business results consumed below.
-        let normalizedToken: String
-        if subscriptionSyncRoundTrip != nil {
-            normalizedToken = "quality-round-trip"
-        } else {
-            let token = try await ensureActivePushToken(serverConfig: config)
-            normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        guard !normalizedToken.isEmpty else {
-            throw AppError.typedLocal(
-                code: "provider_token_missing",
-                category: .validation,
-                message: localizationManager.localized("operation_failed"),
-                detail: "provider token missing"
-            )
-        }
-        guard !credentials.isEmpty else {
-            await refreshChannelSubscriptions()
-            return
-        }
-        let syncKey = "\(gatewayKey)|\(normalizedToken)"
-        if let inFlightTask = subscriptionSyncTask,
-           subscriptionSyncTaskKey == syncKey
-        {
-            try await inFlightTask.value
-            return
-        }
-        if lastSubscriptionSyncKey == syncKey,
-           Date().timeIntervalSince(lastSubscriptionSyncAt) < 3
-        {
-            return
-        }
-
-        let task = Task<Void, Error> { @MainActor [weak self] in
-            guard let self else {
+            let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
+            guard preparationGeneration == channelRemovalGeneration else { continue }
+            // An app-owned quality round trip is the provider boundary for this
+            // lane.  Do not contact APNs or mutate a real provider route merely to
+            // prepare the local sync call; the round trip itself still validates
+            // the gateway and returns the business results consumed below.
+            let normalizedToken: String
+            if subscriptionSyncRoundTrip != nil {
+                normalizedToken = "quality-round-trip"
+            } else {
+                let token = try await ensureActivePushToken(serverConfig: config)
+                normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard preparationGeneration == channelRemovalGeneration else { continue }
+            guard !normalizedToken.isEmpty else {
                 throw AppError.typedLocal(
-                    code: "subscription_sync_context_released",
-                    category: .internalError,
-                    message: LocalizationProvider.localized("operation_failed"),
-                    detail: "subscription sync context released"
+                    code: "provider_token_missing",
+                    category: .validation,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "provider token missing"
                 )
             }
-            try await self.performSubscriptionsSync(
-                config: config,
-                credentials: credentials,
-                providerToken: normalizedToken
-            )
-        }
-        subscriptionSyncTaskKey = syncKey
-        subscriptionSyncTask = task
-        defer {
-            if subscriptionSyncTaskKey == syncKey {
-                subscriptionSyncTaskKey = nil
-                subscriptionSyncTask = nil
+            guard !credentials.isEmpty else {
+                await refreshChannelSubscriptions()
+                return
             }
+            let syncKey = "\(gatewayKey)|\(normalizedToken)"
+            if let inFlightTask = subscriptionSyncTask, let inFlightKey = subscriptionSyncTaskKey {
+                let inFlightID = subscriptionSyncTaskID
+                try await inFlightTask.value
+                if inFlightKey == syncKey { return }
+                // Keep one tracked remote sync even across a gateway change,
+                // so removal can wait for every already-sent subscription list.
+                if subscriptionSyncTaskID == inFlightID {
+                    subscriptionSyncTask = nil
+                    subscriptionSyncTaskKey = nil
+                    subscriptionSyncTaskID = nil
+                }
+                continue
+            }
+            if lastSubscriptionSyncKey == syncKey,
+               Date().timeIntervalSince(lastSubscriptionSyncAt) < 3
+            {
+                return
+            }
+
+            let taskID = UUID()
+            let task = Task<Void, Error> { @MainActor [weak self] in
+                guard let self else {
+                    throw AppError.typedLocal(
+                        code: "subscription_sync_context_released",
+                        category: .internalError,
+                        message: LocalizationProvider.localized("operation_failed"),
+                        detail: "subscription sync context released"
+                    )
+                }
+                try await self.performSubscriptionsSync(
+                    config: config,
+                    credentials: credentials,
+                    providerToken: normalizedToken
+                )
+            }
+            subscriptionSyncTaskKey = syncKey
+            subscriptionSyncTaskID = taskID
+            subscriptionSyncTask = task
+            defer {
+                if subscriptionSyncTaskID == taskID {
+                    subscriptionSyncTaskKey = nil
+                    subscriptionSyncTaskID = nil
+                    subscriptionSyncTask = nil
+                }
+            }
+            try await task.value
+            if subscriptionSyncTaskID == taskID {
+                lastSubscriptionSyncKey = syncKey
+                lastSubscriptionSyncAt = Date()
+            }
+            return
         }
-        try await task.value
-        lastSubscriptionSyncKey = syncKey
-        lastSubscriptionSyncAt = Date()
     }
 
     private func performSubscriptionsSync(

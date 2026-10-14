@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct WatchMessageDetailScreen: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let messageId: String
     let viewModel: WatchLightStoreViewModel
 
     @State private var showDeleteConfirmation = false
+    @State private var deletionTarget: WatchMessageDeletionTarget?
     @State private var didLoad = false
 
     private var message: WatchLightMessage? {
@@ -16,6 +18,13 @@ struct WatchMessageDetailScreen: View {
     var body: some View {
         List {
             if let message {
+                if let error = viewModel.messageError {
+                    WatchEntityLoadErrorState(
+                        message: error.errorDescription ?? error.localizedDescription,
+                        retry: { Task { @MainActor in await viewModel.reload() } }
+                    )
+                    .accessibilityIdentifier("state.message.delete_error")
+                }
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(message.title)
@@ -80,10 +89,13 @@ struct WatchMessageDetailScreen: View {
                     }
 
                     Button(role: .destructive) {
+                        deletionTarget = WatchMessageDeletionTarget(message: message, context: environment.messageDeletionContext, config: environment.serverConfig?.normalized())
                         showDeleteConfirmation = true
                     } label: {
                         Label(localizationManager.localized("delete"), systemImage: "trash")
                     }
+                    .disabled(viewModel.deletionInProgress)
+                    .accessibilityIdentifier("action.message.delete")
                 }
             } else {
                 Section {
@@ -95,24 +107,30 @@ struct WatchMessageDetailScreen: View {
         }
         .accessibilityIdentifier("screen.message.detail")
         .navigationTitle(localizationManager.localized("messages"))
-        .alert(isPresented: $showDeleteConfirmation) {
-            Alert(
-                title: Text(localizationManager.localized(
-                    "are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"
-                )),
-                primaryButton: .destructive(Text(localizationManager.localized("delete"))) {
-                    guard let message else { return }
-                    Task { @MainActor in
-                        await viewModel.deleteMessage(message)
-                    }
-                },
-                secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
-            )
+        .alert(
+            localizationManager.localized("are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"),
+            isPresented: $showDeleteConfirmation,
+            presenting: deletionTarget
+        ) { target in
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                deletionTarget = nil
+                Task { @MainActor in
+                    await viewModel.deleteMessage(target)
+                }
+            }
+            .accessibilityIdentifier("action.message.delete.confirm")
+            Button(localizationManager.localized("cancel"), role: .cancel) {
+                deletionTarget = nil
+            }
+        }
+        .onChange(of: environment.pendingMessageDeletion?.id) { _, _ in
+            presentPendingDeletion()
         }
         .onAppear {
+            presentPendingDeletion()
             guard !didLoad else { return }
             didLoad = true
-            if let message, !message.isRead {
+            if !showDeleteConfirmation, let message, !message.isRead {
                 Task { @MainActor in
                     await viewModel.markMessageRead(message)
                 }
@@ -124,6 +142,15 @@ struct WatchMessageDetailScreen: View {
             PushGoWatchAutomationRuntime.shared.recordMessageDetailReady(message: message)
         }
 #endif
+    }
+
+    private func presentPendingDeletion() {
+        guard let target = environment.pendingMessageDeletion,
+              target.message.messageId == messageId else { return }
+        environment.pendingMessageDeletion = nil
+        guard !showDeleteConfirmation, !viewModel.deletionInProgress else { return }
+        deletionTarget = target
+        showDeleteConfirmation = true
     }
 
     private var automationDetailSignature: String {

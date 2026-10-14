@@ -473,13 +473,19 @@ final class SettingsViewModel {
         }
     }
 
-    func removeNotificationCustomSound(assetID: String) async {
+    func removeNotificationCustomSound(_ asset: NotificationCustomSoundAsset) async -> Bool {
+        guard !isSavingNotificationSounds else { return false }
+        guard notificationSoundSettings.customAssets.first(where: { $0.id == asset.id }) == asset else {
+            error = AppError.localStore(localizationManager.localized("operation_failed"))
+            return false
+        }
         error = nil
         isSavingNotificationSounds = true
         defer { isSavingNotificationSounds = false }
         do {
-            notificationSoundSettings = try await notificationSoundManager.removeCustomSound(assetID: assetID)
+            notificationSoundSettings = try await notificationSoundManager.removeCustomSound(assetID: asset.id)
             successMessage = localizationManager.localized("custom_sound_removed")
+            return true
         } catch {
             self.error = AppError.wrap(
                 error,
@@ -488,6 +494,7 @@ final class SettingsViewModel {
                 category: .validation
             )
         }
+        return false
     }
 
     func previewNotificationSound(for level: NotificationSoundLevel) async {
@@ -755,6 +762,40 @@ final class SettingsViewModel {
                 code: "notification_permission_request_failed"
             )
         }
+    }
+
+    struct ManualKeyClearConfirmation: Identifiable {
+        let id = UUID()
+        let configuration: ServerConfig?
+        let material: ServerConfig.NotificationKeyMaterial?
+    }
+
+    private(set) var manualKeyClearConfirmation: ManualKeyClearConfirmation?
+
+    func requestManualKeyClear() {
+        guard !isSaving, manualKeyInput.hasConfiguredKey,
+              manualKeyInput.key.isEmpty, manualKeyClearConfirmation == nil else { return }
+        manualKeyClearConfirmation = ManualKeyClearConfirmation(
+            configuration: environment.serverConfig?.normalized(),
+            material: environment.currentNotificationMaterial
+        )
+    }
+
+    func cancelManualKeyClear(id: UUID) {
+        guard manualKeyClearConfirmation?.id == id else { return }
+        manualKeyClearConfirmation = nil
+    }
+
+    func confirmManualKeyClear(id: UUID) async {
+        guard !isSaving, let target = manualKeyClearConfirmation, target.id == id else { return }
+        manualKeyClearConfirmation = nil
+        guard target.configuration == environment.serverConfig?.normalized(),
+              target.material == environment.currentNotificationMaterial,
+              manualKeyInput.key.isEmpty else {
+            manualKeyError = AppError.localStore(localizationManager.localized("operation_failed"))
+            return
+        }
+        await saveManualKeyConfig(clearExisting: true)
     }
 
     func saveManualKeyConfig(clearExisting: Bool = false) async {

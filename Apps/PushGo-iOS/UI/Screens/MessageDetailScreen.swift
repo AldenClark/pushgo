@@ -89,7 +89,7 @@ struct MessageDetailScreen: View {
                 openDecryptionOnAppear: true,
                 showsCloseButton: true
             )
-                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                .toastOverlay(environment: environment)
         }
         .onChange(of: environment.messageStoreRevision) { _, _ in
             viewModel.refresh()
@@ -423,7 +423,7 @@ struct MessageDetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(role: .destructive) {
                 if let message = viewModel.message {
-                    Task { await scheduleDeletion(for: message) }
+                    Task { await requestDeletion(for: message) }
                 }
             } label: {
                 Image(systemName: "trash")
@@ -435,22 +435,20 @@ struct MessageDetailScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion(for message: PushMessage) async {
+    private func requestDeletion(for message: PushMessage) async {
         let trimmedTitle = message.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = trimmedTitle.isEmpty
             ? localizationManager.localized("tab_messages")
             : trimmedTitle
 
-        let scheduled = await environment.pendingLocalDeletionController.schedule(
+        await environment.requestLocalDeletion(
             summary: summary,
-            undoLabel: localizationManager.localized("cancel"),
             intent: .messages(ids: [message.id])
-        )
-        guard scheduled else { return }
-
-        onPrepareDelete?()
-        if shouldDismissOnDelete {
-            dismiss()
+        ) {
+            onPrepareDelete?()
+            if shouldDismissOnDelete {
+                dismiss()
+            }
         }
     }
 
