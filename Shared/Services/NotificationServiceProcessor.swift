@@ -124,14 +124,12 @@ final class NotificationServiceProcessor {
                 : nil
             requiredEntryState = "durable"
         case let .pulled(_, deliveryID, context):
-            ackIdentity = context.requiresAck
-                ? ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                    deliveryId: deliveryID,
-                    baseURL: context.baseURL,
-                    deviceKey: context.deviceKey,
-                    ackContract: .v2Batch
-                )
-                : nil
+            ackIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryID,
+                baseURL: context.baseURL,
+                deviceKey: context.deviceKey,
+                ackContract: .v2Batch
+            )
             requiredEntryState = "terminal_local"
         case .claimedByPeer, .unresolvedWakeup:
             ackIdentity = nil

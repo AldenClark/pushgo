@@ -406,7 +406,7 @@ NSE receives wakeup
   -> durably append unresolved wakeup hint
   -> post Darwin hint (best effort)
   -> display bounded fallback content immediately
-  -> host/owned BG worker later resolves v2 or measured legacy fallback
+  -> host/owned BG worker later resolves V2 Pull with explicit ACK
 ```
 
 No iOS, macOS, or watchOS NSE performs provider pull, ACK, or arbitrary `URLSession` work. Host resolution acquires a fenced claim, performs network I/O outside the transaction, then atomically records the classified result and ACK dependency. If resolution fails or a peer owns the claim, the durable hint remains retryable and no ACK is sent.
@@ -526,7 +526,9 @@ This order recovers a direct notification when the NSE displayed fallback becaus
 
 Bootstrap priority is a hard integration rule: after the canonical database opens and small local UI-suppression snapshots load, the first awaited correctness operation is local ingress drain. Pending-deletion execution, channel sync/unsubscribe, search-index repair, image cleanup, and other maintenance start afterward and cannot be awaited ahead of ingress. UI readiness is split into local-store/ingress readiness and maintenance readiness; a slow network reconciliation cannot leave the main UI behind a launch `ProgressView` or hide an already canonical message.
 
-Legacy destructive `/messages/pull` cannot provide a crash-safe response-to-local-commit boundary and is therefore not used for background bulk reconciliation. It remains only as an explicitly measured compatibility fallback for an old Gateway after the v2 capability check fails; its response is journaled immediately, and the residual server-response/client-crash window is reported as a legacy protocol limitation. The release compatibility matrix must name the minimum Gateway version that supports the final crash-safe v2 contract.
+As of the approved 2026-10-14 client cutover, all new Apple clients require `/v2/messages/pull` and `/v2/messages/ack`. Destructive `/messages/pull`, its fallback switch, and new destructive-pull staging producers are removed. Only the exact structured `404 route_not_found` from a V2 endpoint is classified as requiring a Gateway upgrade; authentication, network, and invalid-response failures retain their own classification. Upgrade Gateway first. Gateway `v1.3.0` is the earliest verified local stable tag for this protocol, not a complete current Watch feature compatibility claim (see README).
+
+Existing destructively fetched payloads remain owned by the journal/legacy importer until successful canonical materialization or the existing deterministic validation disposition; failed or unavailable storage must retain the payload for retry. No network legacy fetch or new legacy destructive marker is produced. Empty old queues are inert. The read-only settlement entry can be removed only when every supported upgrade source has been imported and settled, no recoverable file/sidecar or nonterminal entry remains, and older still-running producers can no longer write late artifacts. Do not enforce an arbitrary deadline by discarding data. The normal NSE-to-host journal, direct single-item ACK, full-identity durable ACK recovery, and bounded registered rollback shadows have independent consumers and remain.
 
 ## 8. ACK worker
 
@@ -655,7 +657,7 @@ This removes lost updates between concurrent NSE instances and the host app.
    - import inbox files, ACK markers, and pull claims idempotently;
    - mark `legacy_import_complete` only after verification;
    - normal ownership switches exclusively to the journal; bounded registered N-1 shadows are compatibility artifacts, not independent state machines;
-   - retain read-only legacy recovery for one release, then remove.
+   - keep read-only recovery inert after its finite backlog drains; remove the importer only after the supported upgrade sources and late-writer/artifact gates in the V2-only cutover section are satisfied, never merely because one release elapsed.
 6. **Telemetry and fault tests**
    - all acceptance gates in this document.
 
@@ -708,7 +710,7 @@ At runtime, schema/import failure makes the app present a recovery error and kee
 | N binary is rolled back to N-1 within 35 days | N-1 scans full-identity `.inboxbin`/`.ackbin` shadows; canonical replay is idempotent | local handoff readable; v2 ACK never precedes N terminal commit |
 | NSE sees an unknown newer journal/schema state | show fallback, write nothing, ACK nothing | Gateway copy retained |
 | New Apple app + v2-capable Gateway | detect by successful endpoint semantics; use non-destructive page/ACK barrier | crash-safe |
-| New Apple app + Gateway returning exact `404 route_not_found` for v2 | use measured legacy fallback; journal response immediately | not crash-safe in response-to-local-commit window |
+| New Apple app + Gateway returning exact `404 route_not_found` for V2 | report upgrade required, retain local content and pending ACK; never request legacy Pull | Gateway must be upgraded before the new app |
 | Pending legacy direct ACK followed by v2 pull of same delivery | v2 ACK atomically supersedes legacy ACK; lease fencing rejects stale result | one active ACK contract |
 
 Compatibility is capability-based, not inferred from a version string. The minimum documented Gateway release is an operational shorthand; the client fallback decision remains the exact endpoint/response contract.
@@ -734,7 +736,7 @@ Record monotonic timestamps and redacted IDs for:
 - v2 page pull/classify/materialize/ACK-barrier/advance;
 - deterministic-discard tombstone count by bounded reason;
 - legacy-ACK-to-v2 supersession and stale leased-result rejection;
-- late legacy-file imports, schema cohort, capability fallback, and rollback/degraded mode;
+- late legacy-file imports, schema cohort, explicit V2-required errors, and rollback/degraded mode;
 - derived-work result;
 - journal depth, oldest age, quarantine depth, and lease recovery count.
 
@@ -865,9 +867,9 @@ The cross-system zero-loss oracle is: if Gateway no longer holds a delivery beca
 
 **Red:** A caller that disables fallback could still reach the legacy destructive route through a defaulted helper; an NSE wakeup pull could consume most of its presentation deadline; a legacy response could be deleted server-side before canonical insertion; and an ACK lease validated only against its own outbox row could be detached from the accepted ingress identity.
 
-**Blue:** `allowLegacyFallback` is threaded through every resolver boundary and covered by route-reachability tests. All three NSE implementations durably write a hint and immediately return fallback content; a source guard rejects pull/ACK/`URLSession` regressions. Every legacy response item is journaled with full outer identity before canonical work and creates no client ACK. ACK claim now joins and verifies the referenced ingress schema, full ownership identity, required state, payload fingerprint, and decodability. Legacy terminal settlement uses an exact full-identity SQL transition instead of a bounded scan.
+**Historical finding (superseded by the 2026-10-14 V2-only cutover above).** `allowLegacyFallback` was threaded through every resolver boundary and covered by route-reachability tests. All three NSE implementations durably write a hint and immediately return fallback content; a source guard rejects pull/ACK/`URLSession` regressions. Every legacy response item is journaled with full outer identity before canonical work and creates no client ACK. ACK claim now joins and verifies the referenced ingress schema, full ownership identity, required state, payload fingerprint, and decodability. Legacy terminal settlement uses an exact full-identity SQL transition instead of a bounded scan.
 
-**Verdict:** accepted for the v2 and reachable legacy client paths. The old destructive protocol still cannot eliminate the interval in which the server commits deletion but its response bytes never reach the client; that is an explicit compatibility limitation, not a property attributed to v2.
+**Historical verdict (superseded for new network requests by the 2026-10-14 cutover):** accepted for the then-reachable v2 and legacy client paths. The old destructive protocol could not eliminate the interval in which the server commits deletion but its response bytes never reach the client; that is an explicit compatibility limitation, not a property attributed to v2.
 
 ### Round 9: power-loss and pre-existing sidecar challenge
 

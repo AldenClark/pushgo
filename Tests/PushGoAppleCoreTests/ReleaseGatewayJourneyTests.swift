@@ -28,7 +28,7 @@ struct ReleaseGatewayJourneyTests {
                     try await submit(session, base: base, auth: auth, channel: subscription.channelId, passphrase: passphrase, title: title, body: body)
                 }
                 // v2 pull is non-destructive. Save the real payload for replay.
-                let pending = try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey, allowLegacyFallback: false)
+                let pending = try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey)
                 #expect(pending.items.count == 2)
                 let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: group)
                 let coordinator = ProviderIngressCoordinator(
@@ -74,7 +74,7 @@ struct ReleaseGatewayJourneyTests {
                 #expect(target.rawPayload["channel_id"]?.value as? String == subscription.channelId)
                 #expect(survivor.body == "Keep this separate message")
                 #expect(target.id != survivor.id)
-                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey, allowLegacyFallback: false).items.isEmpty)
+                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey).items.isEmpty)
                 #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
 
                 // Notification Center side effects require an App bundle and are
@@ -149,10 +149,10 @@ struct ReleaseGatewayJourneyTests {
                 #expect(thingTarget.entityType == "thing" && thingTarget.entityId == thingID)
                 await opener.handleNotificationOpen(entityType: thingTarget.entityType, entityId: thingTarget.entityId)
                 #expect(opener.pendingThingToOpen == thingID && opener.pendingEventToOpen == nil)
-                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey, allowLegacyFallback: false).items.isEmpty)
+                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey).items.isEmpty)
                 #expect(try await service.unsubscribe(baseURL: base, token: auth, deviceKey: device.deviceKey, channelId: subscription.channelId))
                 try await submit(session, base: base, auth: auth, channel: subscription.channelId, passphrase: passphrase, title: "Unsubscribed", body: "Must not be delivered")
-                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey, allowLegacyFallback: false).items.isEmpty)
+                #expect(try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey).items.isEmpty)
             }.value
         }
     }

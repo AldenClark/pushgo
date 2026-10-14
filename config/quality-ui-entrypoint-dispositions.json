@@ -65,6 +65,10 @@
           "disposition": "DYNAMIC_PRODUCT_CONTRACT",
           "reason": "The Watch product constructs row.message.<messageId>; the second id is the control object for exact deletion and read persistence."
         },
+        "row.message.quality-watch-v2-message": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Watch product constructs row.message.<messageId>; this native V2 wakeup journey requires real Pull requests, canonical content before ACK, duplicate isolation, and exact content/read state after relaunch. The identifier alone is not execution evidence."
+        },
         "row.thing.quality-watch-thing-001": {
           "disposition": "DYNAMIC_PRODUCT_CONTRACT",
           "reason": "The Watch product constructs row.thing.<thingId>; the test requires the canonical Thing detail and decoded image result."

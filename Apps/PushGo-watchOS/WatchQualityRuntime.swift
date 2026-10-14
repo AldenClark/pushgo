@@ -149,10 +149,28 @@ enum WatchQualityRuntime {
                 || scenario == "watch.gateway-cleanup-recover"
                 || scenario == "watch.provisioning-interrupted-seed"
                 || scenario == "watch.provisioning-interrupted-recover"
+                || scenario == "watch.v2-wakeup"
+                || scenario == "watch.v2-wakeup-unsupported"
         else {
             throw WatchQualityRuntimeError.unsupportedScenario(
                 scenario ?? "<missing>"
             )
+        }
+
+        if scenario == "watch.v2-wakeup" || scenario == "watch.v2-wakeup-unsupported" {
+            try writeGatewayRouteResult(status: "RUNNING", scenario: scenario!, sessionID: sessionID, detail: nil)
+            do {
+                let evidence = try await verifyV2Wakeup(
+                    environment: environment, sessionID: sessionID,
+                    unsupported: scenario == "watch.v2-wakeup-unsupported"
+                )
+                try writeGatewayRouteResult(status: "PASS", scenario: scenario!, sessionID: sessionID, detail: nil, evidence: evidence)
+            } catch {
+                try? writeGatewayRouteResult(status: "FAIL", scenario: scenario!, sessionID: sessionID, detail: error.localizedDescription)
+                throw error
+            }
+            await environment.refreshWatchLightCountsAndNotify()
+            return
         }
 
         if scenario == "watch.gateway-cleanup-seed"
@@ -274,7 +292,8 @@ enum WatchQualityRuntime {
         scenario: String,
         sessionID: String,
         detail: String?,
-        evidence: [String: Any] = [:]
+        evidence: [String: Any] = [:],
+        filename: String = "quality-gateway-route-result.json"
     ) throws {
         let documents = try FileManager.default.url(
             for: .documentDirectory, in: .userDomainMask,
@@ -290,9 +309,77 @@ enum WatchQualityRuntime {
         ]
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         try data.write(
-            to: documents.appendingPathComponent("quality-gateway-route-result.json"),
+            to: documents.appendingPathComponent(filename),
             options: .atomic
         )
+    }
+
+    @MainActor
+    private static func verifyV2Wakeup(
+        environment: AppEnvironment, sessionID: String, unsupported: Bool
+    ) async throws -> [String: Any] {
+        let store = environment.dataStore
+        let deliveryID = "quality-watch-v2-\(sessionID)"
+        let deviceKey = "quality-watch-v2-device-\(sessionID)"
+        let messageID = "quality-watch-v2-message"
+        let config = ServerConfig(baseURL: URL(string: "https://quality-watch-v2.pushgo.dev")!, token: "quality-v2-token", notificationKeyMaterial: nil, updatedAt: Date())
+        if !unsupported {
+            try await store.clearWatchLightStore()
+            try await store.saveWatchProvisioningServerConfig(config)
+            // The configured receiver owns a Gateway-scoped credential cache.
+            // Direct Store setup bypasses normal runtime sync, so prepare that
+            // existing cache too; otherwise the resolver sees nil-token and
+            // configured-token candidates for the same Gateway.
+            let gatewayTokenStore = ProviderGatewayTokenStore()
+            guard gatewayTokenStore.save(token: config.token, baseURL: config.baseURL),
+                  gatewayTokenStore.load(baseURL: config.baseURL) == config.token else {
+                throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 fixture Gateway credential cache did not persist")
+            }
+            guard (await store.saveCachedDeviceKey(deviceKey, for: "watchos")).didPersist else {
+                throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 device key did not persist")
+            }
+        }
+        try await environment.loadQualityServerConfigFromStore()
+        let probe = QualityWatchV2WakeupProbe()
+        environment.installQualityGatewayTransport { request in
+            try await probe.respond(request, store: store, messageID: messageID, deliveryID: deliveryID, deviceKey: deviceKey, unsupported: unsupported)
+        }
+        let wakeupID = unsupported ? "\(deliveryID)-unsupported" : deliveryID
+        let hint: [String: AnyCodable] = [
+            "provider_wakeup": AnyCodable("1"), "provider_mode": AnyCodable("wakeup"),
+            "delivery_id": AnyCodable(wakeupID), "base_url": AnyCodable(config.baseURL.absoluteString),
+            "provider_device_key": AnyCodable(deviceKey),
+            "aps": AnyCodable(["content-available": 1]),
+        ]
+        await environment.qualityReceiveDurableWakeup(hint)
+        if !unsupported { await environment.qualityReceiveDurableWakeup(hint) }
+        let requests = await probe.recordedPaths()
+        let messages = try await store.loadWatchLightMessages()
+        guard messages.count == 1, let message = messages.first,
+              message.messageId == messageID, message.title == "Silent V2 delivery",
+              message.body == "Pulled content survives duplicate wakeups and reopen."
+        else { throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 wakeup lost or duplicated accurate content") }
+        if unsupported {
+            try writeGatewayRouteResult(
+                status: "DIAGNOSTIC", scenario: "watch.v2-wakeup-unsupported", sessionID: sessionID, detail: nil,
+                evidence: ["read": message.isRead, "http_paths": requests,
+                           "toast_expected": environment.localizationManager.localized("gateway_v2_pull_required"),
+                           "toast_actual": environment.toastMessage?.text ?? "<missing>"],
+                filename: "quality-v2-wakeup-diagnostic.json"
+            )
+            guard message.isRead, requests == [ChannelSubscriptionService.pullV2Path, ChannelSubscriptionService.pullV2Path],
+                  environment.toastMessage?.text == environment.localizationManager.localized("gateway_v2_pull_required")
+            else {
+                throw WatchQualityRuntimeError.gatewayRouteInvariant(
+                    "Unsupported V2 must retain read content and visibly require Gateway upgrade without ACK/legacy Pull; read=\(message.isRead), paths=\(requests), toast=\(environment.toastMessage?.text ?? "<missing>")"
+                )
+            }
+        } else {
+            guard requests == [ChannelSubscriptionService.pullV2Path, ChannelSubscriptionService.batchAckV2Path],
+                  try await store.loadWatchDeliveryRecords().filter({ $0.deliveryId == deliveryID }).count == 1
+            else { throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 wakeup must Pull once and ACK once after durable Store, including duplicate hint") }
+        }
+        return ["http_paths": requests, "message_id": message.messageId, "body": message.body, "message_count": messages.count, "read_after_reopen": message.isRead, "unsupported": unsupported]
     }
 
     private static func prepareStandardImage() async throws {
@@ -692,6 +779,54 @@ private enum WatchQualityRuntimeError: LocalizedError {
         case let .gatewayRouteInvariant(reason):
             return "Watch gateway route recovery failed: \(reason)."
         }
+    }
+}
+
+/// A bounded transport probe for the production Watch wakeup/Store/ACK path.
+private actor QualityWatchV2WakeupProbe {
+    private var paths: [String] = []
+
+    func recordedPaths() -> [String] { paths }
+
+    func respond(
+        _ request: URLRequest, store: LocalDataStore, messageID: String,
+        deliveryID: String, deviceKey: String, unsupported: Bool
+    ) async throws -> (Data, URLResponse) {
+        guard let url = request.url, url.host == "quality-watch-v2.pushgo.dev",
+              request.httpMethod == "POST",
+              let bytes = request.httpBody,
+              let body = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              body["device_key"] as? String == deviceKey
+        else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Unexpected V2 wakeup request identity") }
+        paths.append(url.path)
+        let data: [String: Any]
+        let status: Int
+        if url.path == ChannelSubscriptionService.pullV2Path {
+            guard body["delivery_id"] as? String == (unsupported ? "\(deliveryID)-unsupported" : deliveryID) else {
+                throw WatchQualityRuntimeError.gatewayRouteInvariant("Silent wakeup lost targeted delivery ID")
+            }
+            status = unsupported ? 404 : 200
+            data = unsupported
+                ? ["success": false, "error": "route_not_found", "error_code": "route_not_found"]
+                : ["success": true, "data": ["has_more": false, "items": [[
+                    "delivery_id": deliveryID,
+                    "payload": ["message_id": messageID, "watch_light_kind": "message",
+                                "title": "Silent V2 delivery", "body": "Pulled content survives duplicate wakeups and reopen.",
+                                "sent_at": "1800000000000", "severity": "normal"],
+                ]]]]
+        } else if url.path == ChannelSubscriptionService.batchAckV2Path {
+            guard !unsupported, body["delivery_ids"] as? [String] == [deliveryID],
+                  let stored = try await store.loadWatchLightMessage(messageId: messageID),
+                  stored.body == "Pulled content survives duplicate wakeups and reopen.",
+                  try await store.loadWatchDeliveryRecords().contains(where: { $0.deliveryId == deliveryID })
+            else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Gateway ACK preceded accurate durable Watch content") }
+            status = 200
+            data = ["success": true, "data": ["requested_count": 1, "removed_count": 1]]
+        } else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("Unexpected endpoint, including forbidden legacy Pull: \(url.path)")
+        }
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else { throw URLError(.badServerResponse) }
+        return (try JSONSerialization.data(withJSONObject: data), response)
     }
 }
 

@@ -608,3 +608,13 @@ Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言
 受控iOS27.0原生三个既有方法3/3、零失败/跳过/expected failure/retry/runtime warning，严格EXECUTED；收据 build/quality-results/apple-observation-repair-20261013/apple-focused-summary.json 双PASSED，源码为9d5c9e1上的dirty UITest字节，身份/patch同目录。原iOS26.2失败及现有CI原状保留；没有原环境CI、全量、真机或发行包验收。详见同日workstream progress；本地未提交/推送，无产品源码改动。
 
 修复和相关记录随后按用户授权提交到Apple本地仓库，提交字节与既有验证的UITest哈希一致；未重跑测试、未推送、未正式发布。
+
+
+## 2026-10-14 V2 Pull／显式 ACK 最低协议
+
+受影响能力：Provider ingress、Gateway 错误反馈、ACK 恢复、旧数据升级、NSE→host 交接及 Watch 静默补拉。Apple 全端已删除旧网络 Pull／回退开关／新 destructive staging；保留旧 journal 有限结清、direct ACK、正常持久入站、分页入库后 ACK 和原目的地恢复。升级提示仅由实际 HTTP404 且一致 `route_not_found` 触发。先升级 Gateway，再升级 App；本地 v1.3.0 仅为已核实协议下限，最新 Watch 字段还依赖未带本地发布标签的 0c0365ef。
+
+最终是分段证据：受影响 Core 修复后 29/29、最终服务分类 25/25、真实 loopback Gateway/Store/ACK 旅程 1/1、三目标 build-for-testing 和本地化通过。首轮完整 Core 475 的 4 issues 与 focused112 的 1 fixture issue 保留，未将 PR FAILED 改写成完整通过。UI／大字号仍因 console lock BLOCKED，三个 Apple 平台产品 NOT_RUN；新 Watch 用例仅编译。详见 [workstream 进度](../../design/workstreams/pushgo-quality-testing-overhaul/progress.md) 同日节与 `build/quality-results/v2-pull-required-20261014/verification-summary.json`。无提交／推送／发布，不外推真实 APNs／物理 Watch／PG/MySQL 或 Windows 原生。
+
+
+解锁后补验（2026-10-14）：用户指定升级提示已统一为「当前网关无法使用，请升级网关到最新版本」。iOS首轮3项加准备修复后2项、macOS2项、Watch静默V2/ACK/重开/提示1项、中文accessibility5任务1项通过。首败保留：自动bootstrap未隔离默认Gateway与DEBUG旧库fixture漏回退v27列；仅修测试准备边界，生产迁移和V2错误不被吞掉。另两条实际fixture/policy Core回归各1/1。不能把原完整PR FAILED改绿，Windows原生/物理接受度仍未验收。最新分段证据与截图见同日[workstream补验节](../../design/workstreams/pushgo-quality-testing-overhaul/progress.md)和`build/quality-results/v2-pull-required-20261014/native-unlocked/verification-summary.json`；源码身份已刷新，保持本地待审。

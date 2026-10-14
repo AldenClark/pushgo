@@ -40,7 +40,10 @@ struct PendingLocalDeletionControllerTests {
             let completed = await waitUntil(timeout: .seconds(10)) {
                 let stored = try? await store.loadMessage(id: message.id)
                 let records = try? await store.loadPendingLocalDeletions(now: Date())
-                return stored == nil && records?.isEmpty == true
+                // Durable cleanup precedes the controller's presentation reload.
+                let presentationCleared = await controller.pendingDeletion == nil
+                    && controller.effectiveScope.messageIDs.isEmpty
+                return stored == nil && records?.isEmpty == true && presentationCleared
             }
             #expect(completed)
             #expect(await controller.pendingDeletion == nil)

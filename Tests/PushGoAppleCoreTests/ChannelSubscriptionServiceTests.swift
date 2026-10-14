@@ -65,7 +65,6 @@ struct ChannelSubscriptionServiceTests {
         #expect(ChannelSubscriptionService.deviceChannelDeletePath == "/channel/device/delete")
         #expect(ChannelSubscriptionService.providerTokenRetirePath == "/channel/device/provider-token/retire")
         #expect(ChannelSubscriptionService.pullV2Path == "/v2/messages/pull")
-        #expect(ChannelSubscriptionService.pullLegacyPath == "/messages/pull")
         #expect(ChannelSubscriptionService.ackPath == "/messages/ack")
         #expect(ChannelSubscriptionService.batchAckV2Path == "/v2/messages/ack")
     }
@@ -315,8 +314,6 @@ struct ChannelSubscriptionServiceTests {
             token: "token",
             deviceKey: "device"
         )
-        #expect(result.contract == .v2)
-        #expect(result.requiresAck)
         #expect(result.hasMore)
         #expect(result.items.first?.deliveryId == "outer-001")
 
@@ -331,84 +328,114 @@ struct ChannelSubscriptionServiceTests {
     }
 
     @Test
-    func exactRouteNotFoundFallsBackToDestructiveLegacyPullWithoutAckRequirement() async throws {
-        let host = "apple-legacy-\(UUID().uuidString.lowercased()).example"
-        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer {
-            session.invalidateAndCancel()
-            ChannelServiceURLProtocol.unregister(host: host)
+    func exactMissingV2RouteRequiresUpgradeWithoutAnyDestructiveRequest() async throws {
+        let paths = OSAllocatedUnfairLock(initialState: [String]())
+        let baseURL = try #require(URL(string: "https://upgrade.example/GatewayA"))
+        let service = ChannelSubscriptionService(requestTransport: { request in
+            paths.withLock { $0.append(request.url?.path ?? "") }
+            let payload = #"{"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}"#
+            return (Data(payload.utf8), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        })
+        do {
+            _ = try await service.pullMessages(baseURL: baseURL, token: nil, deviceKey: "device", deliveryId: "wake-001")
+            Issue.record("A Gateway without V2 Pull must require an upgrade")
+        } catch let error as AppError {
+            #expect(error.code == "provider_pull_v2_required")
         }
-
-        ChannelServiceURLProtocol.register(host: host) { request in
-            let path = request.url?.path
-            let status: Int
-            let payload: String
-            if path == "/GatewayA/v2/messages/pull" {
-                status = 404
-                payload = """
-                {"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}
-                """
-            } else if path == "/GatewayA/messages/pull" {
-                status = 200
-                payload = """
-                {"success":true,"data":{"items":[{"delivery_id":"legacy-001","payload":{"title":"legacy"}}]}}
-                """
-            } else {
-                throw URLError(.unsupportedURL)
-            }
-            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
-            return (response, Data(payload.utf8))
-        }
-
-        let result = try await ChannelSubscriptionService(session: session).pullMessages(
-            baseURL: baseURL,
-            token: nil,
-            deviceKey: "device"
-        )
-        #expect(result.contract == .legacy)
-        #expect(!result.requiresAck)
-        #expect(!result.hasMore)
-        #expect(result.items.map(\.deliveryId) == ["legacy-001"])
+        #expect(paths.withLock { $0 } == ["/GatewayA/v2/messages/pull"])
     }
 
     @Test
-    func routeNotFoundDoesNotReachDestructiveLegacyPullWhenFallbackIsDisabled() async throws {
-        let host = "apple-no-legacy-\(UUID().uuidString.lowercased()).example"
-        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
-        let session = URLSession(configuration: configuration)
+    func authOtherMissingRouteMalformedAndTransportFailuresNeverBecomeUpgradeOrLegacyPull() async throws {
+        let baseURL = try #require(URL(string: "https://failures.example/GatewayA"))
+        for (status, payload) in [
+            (401, #"{"success":false,"problem":{"code":"authentication_failed","category":"auth","status":401,"title":"Authentication failed","retryable":false}}"#),
+            (404, #"{"success":false,"problem":{"code":"device_key_not_found","category":"not_found","status":404,"title":"Device missing","retryable":false}}"#),
+            (500, #"{"success":false,"problem":{"code":"route_not_found","category":"internal","status":500,"title":"Server error","retryable":true}}"#),
+            (200, "invalid JSON"),
+        ] {
+            let paths = OSAllocatedUnfairLock(initialState: [String]())
+            let service = ChannelSubscriptionService(requestTransport: { request in
+                paths.withLock { $0.append(request.url?.path ?? "") }
+                return (Data(payload.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+            })
+            do {
+                _ = try await service.pullMessages(baseURL: baseURL, token: nil, deviceKey: "device")
+                Issue.record("Failed Pull must preserve its failure")
+            } catch let error as AppError {
+                #expect(error.code != "provider_pull_v2_required")
+            } catch {
+                #expect(status == 200)
+            }
+            #expect(paths.withLock { $0 } == ["/GatewayA/v2/messages/pull"])
+        }
         let paths = OSAllocatedUnfairLock(initialState: [String]())
-        defer {
-            session.invalidateAndCancel()
-            ChannelServiceURLProtocol.unregister(host: host)
-        }
-
-        ChannelServiceURLProtocol.register(host: host) { request in
+        let service = ChannelSubscriptionService(requestTransport: { request in
             paths.withLock { $0.append(request.url?.path ?? "") }
-            let payload = #"{"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}"#
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: 404,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            return (response, Data(payload.utf8))
-        }
-
-        await #expect(throws: AppError.self) {
-            _ = try await ChannelSubscriptionService(session: session).pullMessages(
-                baseURL: baseURL,
-                token: nil,
-                deviceKey: "device",
-                deliveryId: "wake-001",
-                allowLegacyFallback: false
-            )
+            throw URLError(.notConnectedToInternet)
+        })
+        do {
+            _ = try await service.pullMessages(baseURL: baseURL, token: nil, deviceKey: "device")
+            Issue.record("Offline Pull must fail")
+        } catch let error as URLError {
+            #expect(error.code == .notConnectedToInternet)
         }
         #expect(paths.withLock { $0 } == ["/GatewayA/v2/messages/pull"])
+    }
+
+    @Test
+    func missingV2AckRequiresUpgradeWhileLegacySingleAckPreservesItsOwnError() async throws {
+        let paths = OSAllocatedUnfairLock(initialState: [String]())
+        let baseURL = try #require(URL(string: "https://ack-upgrade.example/GatewayA"))
+        let service = ChannelSubscriptionService(requestTransport: { request in
+            paths.withLock { $0.append(request.url?.path ?? "") }
+            let payload = #"{"success":false,"problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}"#
+            return (Data(payload.utf8), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        })
+        do {
+            _ = try await service.ackMessages(baseURL: baseURL, token: nil, deviceKey: "old-device", deliveryIds: ["persisted-item"])
+            Issue.record("V2 ACK requires an upgraded Gateway")
+        } catch let error as AppError {
+            #expect(error.code == "provider_pull_v2_required")
+        }
+        do {
+            _ = try await service.ackMessage(baseURL: baseURL, token: nil, deviceKey: "old-device", deliveryId: "direct-item")
+            Issue.record("The direct ACK must preserve the Gateway route failure")
+        } catch let error as AppError {
+            #expect(error.code == "route_not_found")
+        }
+        #expect(paths.withLock { $0 } == ["/GatewayA/v2/messages/ack", "/GatewayA/messages/ack"])
+    }
+
+    @Test
+    func v2UpgradeClassificationRequiresActualHTTP404AndUnambiguousRouteCode() async throws {
+        let baseURL = try #require(URL(string: "https://status-boundary.example/GatewayA"))
+        let routeMissing = #"{"success":false,"problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Missing route","retryable":false}}"#
+        let conflictingCodes = #"{"success":false,"error_code":"route_not_found","problem":{"code":"authentication_failed","category":"auth","status":404,"title":"Auth error","retryable":false}}"#
+        for (status, payload, requiresUpgrade) in [
+            (401, routeMissing, false), (500, routeMissing, false), (200, routeMissing, false),
+            (404, routeMissing, true), (404, conflictingCodes, false),
+        ] {
+            for isAck in [false, true] {
+                let paths = OSAllocatedUnfairLock(initialState: [String]())
+                let service = ChannelSubscriptionService(requestTransport: { request in
+                    paths.withLock { $0.append(request.url?.path ?? "") }
+                    return (Data(payload.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+                })
+                do {
+                    if isAck {
+                        _ = try await service.ackMessages(baseURL: baseURL, token: "token", deviceKey: "device", deliveryIds: ["saved-item"])
+                    } else {
+                        _ = try await service.pullMessages(baseURL: baseURL, token: "token", deviceKey: "device")
+                    }
+                    Issue.record("An error envelope cannot succeed")
+                } catch let error as AppError {
+                    #expect((error.code == "provider_pull_v2_required") == requiresUpgrade,
+                        "Upgrade classification must use HTTP \(status), not the body status; ACK=\(isAck)")
+                }
+                #expect(paths.withLock { $0 } == [isAck ? "/GatewayA/v2/messages/ack" : "/GatewayA/v2/messages/pull"])
+            }
+        }
     }
 
     @Test

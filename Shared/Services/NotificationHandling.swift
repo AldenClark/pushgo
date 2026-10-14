@@ -35,13 +35,11 @@ enum NotificationIngressResolution: @unchecked Sendable {
 }
 
 struct ProviderPullContext: Sendable {
-    let contract: ChannelSubscriptionService.PullContract
     let baseURL: URL
     let token: String?
     let deviceKey: String
     let claimLease: ProviderWakeupPullClaimStore.ClaimLease
 
-    var requiresAck: Bool { contract == .v2 }
 }
 
 private struct WakeupServerCandidate {
@@ -1036,8 +1034,7 @@ enum NotificationHandling {
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService,
-        notificationIngressInbox: NotificationIngressInbox = .shared,
-        allowLegacyFallback: Bool = true
+        notificationIngressInbox: NotificationIngressInbox = .shared
     ) async -> NotificationIngressResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         let resolution = await resolveProviderWakeup(
@@ -1045,8 +1042,7 @@ enum NotificationHandling {
             dataStore: dataStore,
             fallbackServerConfig: fallbackServerConfig,
             channelSubscriptionService: channelSubscriptionService,
-            notificationIngressInbox: notificationIngressInbox,
-            allowLegacyFallback: allowLegacyFallback
+            notificationIngressInbox: notificationIngressInbox
         )
         switch resolution {
         case .notWakeup:
@@ -1158,8 +1154,7 @@ enum NotificationHandling {
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService,
-        notificationIngressInbox: NotificationIngressInbox = .shared,
-        allowLegacyFallback: Bool = true
+        notificationIngressInbox: NotificationIngressInbox = .shared
     ) async -> ProviderWakeupResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         guard let deliveryId = providerWakeupPullDeliveryId(from: sanitized) else {
@@ -1251,8 +1246,7 @@ enum NotificationHandling {
                     baseURL: candidate.config.baseURL,
                     token: candidate.config.token,
                     deviceKey: deviceKey,
-                    deliveryId: deliveryId,
-                    allowLegacyFallback: allowLegacyFallback
+                    deliveryId: deliveryId
                 )
                 guard !pullResult.items.isEmpty else {
                     await claimStore.releaseLease(lease)
@@ -1272,23 +1266,12 @@ enum NotificationHandling {
                     // database cannot make the same ID look like a replay.
                     durablePayload["base_url"] = candidate.config.baseURL.absoluteString
                     durablePayload["provider_device_key"] = deviceKey
-                    let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
-                    let requiredEntryState: String
-                    if pullResult.requiresAck {
-                        ackIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                            deliveryId: requestIdentifier,
-                            baseURL: candidate.config.baseURL,
-                            deviceKey: deviceKey,
-                            ackContract: .v2Batch
-                        )
-                        requiredEntryState = "terminal_local"
-                    } else {
-                        durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
-                            ProviderLegacyDestructivePullMetadata.markerValue
-                        ackIdentity = nil
-                        requiredEntryState = "durable"
-                    }
-                    if pullResult.requiresAck, ackIdentity == nil {
+                    guard let ackIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                        deliveryId: requestIdentifier,
+                        baseURL: candidate.config.baseURL,
+                        deviceKey: deviceKey,
+                        ackContract: .v2Batch
+                    ) else {
                         allItemsDurable = false
                         continue
                     }
@@ -1302,7 +1285,7 @@ enum NotificationHandling {
                         requestIdentifier: requestIdentifier,
                         source: "provider.host.pulled",
                         ackIdentity: ackIdentity,
-                        requiredEntryState: requiredEntryState
+                        requiredEntryState: "terminal_local"
                     ) else {
                         allItemsDurable = false
                         continue
@@ -1319,7 +1302,6 @@ enum NotificationHandling {
                     payload: selected.payload,
                     requestIdentifier: selected.requestIdentifier,
                     context: ProviderPullContext(
-                        contract: pullResult.contract,
                         baseURL: candidate.config.baseURL,
                         token: candidate.config.token,
                         deviceKey: deviceKey,

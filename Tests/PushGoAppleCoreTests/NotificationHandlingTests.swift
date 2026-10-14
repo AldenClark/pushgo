@@ -17,7 +17,6 @@ private actor NotificationMessageCapture {
 }
 
 private func makeTestProviderPullContext(
-    contract: ChannelSubscriptionService.PullContract = .v2,
     deliveryId: String = "delivery-pulled-001"
 ) -> ProviderPullContext {
     let now = Int64(Date().timeIntervalSince1970 * 1_000)
@@ -34,7 +33,6 @@ private func makeTestProviderPullContext(
         updatedAtEpochMs: now
     )
     return ProviderPullContext(
-        contract: contract,
         baseURL: URL(string: "https://gateway.example/GatewayA")!,
         token: "test-token",
         deviceKey: "test-device",

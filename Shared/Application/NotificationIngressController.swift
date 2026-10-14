@@ -102,7 +102,7 @@ final class NotificationIngressController {
     func handleNotificationIngressChanged(reason: String) async {
         _ = await mergeNotificationIngressInbox(
             reason: reason,
-            allowFallbackPull: false
+            allowWakeupSync: false
         )
         guard !Task.isCancelled else { return }
         scheduleProviderAckDrain(source: "provider.ingress_changed.\(platformSuffix)")
@@ -129,12 +129,12 @@ final class NotificationIngressController {
     @discardableResult
     func mergeNotificationIngressInbox(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> Int {
         await mergeNotificationIngressInboxOutcome(
             reason: reason,
-            allowFallbackPull: allowFallbackPull,
+            allowWakeupSync: allowWakeupSync,
             limit: limit
         ).appliedCount
     }
@@ -146,12 +146,12 @@ final class NotificationIngressController {
 
     func mergeNotificationIngressInboxOutcome(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> MergeOutcome {
         let applied = await providerIngressCoordinator.mergeInbox(
             reason: reason,
-            allowFallbackPull: allowFallbackPull,
+            allowWakeupSync: allowWakeupSync,
             limit: limit
         )
         guard !Task.isCancelled else {
@@ -303,7 +303,7 @@ final class NotificationIngressController {
         ingressRetryWakeDate = nil
         _ = await mergeNotificationIngressInboxOutcome(
             reason: "retry_due_\(platformSuffix)",
-            allowFallbackPull: true
+            allowWakeupSync: true
         )
         guard !Task.isCancelled else { return }
         _ = await drainProviderDeliveryAckFailures(source: "\(source).retry_due")

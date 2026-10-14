@@ -334,6 +334,8 @@ enum AppError: LocalizedError, Equatable, Sendable {
 
     private static func localMessage(for code: String) -> String? {
         switch code {
+        case "provider_pull_v2_required":
+            return LocalizationProvider.localized("gateway_v2_pull_required")
         case "channel_id_required":
             return LocalizationProvider.localized("channel_id_required")
         case "invalid_channel_id":

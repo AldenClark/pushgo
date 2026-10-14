@@ -101,7 +101,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         Task { @MainActor in
             _ = await AppEnvironment.shared.mergeNotificationIngressInbox(
                 reason: "ios_will_enter_foreground",
-                allowFallbackPull: true
+                allowWakeupSync: true
             )
         }
     }
@@ -229,7 +229,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         let environment = AppEnvironment.shared
         let inboxApplied = await environment.mergeNotificationIngressInbox(
             reason: "ios_remote_notification",
-            allowFallbackPull: true
+            allowWakeupSync: true
         )
         let sanitizedPayload = UserInfoSanitizer.sanitize(payload)
         let ingress = await NotificationHandling.resolveNotificationIngress(
@@ -298,7 +298,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
                     mergeIngress: {
                         await environment.mergeNotificationIngressInboxOutcome(
                             reason: "ios_bg_app_refresh",
-                            allowFallbackPull: true
+                            allowWakeupSync: true
                         ).stageOutcome
                     },
                     drainAcknowledgements: {

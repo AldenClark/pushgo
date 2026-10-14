@@ -242,7 +242,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
     private func handleRemoteNotification(_ payload: [String: Any]) async {
         _ = await AppEnvironment.shared.mergeNotificationIngressInbox(
             reason: "macos_remote_notification",
-            allowFallbackPull: true
+            allowWakeupSync: true
         )
         let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, element in
             result[element.key] = element.value

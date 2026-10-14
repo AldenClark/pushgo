@@ -723,6 +723,27 @@ enum PushGoAutomationContext {
         #endif
     }
 
+    // App-owned fixtures prepare local state independently of a live Gateway.
+    // Explicit Gateway verification still opts into automatic provider startup.
+    static var allowsAutomaticProviderBootstrap: Bool {
+        #if DEBUG
+        automaticProviderBootstrapAllowed(
+            qualitySession: qualitySession,
+            explicitGatewayBaseURL: gatewayBaseURLString
+        )
+        #else
+        true
+        #endif
+    }
+
+    static func automaticProviderBootstrapAllowed(
+        qualitySession: PushGoQualitySessionDescriptor?,
+        explicitGatewayBaseURL: String?
+    ) -> Bool {
+        qualitySession == nil
+            || explicitGatewayBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     static var gatewayToken: String? {
         #if DEBUG
         normalizedString(for: gatewayTokenEnv)

@@ -284,6 +284,43 @@ final class PushGo_watchOSUITests: XCTestCase {
         )
     }
 
+    func testSilentWakeupUsesV2PullAckAfterStoreAndRetainsContentAcrossDuplicateAndReopen() {
+        let app = XCUIApplication()
+        let sessionID = UUID().uuidString
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.v2-wakeup")
+        launchPreparedApp(app)
+        let row = app.buttons["row.message.quality-watch-v2-message"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15), startupFailureDescription(in: app))
+        XCTAssertEqual(row.label, "Silent V2 delivery")
+        XCTAssertEqual(row.value as? String, "Unread, Normal, Pulled content survives duplicate wakeups and reopen.")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Pulled content survives duplicate wakeups and reopen."].waitForExistence(timeout: 5))
+        pressBack(in: app)
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            row.value as? String == "Read, Normal, Pulled content survives duplicate wakeups and reopen."
+        })
+
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.v2-wakeup-unsupported", language: "zh-Hans", locale: "zh_CN")
+        launchPreparedApp(app)
+        let upgradeToast = app.descendants(matching: .any)["feedback.toast.error"]
+        XCTAssertTrue(upgradeToast.waitForExistence(timeout: 5), startupFailureDescription(in: app))
+        let upgradePrompt = XCTAttachment(screenshot: app.screenshot())
+        upgradePrompt.name = "Watch real Gateway upgrade prompt"
+        upgradePrompt.lifetime = .keepAlways
+        add(upgradePrompt)
+        // AppContext exposes the toast as its dismiss button. The App-owned
+        // transport/Store harness asserts the exact prompt text; retain the
+        // real render for visual verification instead of inventing AX text.
+        XCTAssertEqual(upgradeToast.label, "关闭")
+        XCTAssertTrue(upgradeToast.isHittable)
+        XCTAssertTrue(row.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertEqual(row.label, "Silent V2 delivery")
+        XCTAssertEqual(row.value as? String, "已读, Normal, Pulled content survives duplicate wakeups and reopen.")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Pulled content survives duplicate wakeups and reopen."].waitForExistence(timeout: 5))
+    }
+
     private func launchPreparedApp(_ app: XCUIApplication) {
         app.launch()
         let alert = XCUIApplication(bundleIdentifier: "com.apple.Carousel").alerts.firstMatch
@@ -306,9 +343,11 @@ final class PushGo_watchOSUITests: XCTestCase {
     private func configureHermeticLaunch(
         _ app: XCUIApplication,
         sessionID: String,
-        scenario: String = "watch.standard"
+        scenario: String = "watch.standard",
+        language: String = "en",
+        locale: String = "en_US"
     ) {
-        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
         app.launchEnvironment["PUSHGO_QUALITY_PROFILE"] = "hermetic"
         app.launchEnvironment["PUSHGO_QUALITY_SCENARIO"] = scenario
         // Reuse the existing Debug-only file-backed credential/storage sandbox.

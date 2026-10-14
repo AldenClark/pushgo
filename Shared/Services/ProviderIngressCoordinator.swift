@@ -163,7 +163,6 @@ final class ProviderIngressCoordinator {
     private struct DurablePulledItem {
         let payload: [AnyHashable: Any]
         let deliveryID: String
-        let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
         let ingressIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity
     }
 
@@ -233,7 +232,7 @@ final class ProviderIngressCoordinator {
     private var lastFullSyncAttemptAt = Date.distantPast
     private var inboxMergeTask: Task<Int, Never>?
     private var inboxMergeRequested = false
-    private var pendingInboxAllowsFallbackPull = false
+    private var pendingInboxAllowsWakeupSync = false
     private var pendingInboxLimit = 64
     private var pendingInboxReason = "unspecified"
     private var qualityMessageRefreshAttempt = 0
@@ -287,11 +286,11 @@ final class ProviderIngressCoordinator {
     @MainActor
     func mergeInbox(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> Int {
         inboxMergeRequested = true
-        pendingInboxAllowsFallbackPull = pendingInboxAllowsFallbackPull || allowFallbackPull
+        pendingInboxAllowsWakeupSync = pendingInboxAllowsWakeupSync || allowWakeupSync
         pendingInboxLimit = max(pendingInboxLimit, min(512, max(1, limit)))
         pendingInboxReason = reason
         if let inboxMergeTask {
@@ -302,14 +301,14 @@ final class ProviderIngressCoordinator {
             var totalApplied = 0
             repeat {
                 inboxMergeRequested = false
-                let runAllowsFallbackPull = pendingInboxAllowsFallbackPull
+                let runAllowsWakeupSync = pendingInboxAllowsWakeupSync
                 let runLimit = pendingInboxLimit
                 let runReason = pendingInboxReason
-                pendingInboxAllowsFallbackPull = false
+                pendingInboxAllowsWakeupSync = false
                 pendingInboxLimit = 64
                 totalApplied += await performMergeInbox(
                     reason: runReason,
-                    allowFallbackPull: runAllowsFallbackPull,
+                    allowWakeupSync: runAllowsWakeupSync,
                     limit: runLimit
                 )
             } while inboxMergeRequested && !Task.isCancelled
@@ -323,7 +322,7 @@ final class ProviderIngressCoordinator {
     @MainActor
     private func performMergeInbox(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int
     ) async -> Int {
         guard !Task.isCancelled, hooks.isEnabled() else { return 0 }
@@ -380,8 +379,7 @@ final class ProviderIngressCoordinator {
                     dataStore: dataStore,
                     fallbackServerConfig: hooks.serverConfig(),
                     channelSubscriptionService: channelSubscriptionService,
-                    notificationIngressInbox: notificationIngressInbox,
-                    allowLegacyFallback: allowFallbackPull
+                    notificationIngressInbox: notificationIngressInbox
                 )
                 guard !Task.isCancelled else { return applied }
 
@@ -430,10 +428,10 @@ final class ProviderIngressCoordinator {
                         )
                     }
                 case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
-                    guard allowFallbackPull else {
+                    guard allowWakeupSync else {
                         _ = await notificationIngressInbox.markRetry(
                             claimedEntry,
-                            reason: "fallback_pull_disabled"
+                            reason: "wakeup_sync_disabled"
                         )
                         break
                     }
@@ -582,7 +580,7 @@ final class ProviderIngressCoordinator {
         if !skipInboxMerge {
             _ = await mergeInbox(
                 reason: "sync_\(reason)",
-                allowFallbackPull: false
+                allowWakeupSync: false
             )
         }
         guard !Task.isCancelled else { return .skipped }
@@ -638,16 +636,14 @@ final class ProviderIngressCoordinator {
                         deliveryId: item.deliveryId,
                         baseURL: config.baseURL,
                         deviceKey: deviceKey,
-                        ackContract: pullResult.requiresAck ? .v2Batch : .legacySingle
+                        ackContract: .v2Batch
                     ) else {
                         pageContainsFailedItem = true
                         continue
                     }
-                    let ackIdentity = pullResult.requiresAck ? ingressIdentity : nil
                     guard await journalPulledPayload(
                         payload,
                         deliveryID: item.deliveryId,
-                        contract: pullResult.contract,
                         baseURL: config.baseURL,
                         deviceKey: deviceKey,
                         source: "provider.pull.page.\(platformSuffix)"
@@ -662,7 +658,6 @@ final class ProviderIngressCoordinator {
                         DurablePulledItem(
                             payload: payload,
                             deliveryID: item.deliveryId,
-                            ackIdentity: ackIdentity,
                             ingressIdentity: ingressIdentity
                         )
                     )
@@ -689,39 +684,22 @@ final class ProviderIngressCoordinator {
                             targetPersistenceFailed = true
                         }
                     }
-                    if item.ackIdentity == nil {
-                        if result.allowsPulledItemRemoval {
-                            await notificationIngressInbox.markTerminal(
-                                identity: item.ingressIdentity,
-                                discarded: {
-                                    if case .rejected = result { return true }
-                                    return false
-                                }(),
-                                reason: "canonical_validation_rejected"
-                            )
-                        }
-                    } else {
-                        switch result {
-                        case .persisted, .duplicate:
-                            await notificationIngressInbox.markTerminal(
-                                identity: item.ingressIdentity,
-                                discarded: false
-                            )
-                        case .rejected:
-                            await notificationIngressInbox.markTerminal(
-                                identity: item.ingressIdentity,
-                                discarded: true,
-                                reason: "canonical_validation_rejected"
-                            )
-                        case .failed:
-                            break
-                        }
+                    switch result {
+                    case .persisted, .duplicate:
+                        await notificationIngressInbox.markTerminal(
+                            identity: item.ingressIdentity,
+                            discarded: false
+                        )
+                    case .rejected:
+                        await notificationIngressInbox.markTerminal(
+                            identity: item.ingressIdentity,
+                            discarded: true,
+                            reason: "canonical_validation_rejected"
+                        )
+                    case .failed:
+                        break
                     }
-                    if pullResult.requiresAck, result.allowsPulledItemRemoval {
-                        guard item.ackIdentity != nil else {
-                            pageContainsFailedItem = true
-                            continue
-                        }
+                    if result.allowsPulledItemRemoval {
                         deliveryIdsToAck.append(item.deliveryID)
                     }
                 }
@@ -947,36 +925,25 @@ final class ProviderIngressCoordinator {
             deliveryId: deliveryId,
             baseURL: context.baseURL,
             deviceKey: context.deviceKey,
-            ackContract: context.requiresAck ? .v2Batch : .legacySingle
+            ackContract: .v2Batch
         ) else {
             await wakeupPullClaimStore.releaseLease(context.claimLease)
             return
         }
-        if context.requiresAck {
-            switch result {
-            case .persisted, .duplicate:
-                await notificationIngressInbox.markTerminal(
-                    identity: identity,
-                    discarded: false
-                )
-            case .rejected:
-                await notificationIngressInbox.markTerminal(
-                    identity: identity,
-                    discarded: true,
-                    reason: "canonical_validation_rejected"
-                )
-            case .failed:
-                break
-            }
-        } else {
+        switch result {
+        case .persisted, .duplicate:
             await notificationIngressInbox.markTerminal(
                 identity: identity,
-                discarded: {
-                    if case .rejected = result { return true }
-                    return false
-                }(),
+                discarded: false
+            )
+        case .rejected:
+            await notificationIngressInbox.markTerminal(
+                identity: identity,
+                discarded: true,
                 reason: "canonical_validation_rejected"
             )
+        case .failed:
+            break
         }
         await wakeupPullClaimStore.markCompleted(context.claimLease)
         // ACK is owned by the durable worker. Canonical persistence and
@@ -993,7 +960,6 @@ final class ProviderIngressCoordinator {
         await journalPulledPayload(
             payload,
             deliveryID: deliveryID,
-            contract: context.contract,
             baseURL: context.baseURL,
             deviceKey: context.deviceKey,
             source: source
@@ -1003,28 +969,19 @@ final class ProviderIngressCoordinator {
     private func journalPulledPayload(
         _ payload: [AnyHashable: Any],
         deliveryID: String,
-        contract: ChannelSubscriptionService.PullContract,
         baseURL: URL,
         deviceKey: String,
         source: String
     ) async -> Bool {
-        let requiresAck = contract == .v2
-        let identity = requiresAck
-            ? ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                deliveryId: deliveryID,
-                baseURL: baseURL,
-                deviceKey: deviceKey,
-                ackContract: .v2Batch
-            )
-            : nil
-        if requiresAck, identity == nil { return false }
+        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+            deliveryId: deliveryID,
+            baseURL: baseURL,
+            deviceKey: deviceKey,
+            ackContract: .v2Batch
+        ) else { return false }
         var durablePayload = UserInfoSanitizer.sanitize(payload)
         durablePayload["base_url"] = baseURL.absoluteString
         durablePayload["provider_device_key"] = deviceKey
-        if !requiresAck {
-            durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
-                ProviderLegacyDestructivePullMetadata.markerValue
-        }
         let codablePayload = durablePayload.reduce(
             into: [String: AnyCodable]()
         ) { result, element in
@@ -1035,7 +992,7 @@ final class ProviderIngressCoordinator {
             requestIdentifier: deliveryID,
             source: source,
             ackIdentity: identity,
-            requiredEntryState: requiresAck ? "terminal_local" : "durable"
+            requiredEntryState: "terminal_local"
         )
     }
 

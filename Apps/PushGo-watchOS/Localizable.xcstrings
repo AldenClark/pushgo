@@ -1104,6 +1104,29 @@
         }
       }
     },
+    "gateway_v2_pull_required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current gateway is unavailable. Upgrade the gateway to the latest version."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前网关无法使用，请升级网关到最新版本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當前網關無法使用，請升級網關到最新版本"
+          }
+        }
+      }
+    },
     "gateway_temporarily_unavailable": {
       "extractionState": "manual",
       "localizations": {

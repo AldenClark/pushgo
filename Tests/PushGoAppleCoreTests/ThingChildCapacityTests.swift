@@ -49,6 +49,9 @@ struct ThingChildCapacityTests {
             )
             _ = try await store.persistNotificationMessagesIfNeeded([messageChild, eventChild])
 
+            // Freeze the sentinel's full derived-work receipt before testing
+            // rollback; its normal worker completion is unrelated to replay.
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
             let before = try await snapshot(
                 db: database,
                 formalMessageID: formal.messageId!,

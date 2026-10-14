@@ -152,6 +152,11 @@ final class AppEnvironment {
             reportInboxProgress: { _ in },
             recordProviderError: { [weak self] error, source in
                 self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+                if let appError = error as? AppError,
+                   appError.code == "provider_pull_v2_required" {
+                    self?.updateStandaloneReadiness(false, failureReason: "provider_pull_v2_required")
+                    self?.showErrorToast(appError, duration: 8)
+                }
             }
             )
         )
@@ -184,7 +189,7 @@ final class AppEnvironment {
             Task { @MainActor in
                 _ = await self.mergeNotificationIngressInbox(
                     reason: "darwin_notification",
-                    allowFallbackPull: false
+                    allowWakeupSync: false
                 )
                 self.scheduleProviderAckDrain(source: "provider.ingress_changed.watchos")
             }
@@ -226,7 +231,7 @@ final class AppEnvironment {
         schedulePreviousGatewayCleanup()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
-            allowFallbackPull: true
+            allowWakeupSync: true
         )
         Task(priority: .utility) { @MainActor in
             await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.watchos")
@@ -931,7 +936,7 @@ final class AppEnvironment {
                 guard let self else { return }
                 _ = await self.mergeNotificationIngressInbox(
                     reason: "scene_active",
-                    allowFallbackPull: false
+                    allowWakeupSync: false
                 )
                 self.scheduleMessageListRefresh()
                 self.flushPendingMessageListRefreshIfNeeded()
@@ -1525,6 +1530,21 @@ final class AppEnvironment {
 
     func setQualityGatewayRouteResult(_ result: String) {
         qualityGatewayRouteResult = result
+    }
+
+    /// Replays the durable hint that the Watch NSE journals for a silent
+    /// wakeup, then uses the same production host drain as bootstrap/Darwin.
+    func qualityReceiveDurableWakeup(_ payload: [String: AnyCodable]) async {
+        _ = await notificationIngressInbox.enqueue(
+            codablePayload: payload,
+            requestIdentifier: payload["delivery_id"]?.value as? String,
+            source: "watch_nse.wakeup_hint",
+            ackIdentity: nil,
+            requiredEntryState: "durable",
+            postChangeNotification: false
+        )
+        _ = await mergeNotificationIngressInbox(reason: "quality_silent_wakeup", allowWakeupSync: true)
+        await drainProviderDeliveryAckFailures(source: "quality_silent_wakeup")
     }
 #endif
 
@@ -2246,12 +2266,12 @@ final class AppEnvironment {
     @discardableResult
     func mergeNotificationIngressInbox(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> Int {
         let applied = await providerIngressCoordinator.mergeInbox(
             reason: reason,
-            allowFallbackPull: allowFallbackPull,
+            allowWakeupSync: allowWakeupSync,
             limit: limit
         )
         scheduleProviderAckDrain(source: "provider.merge.\(reason).watchos")

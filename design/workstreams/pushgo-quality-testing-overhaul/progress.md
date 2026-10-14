@@ -1017,3 +1017,33 @@ Apple 基线 `47f25fb7289fdf658357e940b2a79734fad1e42d` 保持不变；4 份源�
 新构建手机＋原生已验且源码未改的Watch产物，一次有界5→15配对配置验收PASS：两档均应用配置并得到一致generation/digest ACK；最后Watch普通重开后Store仍为15。配对脚本先清观察文件仍可能被旧进程最后一次写入，最终修为先显式终止旧进程，再删response/state并启动，实际Store保留。受影响impact＋脚本74项先通过，最终时序修复后只重验launcher5项通过。没有重跑已绿配对；离线系统日志证明最后旧PID24669于17:04:20.099Z退出，新PID25178于.131Z启动，保存的15分钟state于.465394Z写入，因而本次最终重开确属新进程，排除旧writer。脚本最后时序版本仅有定向5项合同，未伪称其再次完整执行配对。最终手机仍degraded且当前ACK匹配，符合placeholder Gateway未就绪而配置已落盘的合同；不虚称真实Gateway注册/APNs成功。
 
 证据 `build/quality-results/watch-standalone-expiry-20261013/phone-state-followup/`：原日志摘录/诊断、native xcresult、配对收据、final-state、tested-artifacts、脚本日志与影响计划。上一批Apple Core39项义务、Watch4/4、iOS大字号Picker1/1及Gateway9/9＋迁移10/10＋Clippy按未改受测输入分段复用；本轮未重复这些套件。当前impact plan READY/release仅记录累计影响，用户要求仅本次范围，直接执行受影响脚本与native配对检查，不运行全量quality_changed脚本/PR/Release/性能。真实APNs、物理Watch后台/配对、实库PG/MySQL迁移等旧限制继续NOT_RUN。所有使用的模拟器恢复关机，数据/配对保留；Apple/Gateway HEAD与index不变，继续本地未提交、无推送/部署/发布，停止等待复查。
+
+
+## 2026-10-14 全端 V2 Pull／显式 ACK 最低协议切片
+
+本批仅实施新 App 退出旧网络 Pull 回退。Apple 共享服务及 iOS/macOS/watchOS 入口删除 destructive Pull、允许 legacy 回退开关、旧 PullResult contract/requiresAck 分支与专属新暂存生产路径；正常 wakeup 补拉预算以 `allowWakeupSync` 保留。旧 destructively fetched journal 内容继续有限结清，写入失败保留并可重开重试，不清表、不新建双轨框架。直接通知 `legacySingle` ACK、原 Gateway/device/token/contract ACK 恢复、V2 分页入库／ACK 屏障、普通 NSE→host 交接、去重及 Watch 提醒期限与内容生命周期分离均保留。
+
+精确升级提示要求实际 HTTP 404 且响应所有非空错误码一致为 `route_not_found`；HTTP 401/500/200 的伪造 body.status=404、冲突错误码、网络和无效响应均不得转成版本诊断。iOS/macOS/Watch 复用现有错误展示，三语言文案已登记；没有增加通用能力协商。最低协议的最早已核实本地稳定标签是 Gateway v1.3.0（204edd7c）；最新 Watch 提醒字段另需本地 Gateway 0c0365ef，无包含它的本地发布标签，不宣称已发布兼容组合。先升级 Gateway，再升级 App；服务端旧路由不属于本批删除范围。
+
+本地证据是分段结果：首次 focused 112/4 suites 有 1 项 fixture 时序失败，修复原持久 retry-due 准备后该项 1/1 通过；首次完整 Core 的 XCTest 25/25 通过，Swift Testing 475/48 suites 有 4 issues（过时 Watch source guard、Thing fixture derived worker 时序两项、Deletion presentation reload 时序），修复后受影响 29/3 suites 通过。最后新增实际 HTTP/body 状态反例首次 1 test/8 issues 确认分类缺陷，产品修复后 service 25/25 通过。原失败日志和 PR FAILED 收据保留，未重复整场 Core，不能写成完整 PR 通过。
+
+最终 iOS/macOS/Watch Debug build-for-testing 均通过；真实 loopback Gateway（SQLite，0c0365ef；binary SHA e7f3cf624f507036f81f3ad779481fbe0ff19b7bb1e517cae97ccab1b6e7aa24）与生产 Apple Service/Store/ACK 原生 Core 旅程 1/1 通过、零重试。其断言准确内容、先入库后 ACK、去重／已读／重开及实体流程。旧文件导入、迟到 writer、quarantine、旧 payload 失败后重开、direct ACK 及原目的地已有本轮 Core 通过记录。279 脚本合同和本地化通过；impact 为 READY，广义 release 推荐未在用户限定范围内执行。
+
+Apple UI 与大字号检查仍受 `require_unlocked_apple_ui_console.sh` 的 `IOConsoleLocked=Yes` 阻断：iOS/macOS/Watch 最后预检均 BLOCKED、0 tests、产品 NOT_RUN；新 Watch 静默 wakeup→真实 V2 request→准确 Store→ACK→重复／重开及升级提示用例只编译，未运行。不得将构建或 Core 结果替代它。实际 APNs、物理 Watch 后台、PG/MySQL 实库、Windows 原生、签名／远端 CI／正式发布均未验收。
+
+证据及身份索引：`build/quality-results/v2-pull-required-20261014/verification-summary.json`、`source-identities.json`、`apple-tested-inputs.json`、`apple-final-builds.json`、`real-gateway-final/summary.json`、`native-ui-preflight.json`；根审计报告有各端完整责任与有限旧数据退出条件。保留本地待审，无提交／推送／部署／发布；删除前确认、批量模式、并发与 transport 仅登记后续范围。
+
+
+### 2026-10-14 解锁后原生补验与网关升级提示定稿
+
+用户解锁后完成限定原生入口；提示按用户要求改为「当前网关无法使用，请升级网关到最新版本」。Apple/Android 的英文与繁体资源同步，Windows沿用现有英文/简体国际化；不新增版本比较、能力缓存或旧Pull回退。实际触发仍严格要求HTTP404和全部非空错误码为route_not_found。Watch真实截图见`build/quality-results/v2-pull-required-20261014/native-unlocked/watch/watch-gateway-upgrade-zh-Hans.png`。
+
+首次iOS五方法中刷新失败恢复、分页与已读、Gateway设置与重开三项通过；导航与标准消息准备失败，原runner保持BLOCKED。新增失败AX/screen附件保持15秒、单快照与session校验不变，诊断两项仍失败。macOS初次两项同样在准备阶段失败；实际AX/runtime receipt与原进程系统网络日志证明自动bootstrap请求默认Gateway返回404，runtime_error_count使quality.ready失败。iOS导航新截图显示相同升级toast和正确failed session，但其内部事件已被下一session清理，不伪造完整首轮因果收据。最终仅隔离无显式Gateway的App-owned quality session自动register/Pull；生产/显式Gateway、本地inbox/recovery、ACK和手动刷新保留，政策单项1/1通过。
+
+iOS标准消息诊断截图/原SQLite ledger证实：DEBUG伪v17夹具先创建v27，再回退ledger却漏删watch_alert_window_minutes，正常v27迁移再次加列失败。只修该fixture回退；生产迁移未改。实际helper回归先红1test/3issues，修后准确内容与ledger通过但独立GRDB连接schema cache导致列观察失败；换为SQLite pragma直接查询后1/1通过。三份日志保留，无重试覆盖原失败。
+
+修复后重新编译的macOS两方法2/2（28.214s刷新恢复、66.871s导航），iOS两方法2/2（67.228s导航、80.983s标准内容/旧库升级/重开）；另iOS中文accessibility5消息详情与频道创建1/1（40.275s）。Watch新入口最终1/1（21.346s）：静默wakeup→V2实际请求→Store→ACK、重复/已读/重开、缺V2准确提示，保留内容且无legacy请求。Watch首轮fixture缺ProviderGatewayTokenStore凭据造成3次而非2次Pull，修fixture后严格路径/内容/读态/ACK通过；随后toast现有AX标签为关闭而非文本的观察失败也保留，最终查询现有error toast并由runtime核对完整中文，附实际截图。不外推Watch VoiceOver完整任务证据。
+
+原生共九项义务为分段结果（iOS首轮3+修后2、macOS2、Watch1、大字号1），不是整个PR/Release重跑。Core原475整场FAILED、之前279脚本/25service/29受影响Core/真实Gateway1及Android/Windows协议证据按未改行为范围保留；本轮只新跑两条准备边界Core回归、受影响原生与READY影响计划。Android文案仅资源检查，Windows文案实际source单项1/1，二者未新增原生渲染验收。Windows原生、真实APNs/物理Watch/PG/MySQL/远端CI/正式发布仍NOT_RUN。
+
+修后原生候选SHA e16d3b31eaa7f8ed1c911cc5e959e0a41be40aaa322326d4820e9cc240795ef3绑定`native-unlocked/apple-source-before-repaired-native.json`，后续仅文档更新；最终源文件哈希和scoped patches在主`source-identities.json`。首轮与诊断xcresults、错误附件、各方法与命令、修复与复用边界在`native-unlocked/verification-summary.json`。任务iPhone/Watch恢复Shutdown、数据/配对保留；原AegirBooted未操作，租约释放。所有仓库HEAD/index保持；无提交/推送/部署/发布，停止本批。

@@ -14,6 +14,7 @@ Implement the target architecture in `design/apple-durable-ingress-final-design.
 - Canonical commit is the UI visibility boundary; projections retry independently.
 - Foreground reconciliation is sufficient when background execution never runs.
 - Legacy inbox/ACK/claim state imports idempotently and no new normal-path legacy writes remain after cutover.
+- All new Apple clients require V2 Pull and explicit ACK. No destructive legacy network Pull or new destructive staging is produced; already-fetched old payloads retain finite import/drain recovery. Direct single-item ACK and normal NSE-to-host handoff remain independent consumers.
 
 ## Outcome slices
 

@@ -6,21 +6,12 @@ struct ChannelSubscriptionService {
     static let deviceChannelDeletePath = "/channel/device/delete"
     static let providerTokenRetirePath = "/channel/device/provider-token/retire"
     static let pullV2Path = "/v2/messages/pull"
-    static let pullLegacyPath = "/messages/pull"
     static let ackPath = "/messages/ack"
     static let batchAckV2Path = "/v2/messages/ack"
-
-    enum PullContract: Sendable, Equatable {
-        case v2
-        case legacy
-    }
 
     struct PullResult: Sendable, Equatable {
         let items: [PullItem]
         let hasMore: Bool
-        let contract: PullContract
-
-        var requiresAck: Bool { contract == .v2 }
     }
 
     private let requestTransport: @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -562,53 +553,59 @@ struct ChannelSubscriptionService {
         baseURL: URL,
         token: String?,
         deviceKey: String,
-        deliveryId: String? = nil,
-        allowLegacyFallback: Bool = true
+        deliveryId: String? = nil
     ) async throws -> PullResult {
+        let response = try await requestPullMessages(
+            baseURL: baseURL,
+            token: token,
+            deviceKey: deviceKey,
+            deliveryId: deliveryId
+        )
+        return PullResult(items: response.items, hasMore: response.hasMore ?? false)
+    }
+
+    private func decodeRequiredV2Payload<T: Decodable>(
+        _ type: T.Type,
+        data: Data,
+        response: URLResponse,
+        path: String
+    ) throws -> T {
         do {
-            let response = try await pullMessages(
-                baseURL: baseURL,
-                token: token,
-                deviceKey: deviceKey,
-                deliveryId: deliveryId,
-                path: Self.pullV2Path
+            return try decodePayload(type, data: data, response: response)
+        } catch {
+            // A body-provided status must not turn HTTP auth, server or
+            // successful-but-malformed responses into an upgrade diagnosis.
+            guard (response as? HTTPURLResponse)?.statusCode == 404,
+                  case let AppError.gateway(problem) = error,
+                  problem.status == 404,
+                  let envelope = try? JSONDecoder().decode(StatusResponse<T>.self, from: data)
+            else { throw error }
+            let codes = Set([envelope.errorCode, envelope.problem?.code].compactMap { value -> String? in
+                guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                      !normalized.isEmpty else { return nil }
+                return normalized
+            })
+            guard codes == ["route_not_found"] else { throw error }
+            throw AppError.typedLocal(
+                code: "provider_pull_v2_required",
+                category: .validation,
+                message: LocalizationProvider.localized("gateway_v2_pull_required"),
+                detail: "Gateway does not support \(path)"
             )
-            return PullResult(
-                items: response.items,
-                hasMore: response.hasMore ?? false,
-                contract: .v2
-            )
-        } catch let AppError.gateway(problem)
-            where problem.status == 404
-                && problem.code?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    == "route_not_found"
-        {
-            guard allowLegacyFallback else {
-                throw AppError.gateway(problem)
-            }
-            let response = try await pullMessages(
-                baseURL: baseURL,
-                token: token,
-                deviceKey: deviceKey,
-                deliveryId: deliveryId,
-                path: Self.pullLegacyPath
-            )
-            return PullResult(items: response.items, hasMore: false, contract: .legacy)
         }
     }
 
-    private func pullMessages(
+    private func requestPullMessages(
         baseURL: URL,
         token: String?,
         deviceKey: String,
-        deliveryId: String?,
-        path: String
+        deliveryId: String?
     ) async throws -> PullResponse {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
-        components.path = components.path.appendingPathComponent(path)
+        components.path = components.path.appendingPathComponent(Self.pullV2Path)
         guard let url = components.url else {
             throw AppError.invalidURL
         }
@@ -638,7 +635,7 @@ struct ChannelSubscriptionService {
             )
         )
         let (data, response) = try await requestTransport(request)
-        return try decodePayload(PullResponse.self, data: data, response: response)
+        return try decodeRequiredV2Payload(PullResponse.self, data: data, response: response, path: Self.pullV2Path)
     }
 
     func ackMessage(
@@ -732,7 +729,7 @@ struct ChannelSubscriptionService {
             BatchAckRequest(deviceKey: normalizedDeviceKey, deliveryIds: normalizedDeliveryIds)
         )
         let (data, response) = try await requestTransport(request)
-        let result = try decodePayload(BatchAckResponse.self, data: data, response: response)
+        let result = try decodeRequiredV2Payload(BatchAckResponse.self, data: data, response: response, path: Self.batchAckV2Path)
         guard result.requestedCount == normalizedDeliveryIds.count,
               result.removedCount >= 0,
               result.removedCount <= result.requestedCount

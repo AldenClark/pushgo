@@ -270,7 +270,7 @@ struct ProviderIngressCoordinatorTests {
                     source: "test.thing-child.host-inbox")
                 #expect(enqueued)
             }
-            #expect(await coordinator.mergeInbox(reason: "test_pending_children", allowFallbackPull: false) == 2)
+            #expect(await coordinator.mergeInbox(reason: "test_pending_children", allowWakeupSync: false) == 2)
             #expect(persistedKinds == ["pending", "pending"])
             #expect(appliedCount == 2)
             #expect(await inbox.pendingEntries().isEmpty)
@@ -295,7 +295,7 @@ struct ProviderIngressCoordinatorTests {
                 "entity_type": "thing", "entity_id": "ingress-parent", "thing_id": "ingress-parent",
                 "message_id": "ingress-parent-message", "title": "Exact ingress parent", "body": "Parent body",
             ], requestIdentifier: "parent-request", source: "test.thing-child.parent"))
-            #expect(await coordinator.mergeInbox(reason: "test_parent_replay", allowFallbackPull: false) == 1)
+            #expect(await coordinator.mergeInbox(reason: "test_parent_replay", allowWakeupSync: false) == 1)
             #expect(persistedKinds == ["pending", "pending", "main"])
             #expect(appliedCount == 3, "Parent replay must not emit additional child ingress results")
             let detail = try await store.loadThingProjectionDetail(thingId: "ingress-parent")
@@ -432,7 +432,7 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
-    func legacyFallbackPersistsOuterIdentityWithoutCreatingAckMarker() async throws {
+    func unsupportedV2GatewayFailsWithoutCanonicalContentOrAckOrDestructivePull() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-legacy-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
@@ -457,145 +457,53 @@ struct ProviderIngressCoordinatorTests {
                 reason: "test_legacy",
                 skipInboxMerge: true
             )
-            #expect(outcome.appliedCount == 1)
-            #expect(await capture.deliveryIds == ["legacy-outer"])
-            #expect(await capture.payloadDeliveryIds == ["legacy-outer"])
+            #expect(!outcome.completedRequest)
+            #expect(outcome.appliedCount == 0)
+            #expect(await capture.deliveryIds.isEmpty)
+            #expect(await capture.payloadDeliveryIds.isEmpty)
             #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(httpState.recordedPaths() == [
                 "/GatewayA/v2/messages/pull",
-                "/GatewayA/messages/pull",
             ])
         }
     }
 
     @Test
-    func failedLegacyCanonicalWriteRecoversFromJournalWithoutRepullOrAck() async throws {
+    func alreadyDestructivelyFetchedLegacyPayloadDrainsAcrossFailureAndReopenWithoutNetworkOrAck() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
-            let host = "provider-legacy-recovery-\(UUID().uuidString.lowercased()).example"
+            let host = "old-pull-drain-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
-            let httpState = ProviderIngressHTTPState(
-                pullPayloads: [
-                    #"{"success":true,"data":{"items":[{"delivery_id":"legacy-recovery-001","payload":{"title":"legacy recovered"}}]}}"#,
-                ],
-                v2RouteNotFound: true
-            )
-            let capture = ProviderIngressCapture(results: [.failed, .persisted, .duplicate])
-            let firstProcess = makeCoordinatorContext(
-                host: host,
-                baseURL: baseURL,
-                store: store,
-                appGroupIdentifier: appGroupIdentifier,
-                httpState: httpState,
-                capture: capture
-            )
-            _ = await store.saveCachedDeviceKey("device-key", for: "macos")
+            let httpState = ProviderIngressHTTPState(pullPayloads: [], v2RouteNotFound: true)
+            let capture = ProviderIngressCapture(results: [.failed, .persisted])
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
             #expect(await inbox.enqueue(
                 payload: [
-                    "provider_wakeup": true,
-                    "provider_mode": "wakeup",
-                    "delivery_id": "legacy-recovery-001",
-                    "base_url": baseURL.absoluteString,
-                    "title": "Recovery hint",
+                    "message_id": "legacy-recovered-message", "delivery_id": "legacy-recovery-001",
+                    "title": "Already fetched content", "body": "Preserve destructive fetch across upgrade",
+                    "base_url": baseURL.absoluteString, "provider_device_key": "old-device",
+                    ProviderLegacyDestructivePullMetadata.markerKey: ProviderLegacyDestructivePullMetadata.markerValue,
                 ],
-                requestIdentifier: "legacy-recovery-001",
-                source: "test.legacy_recovery_hint"
+                requestIdentifier: "legacy-recovery-001", source: "old.release.destructive_pull"
             ))
-
-            let first = await firstProcess.coordinator.syncProviderIngressOutcome(
-                deliveryId: "legacy-recovery-001",
-                reason: "test_legacy_failure_before_restart",
-                skipInboxMerge: true
-            )
-            #expect(!first.completedRequest)
-            let durableBeforeRestart = await NotificationIngressInbox(
-                appGroupIdentifier: appGroupIdentifier
-            ).pendingEntries()
-            #expect(durableBeforeRestart.count == 2)
-            #expect(
-                durableBeforeRestart.contains {
-                    $0.payload[ProviderLegacyDestructivePullMetadata.markerKey] as? String
-                        == ProviderLegacyDestructivePullMetadata.markerValue
-                }
-            )
-            let durableLegacy = try #require(durableBeforeRestart.first {
-                $0.payload[ProviderLegacyDestructivePullMetadata.markerKey] as? String
-                    == ProviderLegacyDestructivePullMetadata.markerValue
-            })
-            #expect(durableLegacy.payload["base_url"] as? String == baseURL.absoluteString)
-            #expect(durableLegacy.payload["provider_device_key"] as? String == "device-key")
-            firstProcess.cleanup()
-
-            let restartedProcess = makeCoordinatorContext(
-                host: host,
-                baseURL: baseURL,
-                store: store,
-                appGroupIdentifier: appGroupIdentifier,
-                httpState: httpState,
-                capture: capture
-            )
-            defer { restartedProcess.cleanup() }
-            let recovered = await restartedProcess.coordinator.mergeInbox(
-                reason: "test_legacy_restart_recovery",
-                allowFallbackPull: true
-            )
-
-            #expect(recovered == 1)
-            #expect(await capture.deliveryIds == [
-                "legacy-recovery-001",
-                "legacy-recovery-001",
-                "legacy-recovery-001",
-            ])
-            #expect(httpState.recordedPaths() == [
-                "/GatewayA/v2/messages/pull",
-                "/GatewayA/messages/pull",
-            ])
-            #expect(await restartedProcess.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
-            #expect(await NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier).pendingEntries().isEmpty)
-        }
-    }
-
-    @Test @MainActor
-    func cancelledAckDrainDoesNotAcquireLeaseOrReachNetwork() async throws {
-        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
-            let host = "provider-cancelled-ack-\(UUID().uuidString.lowercased()).example"
-            let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
-            let httpState = ProviderIngressHTTPState(pullPayloads: [])
-            let context = makeCoordinatorContext(
-                host: host,
-                baseURL: baseURL,
-                store: store,
-                appGroupIdentifier: appGroupIdentifier,
-                httpState: httpState,
-                capture: ProviderIngressCapture(results: [])
-            )
-            defer { context.cleanup() }
-            let identity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                deliveryId: "cancelled-ack-001",
-                baseURL: baseURL,
-                deviceKey: "device-key",
-                ackContract: .v2Batch
-            ))
-            #expect(await context.ackStore.markInboxDurable(
-                identity: identity,
-                source: "test.cancelled.ack",
-                postNotification: false
-            ))
-            let barrier = ProviderIngressCancellationBarrier()
-            let coordinator = context.coordinator
-            let work = Task { @MainActor in
-                await barrier.pause()
-                await coordinator.drainAckMarkers(source: "test_cancelled_ack")
-            }
-
-            await barrier.waitUntilPaused()
-            work.cancel()
-            await barrier.release()
-            await work.value
-
-            let pending = await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0)
-            #expect(pending.count == 1)
-            #expect(pending.first?.attemptCount == 0)
+            let pending = try #require(await inbox.pendingEntries().first)
+            let first = makeCoordinatorContext(host: host, baseURL: baseURL, store: store,
+                appGroupIdentifier: appGroupIdentifier, httpState: httpState, capture: capture, persistToStore: true)
+            #expect(await first.coordinator.mergeInbox(reason: "legacy_drain_failure", allowWakeupSync: false) == 0)
+            #expect(try await store.loadMessage(messageId: "legacy-recovered-message") == nil)
+            // Make the persisted retry due without waiting on the wall clock.
+            await inbox.markRetry(pending, reason: "test_retry_due", retryAfter: .distantPast)
+            #expect(await inbox.pendingEntries().count == 1)
+            first.cleanup()
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: try #require(PushGoAutomationContext.storageRootOverrideURL))
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let resumed = makeCoordinatorContext(host: host, baseURL: baseURL, store: reopened,
+                appGroupIdentifier: appGroupIdentifier, httpState: httpState, capture: capture, persistToStore: true)
+            defer { resumed.cleanup() }
+            #expect(await resumed.coordinator.mergeInbox(reason: "legacy_drain_resume", allowWakeupSync: false) == 1)
+            #expect(try await reopened.loadMessage(messageId: "legacy-recovered-message")?.title == "Already fetched content")
+            #expect(try await reopened.loadMessage(messageId: "legacy-recovered-message")?.body == "Preserve destructive fetch across upgrade")
+            #expect(await inbox.pendingEntries().isEmpty)
+            #expect(await resumed.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(httpState.recordedPaths().isEmpty)
         }
     }
@@ -917,7 +825,7 @@ struct ProviderIngressCoordinatorTests {
 
             _ = await coordinator.mergeInbox(
                 reason: "test_foreign_delivery_id_reuse",
-                allowFallbackPull: true
+                allowWakeupSync: true
             )
 
             #expect(httpState.recordedPaths().contains("/Root/v2/messages/pull"))
@@ -941,7 +849,7 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
-    func inboxMergeWithFallbackDisabledCannotReachDestructiveLegacyPull() async throws {
+    func inboxMergeWithWakeupSyncDisabledCannotReachDestructiveLegacyPull() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-no-legacy-merge-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
@@ -977,7 +885,7 @@ struct ProviderIngressCoordinatorTests {
 
             #expect(await context.coordinator.mergeInbox(
                 reason: "test_no_legacy_merge",
-                allowFallbackPull: false
+                allowWakeupSync: false
             ) == 0)
             let paths = httpState.recordedPaths()
             #expect(!paths.isEmpty)
@@ -1023,14 +931,14 @@ struct ProviderIngressCoordinatorTests {
             let first = Task { @MainActor in
                 await context.coordinator.mergeInbox(
                     reason: "test_first",
-                    allowFallbackPull: false
+                    allowWakeupSync: false
                 )
             }
             await capture.waitUntilFirstBatchStarts()
             let joining = Task { @MainActor in
                 await context.coordinator.mergeInbox(
                     reason: "test_joining",
-                    allowFallbackPull: false
+                    allowWakeupSync: false
                 )
             }
             await Task.yield()
@@ -1057,7 +965,8 @@ struct ProviderIngressCoordinatorTests {
         appGroupIdentifier: String,
         httpState: ProviderIngressHTTPState,
         capture: ProviderIngressCapture,
-        progressCapture: ProviderInboxProgressCapture? = nil
+        progressCapture: ProviderInboxProgressCapture? = nil,
+        persistToStore: Bool = false
     ) -> CoordinatorContext {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ChannelServiceURLProtocol.self]
@@ -1080,7 +989,11 @@ struct ProviderIngressCoordinatorTests {
                 cachedDeviceKey: { "device-key" },
                 hasPersistedNotification: { _ in false },
                 persistPayloads: { inputs in
-                    await capture.persist(inputs: inputs)
+                    let injected = await capture.persist(inputs: inputs)
+                    guard persistToStore, !injected.contains(where: { if case .failed = $0 { return true }; return false }) else { return injected }
+                    return await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                        inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) }, dataStore: store
+                    ).map(ProviderIngressPersistenceResult.init)
                 },
                 applyPersistenceResults: { _ in },
                 reportInboxProgress: { progress in

@@ -124,16 +124,23 @@ struct MessagePerformanceArchitectureGuardrailTests {
         #expect(sharedWakeupReturn.lowerBound < sharedDirect.lowerBound)
 
         let watchHint = try #require(watchProcessor.range(of: "source: \"watch_nse.wakeup_hint\""))
+        let watchWakeupPreparation = try #require(
+            watchProcessor.range(
+                of: "let prepared = await contentPreparer.prepare(content, includeMediaAttachments: false)",
+                range: watchHint.upperBound..<watchProcessor.endIndex
+            )
+        )
         let watchWakeupReturn = try #require(
             watchProcessor.range(
-                of: "return await contentPreparer.prepare(content, includeMediaAttachments: false)",
-                range: watchHint.upperBound..<watchProcessor.endIndex
+                of: "return Self.applyFreshness(to: prepared)",
+                range: watchWakeupPreparation.upperBound..<watchProcessor.endIndex
             )
         )
         let watchDirect = try #require(
             watchProcessor.range(of: "let ingress = WatchNotificationIngressResolution.direct")
         )
         #expect(watchHint.lowerBound < watchDirect.lowerBound)
+        #expect(watchWakeupPreparation.lowerBound < watchDirect.lowerBound)
         #expect(watchWakeupReturn.lowerBound < watchDirect.lowerBound)
     }
 

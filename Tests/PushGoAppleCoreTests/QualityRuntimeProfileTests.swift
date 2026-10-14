@@ -4,6 +4,16 @@ import Testing
 
 @Suite("Quality runtime profile")
 struct QualityRuntimeProfileTests {
+    @Test("Local App-owned preparation requires an explicit Gateway for automatic provider startup")
+    func automaticProviderBootstrapRequiresExplicitGatewayForAppOwnedFixtures() {
+        let session = PushGoQualitySessionDescriptor(sessionID: "provider-bootstrap-local", fixture: .messagesStandard)
+        #expect(PushGoAutomationContext.automaticProviderBootstrapAllowed(qualitySession: nil, explicitGatewayBaseURL: nil))
+        #expect(PushGoAutomationContext.automaticProviderBootstrapAllowed(qualitySession: nil, explicitGatewayBaseURL: "https://controlled.example"))
+        #expect(!PushGoAutomationContext.automaticProviderBootstrapAllowed(qualitySession: session, explicitGatewayBaseURL: nil))
+        #expect(!PushGoAutomationContext.automaticProviderBootstrapAllowed(qualitySession: session, explicitGatewayBaseURL: "  \n"))
+        #expect(PushGoAutomationContext.automaticProviderBootstrapAllowed(qualitySession: session, explicitGatewayBaseURL: "https://controlled.example"))
+    }
+
     @Test("App-owned fixtures isolate Spotlight while explicit and system indexers retain ownership")
     func spotlightOwnershipForQualitySessions() {
         let session = PushGoQualitySessionDescriptor(sessionID: "spotlight-quality", fixture: .messagesStandard)

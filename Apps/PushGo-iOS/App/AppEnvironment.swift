@@ -518,6 +518,10 @@ final class AppEnvironment {
             },
             recordProviderError: { [weak self] error, source in
                 self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+                if let appError = error as? AppError,
+                   appError.code == "provider_pull_v2_required" {
+                    self?.showErrorToast(appError, duration: 8)
+                }
             },
             shouldDeferStartupWakeupPulls: { [weak self] in
                 self?.shouldDeferStartupWakeupPulls ?? false
@@ -588,7 +592,7 @@ final class AppEnvironment {
             }
             let applied = await mergeNotificationIngressInbox(
                 reason: "bootstrap",
-                allowFallbackPull: false
+                allowWakeupSync: false
             )
 #if DEBUG
             if self.ingressPerformanceMeasurement?.mode == .measure {
@@ -598,13 +602,16 @@ final class AppEnvironment {
             }
 #endif
             await dataStore.scheduleDerivedWorkDrain()
-            await preparePushInfrastructure()
-            let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
+            var completedProviderSync = false
+            if PushGoAutomationContext.allowsAutomaticProviderBootstrap {
+                await preparePushInfrastructure()
+                completedProviderSync = await syncProviderIngressOutcome(reason: "bootstrap_ready").completedRequest
+            }
             _ = await mergeNotificationIngressInbox(
                 reason: "bootstrap_post_sync",
-                allowFallbackPull: false
+                allowWakeupSync: false
             )
-            if syncOutcome.completedRequest {
+            if completedProviderSync {
                 _ = await purgePendingUnresolvedWakeupEntries()
             }
         }
@@ -2206,7 +2213,7 @@ final class AppEnvironment {
             Task { @MainActor in
                 _ = await mergeNotificationIngressInbox(
                     reason: "ios_scene_active",
-                    allowFallbackPull: true
+                    allowWakeupSync: true
                 )
                 scheduleMessageListRefresh()
                 await refreshChannelSubscriptions()
@@ -2329,7 +2336,7 @@ final class AppEnvironment {
     @discardableResult
     func mergeNotificationIngressInbox(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> Int {
 #if DEBUG
@@ -2342,14 +2349,14 @@ final class AppEnvironment {
 #endif
         return await notificationIngressController.mergeNotificationIngressInbox(
             reason: reason,
-            allowFallbackPull: allowFallbackPull,
+            allowWakeupSync: allowWakeupSync,
             limit: limit
         )
     }
 
     func mergeNotificationIngressInboxOutcome(
         reason: String,
-        allowFallbackPull: Bool,
+        allowWakeupSync: Bool,
         limit: Int = 256
     ) async -> NotificationIngressController.MergeOutcome {
 #if DEBUG
@@ -2365,7 +2372,7 @@ final class AppEnvironment {
 #endif
         return await notificationIngressController.mergeNotificationIngressInboxOutcome(
             reason: reason,
-            allowFallbackPull: allowFallbackPull,
+            allowWakeupSync: allowWakeupSync,
             limit: limit
         )
     }

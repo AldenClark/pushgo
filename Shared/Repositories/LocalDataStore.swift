@@ -531,6 +531,10 @@ actor LocalDataStore {
     }
 
     #if DEBUG
+    static func prepareQualityLegacyStoreForTesting(storeURL: URL) throws {
+        try GRDBStore.prepareQualityLegacyStoreIfNeeded(storeURL: storeURL, legacyStore: .messagesV17)
+    }
+
     struct QualitySQLitePageMetrics: Sendable, Equatable {
         let pageCount: Int
         let pageSize: Int
@@ -4141,6 +4145,9 @@ private actor GRDBStore {
         let dbQueue = try DatabaseQueue(path: storeURL.path)
         try migrator.migrate(dbQueue)
         try dbQueue.write { db in
+            // The fixture below rewinds the ledger to v17. Rewind the v27
+            // setting column too, so production migration can add it once.
+            try db.execute(sql: "ALTER TABLE app_settings DROP COLUMN watch_alert_window_minutes;")
             try db.execute(sql: """
                 DROP TRIGGER IF EXISTS messages_stats_after_insert;
                 DROP TRIGGER IF EXISTS messages_stats_after_delete;

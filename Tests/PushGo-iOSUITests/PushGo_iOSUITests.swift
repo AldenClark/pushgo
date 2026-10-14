@@ -5976,9 +5976,12 @@ final class PushGo_iOSUITests: XCTestCase {
     ) {
         var observedStatus = "unobserved"
         var observedSessionID: String?
+        var observedMarkerValues: [String: String] = [:]
+        var lastSnapshot: (any XCUIElementSnapshot)?
         let preparation = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
                 guard let snapshot = try? app.snapshot() else { return false }
+                lastSnapshot = snapshot
                 var nodes: [any XCUIElementSnapshot] = [snapshot]
                 var markers: [String: String] = [:]
                 var storageUnavailable = false
@@ -5989,6 +5992,7 @@ final class PushGo_iOSUITests: XCTestCase {
                     }
                     storageUnavailable = storageUnavailable || node.identifier == "state.storage.unavailable"
                 }
+                observedMarkerValues = markers
                 observedSessionID = markers["quality-runtime.ready"]
                 if observedSessionID != nil {
                     observedStatus = expectedSessionID == nil || observedSessionID == expectedSessionID
@@ -6014,8 +6018,33 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         let result = XCTWaiter.wait(for: [preparation], timeout: timeout)
         if result == .completed && observedStatus == "ready" { return }
+        // Preserve the snapshot that produced the verdict before XCTest aborts
+        // this test. Failure markers carry a session value, not a ready receipt.
+        let markerDetails = observedMarkerValues.keys.sorted().map {
+            "\($0)=\(observedMarkerValues[$0] ?? "")"
+        }.joined(separator: "\n")
+        var snapshotLines: [String] = []
+        if let lastSnapshot {
+            var nodes: [(any XCUIElementSnapshot, Int)] = [(lastSnapshot, 0)]
+            while let (node, depth) = nodes.popLast() {
+                snapshotLines.append(
+                    "\(String(repeating: "  ", count: depth))type=\(node.elementType.rawValue) id=\(node.identifier) label=\(node.label) value=\(String(describing: node.value)) frame=\(node.frame)"
+                )
+                nodes.append(contentsOf: node.children.reversed().map { ($0, depth + 1) })
+            }
+        }
+        let diagnosis = XCTAttachment(string:
+            "status=\(observedStatus)\nexpected_session=\(expectedSessionID ?? "unspecified")\nready_session=\(observedSessionID ?? "unobserved")\nwait_result=\(result.rawValue)\n\(markerDetails)\nAX snapshot:\n\(snapshotLines.isEmpty ? "unavailable" : snapshotLines.joined(separator: "\n"))"
+        )
+        diagnosis.name = "quality-readiness-failure-snapshot"
+        diagnosis.lifetime = .keepAlways
+        add(diagnosis)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "quality-readiness-failure-screen"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         XCTFail(
-            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus); session: \(observedSessionID ?? "unobserved")",
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus); session: \(observedSessionID ?? "unobserved"); markers: \(markerDetails)",
             file: file,
             line: line
         )
