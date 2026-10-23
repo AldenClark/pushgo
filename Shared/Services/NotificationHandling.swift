@@ -111,7 +111,6 @@ enum NotificationPersistenceCoordinator {
         }
         var replacements: [PushMessage] = []
         replacements.reserveCapacity(candidates.count)
-        var decryptedCount = 0
 
         for existing in candidates {
             let payload = Dictionary<AnyHashable, Any>(
@@ -127,9 +126,6 @@ enum NotificationPersistenceCoordinator {
                 dataStore: dataStore
             ) else { continue }
 
-            if reparsed.decryptionState == .decryptOk {
-                decryptedCount += 1
-            }
             replacements.append(PushMessage(
                 id: existing.id,
                 messageId: existing.messageId,
@@ -145,13 +141,11 @@ enum NotificationPersistenceCoordinator {
             ))
         }
 
-        if !replacements.isEmpty {
-            try await dataStore.saveMessages(replacements)
-        }
+        let stored = replacements.isEmpty ? [] : try await dataStore.saveMessages(replacements)
         return EncryptedMessageRecoveryReport(
             examinedCount: candidates.count,
-            updatedCount: replacements.count,
-            decryptedCount: decryptedCount
+            updatedCount: stored.count,
+            decryptedCount: stored.filter { $0.decryptionState == .decryptOk }.count
         )
     }
 
@@ -316,7 +310,7 @@ enum NotificationPersistenceCoordinator {
             return .persistedMain(stored)
         case let .persistedPending(stored):
             return .persistedPending(stored)
-        case .duplicateRequest, .duplicateMessage:
+        case .duplicateRequest, .duplicateMessage, .duplicateProcessed:
             return .duplicate
         }
     }

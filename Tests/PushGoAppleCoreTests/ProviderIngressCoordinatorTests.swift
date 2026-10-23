@@ -602,6 +602,47 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
+    func deletedDirectReplayStillDrainsAckToItsOriginalGatewayWithoutRestoringContent() async throws {
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
+            let host = "deleted-direct-\(UUID().uuidString.lowercased()).example"
+            let baseURL = try #require(URL(string: "https://\(host)/OriginalGateway"))
+            let httpState = ProviderIngressHTTPState(pullPayloads: [])
+            let context = makeCoordinatorContext(host: host, baseURL: baseURL, store: store,
+                appGroupIdentifier: appGroupIdentifier, httpState: httpState,
+                capture: ProviderIngressCapture(results: []), persistToStore: true)
+            defer { context.cleanup() }
+            let payload: [AnyHashable: Any] = [
+                "entity_type": "message", "entity_id": "deleted-direct-message",
+                "message_id": "deleted-direct-message", "delivery_id": "deleted-direct-delivery",
+                "op_id": "deleted-direct-operation", "channel_id": "lifecycle",
+                "title": "Exact deleted title", "body": "Exact deleted body",
+                "base_url": baseURL.absoluteString, "provider_device_key": "original-device",
+            ]
+            let first = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                payload, requestIdentifier: "deleted-direct-delivery", dataStore: store)
+            guard case let .persistedMain(saved) = first else {
+                Issue.record("First Direct must be durably saved.")
+                return
+            }
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [saved.id])))
+            let replay = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                payload, requestIdentifier: "deleted-direct-delivery", dataStore: store)
+            guard case .duplicate = replay else {
+                Issue.record("Deleted replay must remain a processed duplicate.")
+                return
+            }
+            await context.coordinator.ackDirectDeliveryIfNeeded(payload: payload,
+                result: ProviderIngressPersistenceResult(replay), source: "test.deleted.direct")
+            await context.coordinator.drainAckMarkers(source: "test.deleted.direct.drain")
+            #expect(httpState.recordedPaths() == ["/OriginalGateway/messages/ack"])
+            #expect(httpState.recordedDeviceKeys() == ["original-device"])
+            #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
+            #expect(try await store.loadMessages().isEmpty)
+        }
+    }
+
+    @Test
     func directAckWithMissingImmutableSourceDoesNotGuessCurrentConfig() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-direct-missing-\(UUID().uuidString.lowercased()).example"

@@ -1059,3 +1059,26 @@ iOS标准消息诊断截图/原SQLite ledger证实：DEBUG伪v17夹具先创建v
 原生共九项义务为分段结果（iOS首轮3+修后2、macOS2、Watch1、大字号1），不是整个PR/Release重跑。Core原475整场FAILED、之前279脚本/25service/29受影响Core/真实Gateway1及Android/Windows协议证据按未改行为范围保留；本轮只新跑两条准备边界Core回归、受影响原生与READY影响计划。Android文案仅资源检查，Windows文案实际source单项1/1，二者未新增原生渲染验收。Windows原生、真实APNs/物理Watch/PG/MySQL/远端CI/正式发布仍NOT_RUN。
 
 修后原生候选SHA e16d3b31eaa7f8ed1c911cc5e959e0a41be40aaa322326d4820e9cc240795ef3绑定`native-unlocked/apple-source-before-repaired-native.json`，后续仅文档更新；最终源文件哈希和scoped patches在主`source-identities.json`。首轮与诊断xcresults、错误附件、各方法与命令、修复与复用边界在`native-unlocked/verification-summary.json`。任务iPhone/Watch恢复Shutdown、数据/配对保留；原AegirBooted未操作，租约释放。所有仓库HEAD/index保持；无提交/推送/部署/发布，停止本批。
+
+
+## 2026-10-24 普通 Message 确认删除与处理身份（隔离实施记录）
+
+目标：已经可靠处理的同一投递/操作在确认删除后不重建可见正文；真正的新身份仍可接收，重放继续按既有协议 ACK。仅本地候选，不推送、签名、真实 APNs 或用户数据库。
+
+实现：复用 operation_ledger，不新增 deleted/tombstone 表、TTL 或背景 worker。普通 Message 新 scope 包含规范化完整 Gateway 路径和原 recipient；同一现有 ledger 必要时保存 operation 与 delivery 两个精确查找事实，delivery-only 不伪造 op_id。正文缺失时返回无正文 duplicateProcessed，早于缺失父项入等待区。确认 Message/Thing/频道删除同事务从仍存在的 canonical 或 accepted pending Message 保留来源事实；Event/Thing 原 operation scope 不变。旧无来源 operation 行只在存活 canonical 能证明来源时补齐；既有 journal 的 validated terminal 可按 Gateway/device/delivery 精确保护旧 Direct/Pull，不加载正文，不延长原 35 天 journal 保留。新无 journal 文件为正常冷启动；现存坏库读取失败为 failed/no ACK。无法归属且无可证明 journal 的历史 op-only 行仍待用户策略决定，不能把全部历史写为闭合。
+
+证据：
+- quality_changed 默认 Xcode Python 3.9 首次三项脚本错误，完整保留 ../apple-impact.log。改用已有 Python 3.13 后 281 script contracts PASS，impact READY、推荐 nightly，plan-only 不等于夜间平台验收。
+- 初次 Swift 测试编译暴露新 fixture 的 GRDB async API 缺 await，以及新只读方法 return；日志 ../apple-focused.log、../apple-focused-fixed.log 保留；修正后 focused 25/25 PASS。
+- 精确 151d50cc 三个生产文件负控：新增两个生产重放 oracle 可编译并实际运行，2/2 因正文复活/未返回 duplicate 失败（5 issues）；恢复后对三文件 SHA-256 全部核对一致，../apple-baseline-negative.log 和 ../evidence/apple-negative-snapshot/sha256.json。
+- 负控恢复后的第一轮相关 199 方法中一项历史手写 fixture 与真实 derived worker 抢 SQLite 写锁失败；先 join 生产 drain 明确建立离线 fixture 前提后，相关 200/200、8 suites、0 skip、8.374 秒 PASS（../apple-related-final-v2.log）。不是增加等待/业务重试。
+- 已发现同一终态约束还须覆盖 generic saveMessage/saveMessages/saveMessagesBatch 的迟到解密 snapshot；实现复用同 DB 检查，不改变现存 canonical enrichment、新身份或 Event/Thing。saveMessages 返回实际存储结果，解密恢复统计不为被丢弃旧 snapshot 报成功。最终含此路径的回归收据另附，不沿用先前 200 的运行源码声明。
+- Watch 原生产 SQLite 源码 host 回归 6/6 PASS；固定旧生产源码在确认删除后同 delivery 重放 oracle 失败。Watch 已处理 delivery 原记录保留，无 schema/TTL 增加；非 watchOS 编译或真实后台/APNs 证据。
+
+本轮没有资源缓存、图像、依赖或 UI 重构。完整 PR/nightly 原生 UI、NSE、物理 Watch、真实 Provider 与断电没有据此验收。
+
+最终共享 Apple 输入：生产 generic writer 复用同一处理身份检查，只有 canonical 缺失（或当前全局 message_id 已归属另一来源）时阻止旧 Message snapshot 插入；同一存活 origin 的内容刷新、新身份及 Event/Thing 不变。legacy-live 回填同时验证 canonical 的旧 operation scope 和已知 delivery，不因同名 message_id 猜 owner。最终相关 202/202、8 suites、0 skip、8.610 秒 PASS，收据 ../apple-related-final-v4.log。前一轮新增 fixture 的 live 更新使用未跨毫秒存储精度的原 Date，按既有版本门槛被当旧版本；改为显式后续版本 +1 秒，不改产品条件、不 sleep/retry，原 v3 两项断言失败保留。
+
+未知旧来源的策略精确项仍 BLOCKED 待用户决定：旧 operation row 缺 Gateway/recipient、canonical 已删除且 retained journal 无可靠终态映射。该分支不擅自选择新的拒绝或归属语义；保留原记录和原行为。当前提交是可证明来源与新处理事实的修复检查点，不称所有历史已闭合。后续资源专题仅需沿用此处理终态与缓存失效边界，不在本轮改资源加载。
+
+Watch 最终后继：7/7 production SQLite cases PASS；覆盖删除/reopen/ACK可用终态、新身份、不同Gateway及同message_id再占用后的旧重放。新 message_id 索引在实际 Store 的 EXPLAIN 为 covering range SEARCH。af050d 的同源码第7负控明确失败，前6通过。结果范围为 host exact-source SQLite，不外推 watchOS/native。

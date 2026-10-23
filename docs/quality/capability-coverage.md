@@ -630,3 +630,16 @@ Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言
 
 
 解锁后补验（2026-10-14）：用户指定升级提示已统一为「当前网关无法使用，请升级网关到最新版本」。iOS首轮3项加准备修复后2项、macOS2项、Watch静默V2/ACK/重开/提示1项、中文accessibility5任务1项通过。首败保留：自动bootstrap未隔离默认Gateway与DEBUG旧库fixture漏回退v27列；仅修测试准备边界，生产迁移和V2错误不被吞掉。另两条实际fixture/policy Core回归各1/1。不能把原完整PR FAILED改绿，Windows原生/物理接受度仍未验收。最新分段证据与截图见同日[workstream补验节](../../design/workstreams/pushgo-quality-testing-overhaul/progress.md)和`build/quality-results/v2-pull-required-20261014/native-unlocked/verification-summary.json`；源码身份已刷新，保持本地待审。
+
+
+## 2026-10-24 消息生命周期修复（本地隔离候选）
+
+- I/M Delete confirmation、I/M Ingress/ACK：确认删除保留既有 operation_ledger 中的处理事实；普通 Message 新事实按完整规范化 Gateway（保留路径前缀）和原 recipient 隔离，delivery-only 使用同一 ledger 的明确 delivery namespace，不伪造外部 op_id、不新增删除 tombstone 表或保留期。正文不存在时返回 payload-free processed duplicate，沿现有 ACK worker 继续确认；新 identity、相同正文仍可接收。确认 Thing/频道删除同事务保留其已接纳等待 Message 的身份，重放检查早于缺失父项入等待区。
+- 兼容边界：历史已删除且只剩无来源的旧 operation row 无法凭空恢复 Gateway；不将它归属给当前配置。当前 canonical message_id 的既有全局唯一约束不在本轮变更；不同来源隔离用实际新 message_id 覆盖。Event/Thing 的既有 operation scope 和生命周期域不改。
+- W Messages：复用原 Gateway＋delivery 记录；确认删除后同投递不重建 Message，重复结果仍可走既有 ACK。真实 Watch Store 源码 host SQLite 回归 6/6 PASS，旧 151d50cc 在同一删除重放 oracle 失败。此项不等于 watchOS 编译、物理 Watch 或 APNs 运行。
+- 新增 Apple GRDB/生产 NotificationPersistence/ProviderIngress ACK 定向和相关最终回归 202/202 PASS（8 suites，0 skip，8.610 秒）。已有 journal 的 validated/applied 或 discarded 事实按完整来源精确查询；只在同来源正文不存在时返回无正文 duplicate，有存活内容仍正常 enrichment。冷启动无 journal 文件不阻塞新消息，现存 journal 不可读取则 failed/no ACK。既有 35 天 journal 维护规则不变，不做全窗口加载。平台通知运行与真实外部服务不据此推断。
+
+- 最终补齐 generic saveMessage/saveMessages/saveMessagesBatch：已经删除的普通 Message 迟到 snapshot 不可 upsert，其他来源复用旧全局 message_id 时也不可被旧来源覆盖。现存 canonical enrichment、新 identity 与 Event/Thing 原逻辑保留；saveMessages 返回实际 stored 结果，解密恢复不把被丢弃的旧 snapshot 计作成功更新。最终 202 仅为 host production Store/notification/ACK 证据，不等于原生平台链路。
+- BLOCKED/待产品决定：旧无来源 operation 行、canonical 已删除且无可证明的 retained journal 时，历史归属无法恢复。本地检查点不改变该分支原行为，不把它列为已修复；原记录保留。
+
+- Watch 后继补齐同 Gateway/delivery 与另一 Gateway 复用 message_id 的所有权负控：最终 exact-production SQLite 7/7 PASS，新增 message_id 索引的实际 EXPLAIN 为 covering range SEARCH；af050d 负控前六项通过、第七项明确因跨 Gateway 旧重放覆盖新正文失败。没有用索引存在或单独 SQL 文本代替数据结果。watchOS 编译与系统运行仍 NOT RUN。

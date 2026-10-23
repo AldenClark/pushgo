@@ -190,6 +190,9 @@ enum NotificationStoreSaveOutcome: Sendable {
     case persistedPending(PushMessage)
     case duplicateRequest(PushMessage)
     case duplicateMessage(PushMessage)
+    // The accepted identity outlives its visible content. This is ACKable,
+    // without fabricating a replacement message after confirmed deletion.
+    case duplicateProcessed
 }
 
 private enum CanonicalDerivedWorkKind: String, CaseIterable, Sendable {
@@ -222,7 +225,10 @@ private func normalizeOperationField(_ value: String?) -> String? {
     return trimmed.isEmpty ? nil : trimmed
 }
 
-private func resolveOperationScopeIdentity(from message: PushMessage) -> OperationScopeIdentity? {
+private func resolveOperationScopeIdentity(
+    from message: PushMessage,
+    includeOrigin: Bool = true
+) -> OperationScopeIdentity? {
     guard let opId = normalizeOperationField(message.operationId) else {
         return nil
     }
@@ -238,7 +244,11 @@ private func resolveOperationScopeIdentity(from message: PushMessage) -> Operati
     }
 
     let channelId = normalizeOperationField(message.channel)
-    let scopeKey = "\(channelId ?? "_")|\(entityType)|\(entityId)|\(opId)"
+    let legacyScopeKey = "\(channelId ?? "_")|\(entityType)|\(entityId)|\(opId)"
+    let origin = includeOrigin && entityType == "message" ? notificationOriginScope(message) : nil
+    let scopeKey = origin.map {
+        "origin:\($0)|operation:\(legacyScopeKey)"
+    } ?? legacyScopeKey
     return OperationScopeIdentity(
         scopeKey: scopeKey,
         opId: opId,
@@ -246,6 +256,35 @@ private func resolveOperationScopeIdentity(from message: PushMessage) -> Operati
         entityType: entityType,
         entityId: entityId,
         deliveryId: normalizeOperationField(message.deliveryId)
+    )
+}
+
+/// Reuse the ACK identity's normalized Gateway and recipient scope. No token is
+/// part of this key, and a missing origin never borrows the current config.
+private func notificationOriginScope(_ message: PushMessage) -> String? {
+    guard let source = message.providerSourceBaseURL,
+          let url = URL(string: source),
+          let gateway = normalizedProviderGatewayURL(url) else { return nil }
+    let recipient = normalizeOperationField(message.rawPayload["provider_device_key"]?.value as? String) ?? ""
+    // Length-prefix the two origin components so delimiters in a URL cannot
+    // create a false match. Full path prefixes remain significant.
+    let base = gateway.absoluteString
+    return "\(base.utf8.count):\(base)\(recipient.utf8.count):\(recipient)"
+}
+
+private func notificationDeliveryScopeIdentity(_ message: PushMessage) -> OperationScopeIdentity? {
+    guard normalizedEntityType(message) == "message",
+          let delivery = normalizeOperationField(message.deliveryId) else { return nil }
+    let origin = notificationOriginScope(message) ?? "unscoped"
+    return OperationScopeIdentity(
+        scopeKey: "delivery:\(origin)|\(delivery.utf8.count):\(delivery)",
+        // Delivery-only input has no operation ID. Keep that absence rather
+        // than inventing a protocol operation; this column already permits it.
+        opId: normalizeOperationField(message.operationId) ?? "",
+        channelId: normalizeOperationField(message.channel),
+        entityType: "message",
+        entityId: normalizeOperationField(message.entityId) ?? message.messageId ?? delivery,
+        deliveryId: delivery
     )
 }
 
@@ -2339,10 +2378,11 @@ actor LocalDataStore {
         return AppError.localStore(message)
     }
 
+    @discardableResult
     func saveMessages(
         _ messages: [PushMessage],
         progressObserver: (@Sendable (String) async -> Void)? = nil
-    ) async throws {
+    ) async throws -> [PushMessage] {
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
         await progressObserver?("backend.start")
         let storedMessages = try await performBackendWrite { backend in
@@ -2363,6 +2403,7 @@ actor LocalDataStore {
         await progressObserver?("live_activity.end")
         await refreshSystemSurfaceSnapshot()
         await progressObserver?("system_snapshot.end")
+        return storedMessages
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
@@ -2409,11 +2450,48 @@ actor LocalDataStore {
     ) async throws -> [NotificationStoreSaveOutcome] {
         guard !messages.isEmpty else { return [] }
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
-        let outcomes = try await performBackendWrite { backend in
-            try await backend.persistNotificationMessagesIfNeeded(canonicalMessages)
+        var outcomes = Array<NotificationStoreSaveOutcome?>(repeating: nil, count: canonicalMessages.count)
+        var writes: [(Int, PushMessage)] = []
+        let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+        for (index, message) in canonicalMessages.enumerated() {
+            if try await hasRetainedProcessedDeliveryWithoutContent(message, journal: journal) {
+                outcomes[index] = .duplicateProcessed
+            } else {
+                writes.append((index, message))
+            }
+        }
+        let pendingWrites = writes.map(\.1)
+        let stored = try await performBackendWrite { backend in
+            try await backend.persistNotificationMessagesIfNeeded(pendingWrites)
+        }
+        for (write, outcome) in zip(writes, stored) {
+            outcomes[write.0] = outcome
         }
         scheduleDerivedWorkDrain()
-        return outcomes
+        return try outcomes.map { outcome in
+            guard let outcome else { throw AppError.localStore("Notification batch commit returned no outcome.") }
+            return outcome
+        }
+    }
+
+    private func hasRetainedProcessedDeliveryWithoutContent(
+        _ message: PushMessage,
+        journal: DurableIngressJournal
+    ) async throws -> Bool {
+        guard normalizedEntityType(message) == "message",
+              let deliveryID = normalizeOperationField(message.deliveryId),
+              let source = message.providerSourceBaseURL,
+              let sourceURL = URL(string: source),
+              let baseURL = normalizedProviderGatewayURL(sourceURL),
+              let recipient = normalizeOperationField(message.rawPayload["provider_device_key"]?.value as? String)
+        else { return false }
+        guard try await journal.hasProcessedDelivery(baseURL: baseURL.absoluteString,
+            deviceKey: recipient, deliveryID: deliveryID) else { return false }
+        // A retained journal terminal is proof for old Direct/Pull deliveries
+        // whose old operation row omitted origin. Do not alter enrichment of a
+        // still-visible canonical row. Read failures propagate (never ACK).
+        let existing = try await requireBackend().loadMessages(deliveryId: deliveryID)
+        return !existing.contains { notificationOriginScope($0) == notificationOriginScope(message) }
     }
 
     /// Starts (or joins) the single owned worker for canonical post-commit
@@ -6265,6 +6343,7 @@ private actor GRDBStore {
                         db,
                         sql: "SELECT * FROM messages WHERE id IN (\(inClause));"
                     ).map(GRDBMessageRecord.init(row:))
+                    try retainProcessedNotificationIdentities(records, db: db)
                     try db.execute(sql: "DELETE FROM messages WHERE id IN (\(inClause));")
                     try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
                     cleanup = deletionCleanup(messageRecords: records)
@@ -6305,6 +6384,9 @@ private actor GRDBStore {
                         db,
                         sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE thing_id IN (\(inClause));"
                     ) ?? 0
+                    try retainProcessedNotificationIdentities(records, db: db)
+                    try retainPendingProcessedNotificationIdentities(
+                        condition: "thing_id IN (\(inClause))", db: db)
                     let messageIDs = records.map { Self.sqlQuoted($0.id.uuidString) }.joined(separator: ",")
                     if !messageIDs.isEmpty {
                         try db.execute(sql: "DELETE FROM messages WHERE id IN (\(messageIDs));")
@@ -6334,6 +6416,8 @@ private actor GRDBStore {
                     db,
                     sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE \(channelCondition);"
                 ) ?? 0
+                try retainProcessedNotificationIdentities(records, db: db)
+                try retainPendingProcessedNotificationIdentities(condition: channelCondition, db: db)
                 try db.execute(sql: "DELETE FROM messages WHERE \(channelCondition);")
                 try db.execute(sql: "DELETE FROM event_projection_heads WHERE \(channelCondition);")
                 try db.execute(sql: "DELETE FROM thing_projection_heads WHERE \(channelCondition);")
@@ -7986,6 +8070,57 @@ private actor GRDBStore {
         try db.execute(sql: sql)
     }
 
+    private func retainProcessedNotificationIdentity(_ message: PushMessage, db: Database) throws {
+        guard normalizedEntityType(message) == "message" else { return }
+        let identities = [resolveOperationScopeIdentity(from: message), notificationDeliveryScopeIdentity(message)]
+            .compactMap { $0 }
+        for identity in identities where try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) == nil {
+            try upsertOperationLedger(identity: identity,
+                messageId: message.messageId ?? message.id.uuidString, appliedAt: Date(), db: db)
+        }
+    }
+
+    private func isProcessedNotificationWithoutContent(_ message: PushMessage, db: Database) throws -> Bool {
+        guard normalizedEntityType(message) == "message" else { return false }
+        for identity in [resolveOperationScopeIdentity(from: message), notificationDeliveryScopeIdentity(message)]
+            .compactMap({ $0 })
+        {
+            if let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) {
+                guard let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db) else { return true }
+                // The canonical key is historically global. If another origin
+                // legitimately reused it after deletion, its row is not proof
+                // that this origin's old content still exists.
+                if notificationOriginScope(existing.toPushMessage(decoder: decoder)) != notificationOriginScope(message) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private func retainProcessedNotificationIdentities(_ records: [GRDBMessageRecord], db: Database) throws {
+        for record in records where record.entityType == "message" {
+            try retainProcessedNotificationIdentity(record.toPushMessage(decoder: decoder), db: db)
+        }
+    }
+
+    private func retainPendingProcessedNotificationIdentities(condition: String, db: Database) throws {
+        // Do not activate a waiting child or retain its body merely to remember
+        // that confirmed parent deletion also consumed its accepted identity.
+        let rows = try Row.fetchCursor(db, sql: """
+            SELECT message_id, channel, raw_payload_json FROM pending_inbound_messages
+            WHERE entity_type = 'message' AND (\(condition));
+            """)
+        while let row = try rows.next() {
+            let messageID: String = row["message_id"]
+            let channel: String? = row["channel"]
+            let rawPayload: String = row["raw_payload_json"]
+            let payload = try decoder.decode([String: AnyCodable].self, from: Data(rawPayload.utf8))
+            try retainProcessedNotificationIdentity(
+                PushMessage(messageId: messageID, title: "", body: "", channel: channel, rawPayload: payload), db: db)
+        }
+    }
+
     func loadChannelSubscriptions(includeDeleted: Bool) async throws -> [ChannelSubscription] {
         try read { db in
             let whereClause = includeDeleted ? "1" : "is_deleted = 0"
@@ -8811,6 +8946,9 @@ private actor GRDBStore {
     ) throws -> NotificationStoreSaveOutcome {
         let canonicalMessage = canonicalizedMessageForPersistence(message)
         let record = try buildMessageRecord(from: canonicalMessage)
+        // Check before the missing-parent path as well: deletion of a parent
+        // must not make an already-processed child wait for a new parent again.
+        if try isProcessedNotificationWithoutContent(canonicalMessage, db: db) { return .duplicateProcessed }
         if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
            try !hasThingParentRecord(thingId: thingId, db: db)
         {
@@ -8828,8 +8966,8 @@ private actor GRDBStore {
                // Notification request IDs and delivery IDs are scoped to the
                // originating Gateway. An older restored Gateway can reuse one
                // without making the new message a replay of the old row.
-               $0.toPushMessage(decoder: decoder).providerSourceBaseURL
-                   == canonicalMessage.providerSourceBaseURL
+               notificationOriginScope($0.toPushMessage(decoder: decoder))
+                   == notificationOriginScope(canonicalMessage)
            })
         {
             let updatedRecord = GRDBMessageRecord(
@@ -8866,8 +9004,25 @@ private actor GRDBStore {
                 updateOnConflict: true,
                 projectionMessage: canonicalMessage
             )
+            try retainProcessedNotificationIdentity(updatedRecord.toPushMessage(decoder: decoder), db: db)
             try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
             return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
+        }
+
+        if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
+           let legacy = resolveOperationScopeIdentity(from: canonicalMessage, includeOrigin: false),
+           identity.scopeKey != legacy.scopeKey,
+           let ledger = try fetchOperationLedger(scopeKey: legacy.scopeKey, db: db),
+           let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db),
+           resolveOperationScopeIdentity(from: existing.toPushMessage(decoder: decoder), includeOrigin: false)?.scopeKey == legacy.scopeKey,
+           ledger.deliveryId == nil || ledger.deliveryId == existing.deliveryId,
+           notificationOriginScope(existing.toPushMessage(decoder: decoder)) == notificationOriginScope(canonicalMessage)
+        {
+            // Upgrade only facts whose surviving canonical payload proves the
+            // old scope's origin. An origin-less deleted row is not evidence
+            // for any current Gateway and is never backfilled by guesswork.
+            try retainProcessedNotificationIdentity(existing.toPushMessage(decoder: decoder), db: db)
+            return .duplicateMessage(existing.toPushMessage(decoder: decoder))
         }
 
         if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
@@ -8887,6 +9042,7 @@ private actor GRDBStore {
             updateOnConflict: false,
             projectionMessage: canonicalMessage
         )
+        try retainProcessedNotificationIdentity(canonicalMessage, db: db)
         if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
             try upsertOperationLedger(
                 identity: identity,
@@ -9120,6 +9276,7 @@ private actor GRDBStore {
                 let canonical = canonicalizedMessageForPersistence(message)
                 guard isEntityScopedWrite(canonical) else { continue }
                 let record = try buildMessageRecord(from: canonical)
+                if try isProcessedNotificationWithoutContent(canonical, db: db) { continue }
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {
@@ -9202,6 +9359,7 @@ private actor GRDBStore {
             for message in messages {
                 var canonical = message
                 var record = try buildMessageRecord(from: canonical)
+                if try isProcessedNotificationWithoutContent(canonical, db: db) { continue }
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {

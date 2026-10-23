@@ -152,7 +152,7 @@ let package = Package(
             name: "PushGoSQLiteMigrationChild",
             dependencies: ["PushGoAppleCore"],
             path: "Tests/Fixtures",
-            exclude: ["abrupt_wal_writer.py"],
+            exclude: ["abrupt_wal_writer.py", "watch_sqlite_lifecycle.swift"],
             sources: ["sqlite_migration_child.swift"]
         ),
         .testTarget(

@@ -3880,7 +3880,7 @@ final class PushGoAutomationRuntime {
         guard !bundle.messages.isEmpty else {
             throw PushGoAutomationError.invalidArgument("path")
         }
-        try await withPhaseMarker(command: command, phase: "fixture.save_messages") {
+        _ = try await withPhaseMarker(command: command, phase: "fixture.save_messages") {
             try await environment.dataStore.saveMessages(
                 bundle.messages
                     .map { $0.toPushMessage() }

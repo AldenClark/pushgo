@@ -739,6 +739,37 @@ actor DurableIngressJournal {
         }
     }
 
+    /// Read a retained, validated terminal fact without loading its body. A
+    /// legacy ACK import alone is not proof that this client saved content.
+    func hasProcessedDelivery(
+        baseURL: String,
+        deviceKey: String,
+        deliveryID: String
+    ) throws -> Bool {
+        guard let databaseURL else { throw JournalError.unavailable }
+        guard fileManager.fileExists(atPath: databaseURL.path) else { return false }
+        return try withDatabase(write: false) { db in
+            let statement = try prepare(db, """
+                SELECT 1 FROM ingress_entry
+                WHERE source_base_url = ? AND source_device_key = ? AND delivery_id = ?
+                  AND schema_version <= \(Self.schemaVersion)
+                  AND validation_state = 'validated'
+                  AND apply_state IN ('applied', 'discarded')
+                  AND source != 'ack_import'
+                LIMIT 1;
+                """)
+            defer { sqlite3_finalize(statement) }
+            bindText(statement, 1, baseURL)
+            bindText(statement, 2, deviceKey)
+            bindText(statement, 3, deliveryID)
+            let result = sqlite3_step(statement)
+            guard result == SQLITE_ROW || result == SQLITE_DONE else {
+                throw JournalError.sqlite(String(cString: sqlite3_errmsg(db)))
+            }
+            return result == SQLITE_ROW
+        }
+    }
+
     func durableIngressPayload(
         identity: ProviderDeliveryAckFailureStore.DeliveryIdentity
     ) -> [String: AnyCodable]? {
