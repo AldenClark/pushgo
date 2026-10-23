@@ -1085,7 +1085,13 @@ private final class WatchLocalSQLiteStore {
                 let projectionIdentity = Self.watchBusinessIdentity(for: projectionPayload)
                 switch projectionPayload {
                 case let .message(message):
-                    try upsertWatchLightMessage(message)
+                    // The delivery fact outlives confirmed content deletion.
+                    // Replays may enrich an extant projection, but absence is
+                    // not permission to recreate already-processed content.
+                    // Keep merging the fact below so replay remains ACK-safe.
+                    if try loadWatchLightMessage(messageId: message.messageId) != nil {
+                        try upsertWatchLightMessage(message)
+                    }
                 case let .event(event):
                     try upsertWatchLightEvent(event)
                 case let .thing(thing):
