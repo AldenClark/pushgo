@@ -1089,7 +1089,8 @@ private final class WatchLocalSQLiteStore {
                     // Replays may enrich an extant projection, but absence is
                     // not permission to recreate already-processed content.
                     // Keep merging the fact below so replay remains ACK-safe.
-                    if try loadWatchLightMessage(messageId: message.messageId) != nil {
+                    if try loadWatchLightMessage(messageId: message.messageId) != nil,
+                       try canEnrichWatchMessageProjection(messageId: message.messageId, gatewayKey: existing.gatewayKey) {
                         try upsertWatchLightMessage(message)
                     }
                 case let .event(event):
@@ -1279,6 +1280,32 @@ private final class WatchLocalSQLiteStore {
         sqlite3_bind_double(statement, 9, record.persistedAt.timeIntervalSince1970)
         try bindText(statement, index: 10, value: record.serverAckState.rawValue)
         try stepDone(statement)
+    }
+
+    private func canEnrichWatchMessageProjection(messageId: String, gatewayKey: String) throws -> Bool {
+        // message_id is a historical global projection key. A different
+        // Gateway may have reused it after deletion; old delivery facts then
+        // prove processing, not ownership of the currently visible content.
+        // Split foreign origins into two indexed ranges, including legacy
+        // facts whose entity fields are absent, rather than scanning history.
+        let statement = try prepare("""
+            SELECT NOT EXISTS (
+                SELECT 1 FROM watch_delivery_records
+                WHERE message_id = ? AND gateway_key < ? LIMIT 1
+            ) AND NOT EXISTS (
+                SELECT 1 FROM watch_delivery_records
+                WHERE message_id = ? AND gateway_key > ? LIMIT 1
+            );
+            """)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: messageId)
+        try bindText(statement, index: 2, value: gatewayKey)
+        try bindText(statement, index: 3, value: messageId)
+        try bindText(statement, index: 4, value: gatewayKey)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+        }
+        return sqlite3_column_int(statement, 0) != 0
     }
 
     private func upsertWatchLightMessage(_ message: WatchLightMessage) throws {
@@ -1766,6 +1793,7 @@ private final class WatchLocalSQLiteStore {
 
     private static func createWatchDeliveryRecordIndexes(db: OpaquePointer) throws {
         try execute("CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_business_identity ON watch_delivery_records(entity_type, entity_id, message_id);", db: db)
+        try execute("CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_message_origin ON watch_delivery_records(message_id, gateway_key);", db: db)
         try execute("CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_persisted_at ON watch_delivery_records(persisted_at DESC);", db: db)
     }
 

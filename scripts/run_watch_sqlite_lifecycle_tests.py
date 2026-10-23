@@ -9,10 +9,13 @@ This is production-SQLite host evidence, not watchOS/APNs or GUI acceptance.
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import tempfile
+import textwrap
 
 
 def between(source: str, start: str, end: str) -> str:
@@ -87,6 +90,27 @@ private enum DarwinNotificationPoster { static func post(name: String) {} }
     subprocess.run(command, check=True, cwd=repo)
     with tempfile.TemporaryDirectory(prefix="pushgo-watch-sqlite-") as root:
         subprocess.run([str(executable)], check=True, env={**os.environ, "WATCH_SQLITE_TEST_ROOT": root})
+        # Inspect the exact production ownership query against the indexes
+        # created by the actual Store above, using only the synthetic test DB.
+        query = textwrap.dedent(between(
+            store, 'let statement = try prepare("""\n            SELECT NOT EXISTS (',
+            '\n            """)'
+        ))
+        query = "SELECT NOT EXISTS (" + query
+        database = Path(root) / "reused-message-id/watch.sqlite"
+        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
+            plan = list(db.execute("EXPLAIN QUERY PLAN " + query, (
+                "shared-message-id", "https://gateway.example/root",
+                "shared-message-id", "https://gateway.example/root",
+            )))
+        index = "USING COVERING INDEX idx_watch_delivery_records_message_origin"
+        indexed_ranges = [row for row in plan if index in row[3]]
+        if len(indexed_ranges) != 2 or any("SCAN watch_delivery_records" in row[3] for row in plan):
+            raise AssertionError(f"ownership lookup did not use both bounded index ranges: {plan!r}")
+        evidence = {"sqlite_version": sqlite3.sqlite_version, "sql": query, "plan": plan,
+                    "indexed_ranges": len(indexed_ranges), "status": "PASSED"}
+        (output / "ownership-query-plan.json").write_text(json.dumps(evidence, indent=2) + "\n")
+        print("PASS ownership_query_two_indexed_ranges", flush=True)
 
 
 if __name__ == "__main__":

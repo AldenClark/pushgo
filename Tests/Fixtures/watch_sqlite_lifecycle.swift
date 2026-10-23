@@ -110,6 +110,36 @@ private func runLifecycleTests() throws {
         try require(try store.loadWatchLightMessage(messageId: "stale-message")?.body == "Replacement", "failed confirmation may not suppress normal duplicate behavior")
         print("PASS stale_confirmation_preserves_content")
     }
+
+    // The lightweight table's canonical key is message_id. After A's content
+    // is deleted, B may legitimately fill that empty key. A's retained fact
+    // must not become authority to update B's newly visible projection.
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "reused-message-id")
+        _ = try store.ingestWatchDelivery(delivery("delivery-a", messageID: "shared-message-id"))
+        let target = try store.loadWatchLightMessage(messageId: "shared-message-id")!
+        try require(try store.deleteWatchLightMessage(matching: target, config: nil, localConfig: nil), "A's confirmed content deletion must commit")
+        let foreign = try store.ingestWatchDelivery(delivery(
+            "delivery-b", messageID: "shared-message-id", gateway: "https://gateway.example/other",
+            title: "B title", body: "B body"
+        ))
+        try require(foreign.disposition == .inserted, "B's distinct Gateway+delivery must be accepted")
+        let oldReplay = try store.ingestWatchDelivery(delivery(
+            "delivery-a", messageID: "shared-message-id", title: "Late A title", body: "Late A body", ack: .ackedDirect
+        ))
+        try require(oldReplay.disposition == .duplicateDelivery, "A remains ACK-safe duplicate after B takes the empty canonical key")
+        try require(oldReplay.deliveryRecord.serverAckState == .ackedDirect, "A's delivery ACK metadata must still converge")
+        try require(try store.loadWatchLightMessage(messageId: "shared-message-id")?.body == "B body", "A's old duplicate overwrote B's distinct Gateway content")
+    }
+    do {
+        let reopened = try WatchLocalSQLiteStore(appGroupIdentifier: "reused-message-id")
+        _ = try reopened.ingestWatchDelivery(delivery(
+            "delivery-a", messageID: "shared-message-id", body: "Late A after restart", ack: .ackedDirect
+        ))
+        try require(try reopened.loadWatchLightMessage(messageId: "shared-message-id")?.body == "B body", "restart forgot cross-Gateway delivery ownership evidence")
+        try require(try reopened.loadWatchDeliveryRecords().count == 2, "ownership check must retain both delivery facts")
+        print("PASS deleted_identity_reused_by_other_gateway")
+    }
 }
 
 @main
@@ -117,7 +147,7 @@ private enum WatchSQLiteLifecycleTests {
     static func main() {
         do {
             try runLifecycleTests()
-            print("RESULT passed=6 failed=0 layer=host_production_watch_sqlite")
+            print("RESULT passed=7 failed=0 layer=host_production_watch_sqlite")
         } catch {
             FileHandle.standardError.write(Data("FAIL \(error)\n".utf8))
             exit(1)
