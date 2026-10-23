@@ -1,310 +1,148 @@
 import Foundation
 import SwiftUI
-#if canImport(SDWebImageSwiftUI) && !os(watchOS)
-import SDWebImageSwiftUI
-#endif
+import ImageIO
 
-#if canImport(UIKit)
-import UIKit
-typealias PlatformImage = UIImage
-#elseif os(macOS)
-import AppKit
-typealias PlatformImage = NSImage
-#endif
+private struct PushGoResourceOwnerKey: EnvironmentKey {
+    static let defaultValue: SharedImageCache.ResourceOwner? = nil
+}
+
+private struct PushGoResourceRevisionKey: EnvironmentKey {
+    static let defaultValue: Int? = nil
+}
+
+extension EnvironmentValues {
+    var pushgoResourceRevision: Int? {
+        get { self[PushGoResourceRevisionKey.self] }
+        set { self[PushGoResourceRevisionKey.self] = newValue }
+    }
+    /// The canonical content owner, never the currently selected Gateway configuration.
+    var pushgoResourceOwner: SharedImageCache.ResourceOwner? {
+        get { self[PushGoResourceOwnerKey.self] }
+        set { self[PushGoResourceOwnerKey.self] = newValue }
+    }
+}
+
 struct RemoteImageView<Content: View, Placeholder: View>: View {
     let url: URL?
     let rendition: SharedImageCache.Rendition
+    let explicitOwner: SharedImageCache.ResourceOwner?
+    let explicitRevision: Int?
     let content: (Image) -> Content
     let placeholder: () -> Placeholder
-
-    @State private var sourceURL: URL?
-    @State private var isAnimatedAsset = false
+    @Environment(\.pushgoResourceOwner) private var owner
+    @Environment(\.pushgoResourceRevision) private var resourceRevision
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var loadedImage: Image?
+    @State private var failed = false
+    @State private var isStale = false
+    @State private var retry = 0
+    @State private var generation = UUID()
+    @State private var isVisible = false
 
     init(
         url: URL?,
         rendition: SharedImageCache.Rendition = .original,
+        owner: SharedImageCache.ResourceOwner? = nil,
+        revision: Int? = nil,
         @ViewBuilder content: @escaping (Image) -> Content,
-        @ViewBuilder placeholder: @escaping () -> Placeholder = { Color.clear },
+        @ViewBuilder placeholder: @escaping () -> Placeholder = { Color.clear }
     ) {
         self.url = url
         self.rendition = rendition
+        explicitOwner = owner
+        explicitRevision = revision
         self.content = content
         self.placeholder = placeholder
     }
 
     var body: some View {
         Group {
-#if canImport(SDWebImageSwiftUI) && !os(watchOS)
-            if let sourceURL {
-                if isAnimatedAsset {
-                    WebImage(
-                        url: sourceURL,
-                        options: [.fromLoaderOnly],
-                        isAnimating: .constant(false)
-                    ) { image in
-                        content(image)
-                    } placeholder: {
-                        placeholder()
-                    }
-                    .transaction { transaction in
-                        transaction.animation = nil
-                    }
-                } else {
-                    StaticRemoteImageContent(
-                        originalURL: url,
-                        sourceURL: sourceURL,
-                        rendition: rendition,
-                        content: content,
-                        placeholder: placeholder
-                    )
-                }
-            } else {
-                placeholder()
-            }
-#else
-            placeholder()
-#endif
-        }
-        .task(id: sourceIdentity) {
-            await resolveSourceURL()
-        }
-    }
-
-    private var sourceIdentity: String {
-        "\(url?.absoluteString ?? "nil")#\(rendition.rawValue)"
-    }
-
-    private func resolveSourceURL() async {
-        guard let url else {
-            await MainActor.run {
-                sourceURL = nil
-                isAnimatedAsset = false
-            }
-            return
-        }
-        let animatedHint = await animatedAssetHint(for: url)
-        if let cached = SharedImageCache.cachedFileURL(for: url, rendition: rendition) {
-            await MainActor.run {
-                if sourceURL != cached {
-                    sourceURL = cached
-                }
-                if isAnimatedAsset != animatedHint {
-                    isAnimatedAsset = animatedHint
-                }
-            }
-            return
-        }
-        let resolved = await SharedImageCache.localSourceURL(
-            for: url,
-            rendition: rendition,
-            maxBytes: AppConstants.maxMessageImageBytes,
-            timeout: 10
-        )
-        await MainActor.run {
-            if sourceURL != resolved {
-                sourceURL = resolved
-            }
-            if isAnimatedAsset != animatedHint {
-                isAnimatedAsset = animatedHint
-            }
-        }
-    }
-
-    private func animatedAssetHint(for url: URL) async -> Bool {
-        if let metadata = await SharedImageCache.ensureMetadataFromCache(for: url) {
-            return metadata.isAnimated
-        }
-        let ext = url.pathExtension.lowercased()
-        return ext == "gif" || ext == "webp" || ext == "apng"
-    }
-}
-
-private struct StaticRemoteImageContent<Content: View, Placeholder: View>: View {
-    let originalURL: URL?
-    let sourceURL: URL
-    let rendition: SharedImageCache.Rendition
-    let content: (Image) -> Content
-    let placeholder: () -> Placeholder
-
-    @State private var loadedImage: Image?
-
-    var body: some View {
-        Group {
             if let loadedImage {
                 content(loadedImage)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isStale {
+                            Button { retry += 1 } label: {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.caption2).padding(5)
+                                    .background(.regularMaterial, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(LocalizedStringKey("image_cached_preview_retry"))
+                        }
+                    }
+            } else if failed {
+                Button { retry += 1 } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .padding(8)
+                        .frame(minWidth: 32, minHeight: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LocalizedStringKey("retry"))
             } else {
                 placeholder()
             }
         }
-        .task(id: sourceIdentity) {
-            await loadImage()
+        .task(id: identity) {
+            if isVisible, scenePhase == .active { await load() }
         }
-    }
-
-    private var sourceIdentity: String {
-        let original = originalURL?.absoluteString ?? "nil"
-        return "\(original)#\(rendition.rawValue)#\(sourceURL.absoluteString)"
-    }
-
-    private func loadImage() async {
-        if let originalURL,
-           !originalURL.isFileURL
-        {
-            if let cached = await RemoteImageCache.cachedImage(for: originalURL, rendition: rendition) {
-                await MainActor.run {
-                    loadedImage = swiftUIImage(from: cached)
-                }
-                return
-            }
-            if let remote = try? await RemoteImageCache.loadImage(from: originalURL, rendition: rendition) {
-                await MainActor.run {
-                    loadedImage = swiftUIImage(from: remote)
-                }
-                return
+        .onAppear { isVisible = true }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                generation = UUID()
+                loadedImage = nil
             }
         }
-
-        if let data = try? Data(contentsOf: sourceURL),
-           let platformImage = PlatformImage(data: data)
-        {
-            await MainActor.run {
-                loadedImage = swiftUIImage(from: platformImage)
-            }
-            return
-        }
-        await MainActor.run {
+        .onDisappear {
+            isVisible = false
+            generation = UUID()
             loadedImage = nil
         }
     }
 
-    private func swiftUIImage(from image: PlatformImage) -> Image {
-#if canImport(UIKit)
-        Image(uiImage: image)
-#else
-        Image(nsImage: image)
-#endif
-    }
-}
-
-enum RemoteImageCache {
-    private static let decodeQueue = DispatchQueue(label: "io.ethan.pushgo.remote-image-decode", qos: .userInitiated)
-    private static let imageCacheLimitBytes = 256 * 1024 * 1024
-
-    private actor MemoryCache {
-        private let cache = NSCache<NSURL, PlatformImage>()
-
-        init() {
-            cache.totalCostLimit = RemoteImageCache.imageCacheLimitBytes
-            cache.countLimit = 512
-        }
-
-        func image(for key: NSURL) -> PlatformImage? {
-            cache.object(forKey: key)
-        }
-
-        func set(_ image: PlatformImage, for key: NSURL) {
-            cache.setObject(image, forKey: key, cost: Self.approximateCost(for: image))
-        }
-
-        func remove(for key: NSURL) {
-            cache.removeObject(forKey: key)
-        }
-
-        private static func approximateCost(for image: PlatformImage) -> Int {
-#if canImport(UIKit)
-            let pixelWidth = max(Int(image.size.width * image.scale), 1)
-            let pixelHeight = max(Int(image.size.height * image.scale), 1)
-            return pixelWidth * pixelHeight * 4
-#else
-            if let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first {
-                let bitsPerPixel = max(bitmap.bitsPerPixel, 32)
-                return max(bitmap.pixelsWide, 1) * max(bitmap.pixelsHigh, 1) * bitsPerPixel / 8
-            }
-            let fallbackPixelWidth = max(Int(image.size.width * 2), 1)
-            let fallbackPixelHeight = max(Int(image.size.height * 2), 1)
-            return fallbackPixelWidth * fallbackPixelHeight * 4
-#endif
-        }
+    private var identity: LoadIdentity {
+        LoadIdentity(url: url, rendition: rendition, owner: explicitOwner ?? owner, retry: retry, visible: isVisible, revision: explicitRevision ?? resourceRevision, active: scenePhase == .active)
     }
 
-    private actor InflightImages {
-        private var tasks: [NSURL: Task<PlatformImage, Error>] = [:]
-
-        func task(for key: NSURL, create: @escaping () -> Task<PlatformImage, Error>) -> Task<PlatformImage, Error> {
-            if let existing = tasks[key] {
-                return existing
-            }
-            let task = create()
-            tasks[key] = task
-            return task
-        }
-
-        func remove(_ key: NSURL) {
-            tasks[key] = nil
-        }
+    private struct LoadIdentity: Hashable {
+        let url: URL?
+        let rendition: SharedImageCache.Rendition
+        let owner: SharedImageCache.ResourceOwner?
+        let retry: Int
+        let visible: Bool
+        let revision: Int?
+        let active: Bool
     }
 
-    private static let cache = MemoryCache()
-    private static let inflight = InflightImages()
-
-    static func cachedImage(for url: URL, rendition: SharedImageCache.Rendition) async -> PlatformImage? {
-        let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
-        return await cache.image(for: cacheKey)
-    }
-
-    static func loadImage(from url: URL, rendition: SharedImageCache.Rendition) async throws -> PlatformImage {
-        let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
-        if let cached = await cache.image(for: cacheKey) {
-            return cached
+    private func load() async {
+        let token = UUID()
+        generation = token
+        loadedImage = nil
+        failed = false
+        isStale = false
+        guard let url else { return }
+        do {
+            // A bound owner resolves an immutable acquired content version. No secondary loader
+            // is allowed to follow the original remote URL after this resolution.
+            let resource = try await SharedImageCache.resolve(
+                for: url,
+                rendition: .original,
+                maxBytes: AppConstants.maxMessageImageBytes,
+                timeout: 10,
+                owner: explicitOwner ?? owner
+            )
+            defer { withExtendedLifetime(resource) {} }
+            let image = await ResourceImageDecode.shared.image(
+                data: resource.data,
+                immutableFile: resource.isPersistent ? resource.fileURL : nil,
+                rendition: rendition
+            )
+            guard !Task.isCancelled, isVisible, scenePhase == .active, generation == token else { return }
+            isStale = resource.isStale
+            loadedImage = image.map { Image(decorative: $0, scale: 1) }
+            failed = image == nil
+        } catch {
+            guard !Task.isCancelled, isVisible, scenePhase == .active, generation == token else { return }
+            failed = true
         }
-        let task = await inflight.task(for: cacheKey) {
-            Task {
-                defer { Task { await inflight.remove(cacheKey) } }
-                let image = try await loadImageUncached(from: url, rendition: rendition)
-                await cache.set(image, for: cacheKey)
-                return image
-            }
-        }
-        let image = try await task.value
-        await cache.set(image, for: cacheKey)
-        return image
-    }
-
-    static func purge(urls: [URL]) async {
-        for url in urls {
-            for rendition in SharedImageCache.Rendition.allCases {
-                let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
-                await cache.remove(for: cacheKey)
-            }
-        }
-        await SharedImageCache.purge(urls: urls)
-    }
-
-    private static func decodeImage(from data: Data) async throws -> PlatformImage {
-        try await withCheckedThrowingContinuation { continuation in
-            decodeQueue.async {
-                if let image = PlatformImage(data: data) {
-                    continuation.resume(returning: image)
-                } else {
-                    continuation.resume(throwing: URLError(.cannotDecodeContentData))
-                }
-            }
-        }
-    }
-
-    private static func loadImageUncached(
-        from url: URL,
-        rendition: SharedImageCache.Rendition
-    ) async throws -> PlatformImage {
-        if let data = await SharedImageCache.cachedData(for: url, rendition: rendition) {
-            return try await decodeImage(from: data)
-        }
-        let data = try await SharedImageCache.fetchData(
-            from: url,
-            rendition: rendition,
-            maxBytes: AppConstants.maxMessageImageBytes,
-            timeout: 10
-        )
-        return try await decodeImage(from: data)
     }
 }

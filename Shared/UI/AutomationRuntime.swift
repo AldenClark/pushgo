@@ -4197,18 +4197,11 @@ final class PushGoAutomationRuntime {
         guard let data = Data(base64Encoded: Self.qualityStandardMessagePNGBase64) else {
             throw PushGoAutomationError.invalidArgument("quality_standard_message_image")
         }
-        guard await SharedImageCache.store(
-            data: data,
-            for: Self.qualityStandardMessageImageURL,
-            rendition: .original
-        ) != nil else {
+        guard let file = await SharedImageCache.store(data: data, for: Self.qualityStandardMessageImageURL),
+              (try? Data(contentsOf: file)) == data
+        else {
             throw PushGoAutomationError.invalidArgument("quality_standard_message_image_cache")
         }
-        _ = await SharedImageCache.store(
-            data: data,
-            for: Self.qualityStandardMessageImageURL,
-            rendition: .listThumbnail
-        )
     }
 
     private static let qualityStandardMessagePNGBase64 =

@@ -79,13 +79,20 @@ private enum AppConstants {
 private enum DarwinNotificationPoster { static func post(name: String) {} }
 '''
     fixture = (repo / "Tests/Fixtures/watch_sqlite_lifecycle.swift").read_text()
-    compilation = "\n".join([support, read("Shared/Models/ServerConfig.swift"), models, payload, metadata, equality, freshness, store, fixture])
+    has_resources = "func imageResourceSnapshot(owner:" in store
+    resource_identity = (
+        read("Shared/Utilities/ImageResourceStore.swift").split("/// The HTTP index", 1)[0]
+        if has_resources else ""
+    )
+    compilation = "\n".join([support, resource_identity, read("Shared/Models/ServerConfig.swift"), models, payload, metadata, equality, freshness, store, fixture])
     source = output / "watch_sqlite_lifecycle.swift"
     source.write_text(compilation)
     executable = output / "watch_sqlite_lifecycle"
     print(f"production_source_ref={args.source_ref or 'working-tree'}", flush=True)
     print(f"watch_sqlite_class_sha256={hashlib.sha256(store.encode()).hexdigest()}", flush=True)
     command = ["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6", "-warnings-as-errors", str(source), "-o", str(executable)]
+    if has_resources:
+        command.extend(["-D", "WATCH_RESOURCE_TESTS"])
     print("compile_command=" + " ".join(command), flush=True)
     subprocess.run(command, check=True, cwd=repo)
     with tempfile.TemporaryDirectory(prefix="pushgo-watch-sqlite-") as root:

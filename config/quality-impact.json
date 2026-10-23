@@ -374,7 +374,7 @@
     },
     {
       "id": "shared-ui-media-accessibility-localization",
-      "paths": ["Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
+      "paths": ["Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/ImageResourceStore.swift", "Shared/Utilities/ImageDisplayPolicy.swift", "Tests/PushGoAppleCoreTests/ImageResourceStoreTests.swift", "Tests/PushGoAppleCoreTests/ImageResourceReferenceTests.swift", "Tests/PushGoAppleCoreTests/ImageDisplayPolicyTests.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
       "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
       "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
       "lane": "nightly",

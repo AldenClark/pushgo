@@ -239,6 +239,8 @@ private struct ThingDetailPanel: View {
         }
         .background(EntityVisualTokens.pageBackground)
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
+        .environment(\.pushgoResourceOwner, .entity(type: "thing", localID: thing.id))
+        .environment(\.pushgoResourceRevision, thing.updatedAt.hashValue ^ thing.relatedUpdates.count.hashValue ^ (thing.relatedUpdates.first?.id.hashValue ?? 0))
         .sheet(item: $relatedDetail) { detail in
             ThingSecondaryDetailSheet {
                 switch detail {

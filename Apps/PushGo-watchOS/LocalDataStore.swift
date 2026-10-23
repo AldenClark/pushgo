@@ -606,6 +606,22 @@ actor LocalDataStore {
         return try sqliteStore.loadWatchDeliveryRecords()
     }
 
+    func imageResourceSnapshot(owner: ImageResourceOwner) async throws -> ImageResourceOwnerSnapshot? {
+        try requireSQLiteStore().imageResourceSnapshot(owner: owner)
+    }
+
+    func imageResourceBinding(snapshot: ImageResourceOwnerSnapshot, requestKey: String) async throws -> String? {
+        try requireSQLiteStore().imageResourceBinding(snapshot: snapshot, requestKey: requestKey)
+    }
+
+    func bindImageResource(snapshot: ImageResourceOwnerSnapshot, requestKey: String, contentHash: String) async throws -> Bool {
+        try requireSQLiteStore().bindImageResource(snapshot: snapshot, requestKey: requestKey, contentHash: contentHash)
+    }
+
+    func collectImageResource(contentHash: String, remove: @Sendable () -> Void) async throws -> Bool {
+        try requireSQLiteStore().collectImageResource(contentHash: contentHash, remove: remove)
+    }
+
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
         let sqliteStore = try requireSQLiteStore()
         return try sqliteStore.markWatchLightMessageRead(messageId: messageId)
@@ -635,7 +651,13 @@ actor LocalDataStore {
         }
         let sqliteStore = try requireSQLiteStore()
         let localConfig = try? localConfigStore.loadServerConfig()?.normalized()
-        return try sqliteStore.deleteWatchLightMessage(matching: message, config: config, localConfig: localConfig)
+        let deleted = try sqliteStore.deleteWatchLightMessage(matching: message, config: config, localConfig: localConfig)
+        if deleted {
+            // Reference release is already committed. Collection is bounded,
+            // local-only and outside the SQLite writer transaction.
+            _ = await SharedImageCache.purgeExpired(using: self)
+        }
+        return deleted
     }
 
     func deleteAllMessages() async throws {
@@ -1119,6 +1141,10 @@ private final class WatchLocalSQLiteStore {
                 try upsertWatchLightThing(thing)
             }
 
+            // A genuinely new delivery replacing a globally keyed projection
+            // starts a new content owner even when its bytes/timestamp match.
+            // Duplicate delivery enrichment above deliberately does not rotate.
+            try rotateImageResourceLifecycle(payload: record.payload, metadata: record.metadata)
             let deliveryRecord = WatchDeliveryRecord(
                 deliveryId: record.metadata.deliveryId,
                 gatewayKey: record.metadata.gatewayKey,
@@ -1149,6 +1175,117 @@ private final class WatchLocalSQLiteStore {
             records.append(Self.decodeWatchDeliveryRecord(statement))
         }
         return records
+    }
+
+    func imageResourceSnapshot(owner: ImageResourceOwner) throws -> ImageResourceOwnerSnapshot? {
+        let table: String
+        let idColumn: String
+        let localID: String
+        switch owner {
+        case let .watchMessage(id):
+            table = "watch_light_messages"; idColumn = "message_id"; localID = id
+        case let .watchEntity(type, id) where type == "event" || type == "thing":
+            table = type == "event" ? "watch_light_events" : "watch_light_things"
+            idColumn = type == "event" ? "event_id" : "thing_id"; localID = id
+        default:
+            return nil
+        }
+        let row = try prepare("SELECT resource_generation, image_url FROM \(table) WHERE \(idColumn) = ? LIMIT 1;")
+        defer { sqlite3_finalize(row) }
+        try bindText(row, index: 1, value: localID)
+        let result = sqlite3_step(row)
+        if result == SQLITE_DONE { return nil }
+        guard result == SQLITE_ROW, let generation = Self.columnText(row, index: 0), !generation.isEmpty else {
+            throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+        }
+        let imageURL = Self.columnText(row, index: 1)
+        let stamp = imageContentHash(try encoder.encode([generation, imageURL]))
+
+        // New ingress captures its actual source beside the random lifecycle
+        // token. Old or imported rows contain only that token and remain
+        // owner-local. No historical delivery scan or current config guess.
+        var scope = "isolated:" + owner.key + ":" + generation
+        let parts = generation.split(separator: ":", omittingEmptySubsequences: false)
+        if parts.count == 2, Self.isContentHash(String(parts[1])) {
+            scope = "origin:" + String(parts[1])
+        }
+        return ImageResourceOwnerSnapshot(owner: owner, stamp: stamp, scope: scope, canonicalID: localID)
+    }
+
+    func imageResourceBinding(snapshot: ImageResourceOwnerSnapshot, requestKey: String) throws -> String? {
+        guard try imageResourceSnapshot(owner: snapshot.owner) == snapshot else { return nil }
+        let statement = try prepare("SELECT content_hash FROM watch_image_resource_refs WHERE owner_key = ? AND owner_stamp = ? AND request_key = ? LIMIT 1;")
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: snapshot.owner.key)
+        try bindText(statement, index: 2, value: snapshot.stamp)
+        try bindText(statement, index: 3, value: requestKey)
+        let result = sqlite3_step(statement)
+        if result == SQLITE_DONE { return nil }
+        guard result == SQLITE_ROW else { throw StoreError.sqliteStepFailed(lastSQLiteMessage()) }
+        return Self.columnText(statement, index: 0)
+    }
+
+    func bindImageResource(snapshot: ImageResourceOwnerSnapshot, requestKey: String, contentHash: String) throws -> Bool {
+        guard Self.isContentHash(contentHash) else { return false }
+        return try writeTransaction {
+            guard try imageResourceSnapshot(owner: snapshot.owner) == snapshot else { return false }
+            let statement = try prepare("""
+                INSERT INTO watch_image_resource_refs(owner_key, owner_stamp, request_key, content_hash)
+                VALUES (?, ?, ?, ?) ON CONFLICT(owner_key, request_key) DO NOTHING;
+                """)
+            defer { sqlite3_finalize(statement) }
+            try bindText(statement, index: 1, value: snapshot.owner.key)
+            try bindText(statement, index: 2, value: snapshot.stamp)
+            try bindText(statement, index: 3, value: requestKey)
+            try bindText(statement, index: 4, value: contentHash)
+            try stepDone(statement)
+            return try imageResourceBinding(snapshot: snapshot, requestKey: requestKey) == contentHash
+        }
+    }
+
+    func collectImageResource(contentHash: String, remove: @Sendable () -> Void) throws -> Bool {
+        try writeTransaction {
+            let statement = try prepare("SELECT 1 FROM watch_image_resource_refs WHERE content_hash = ? LIMIT 1;")
+            defer { sqlite3_finalize(statement) }
+            try bindText(statement, index: 1, value: contentHash)
+            let result = sqlite3_step(statement)
+            if result == SQLITE_ROW { return false }
+            guard result == SQLITE_DONE else { throw StoreError.sqliteStepFailed(lastSQLiteMessage()) }
+            // Only a local unlink, never a network or decode operation, occurs
+            // inside this short writer transaction.
+            remove()
+            return true
+        }
+    }
+
+    private static func isContentHash(_ value: String) -> Bool {
+        value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+    }
+
+    private func rotateImageResourceLifecycle(payload: WatchLightPayload, metadata: WatchDeliveryMetadata) throws {
+        let table: String
+        let column: String
+        let identifier: String
+        switch payload {
+        case let .message(message):
+            table = "watch_light_messages"; column = "message_id"; identifier = message.messageId
+        case let .event(event):
+            table = "watch_light_events"; column = "event_id"; identifier = event.eventId
+        case let .thing(thing):
+            table = "watch_light_things"; column = "thing_id"; identifier = thing.thingId
+        }
+        var scopeSuffix = ""
+        let gateway = metadata.gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let recipient = metadata.watchDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let url = URL(string: gateway), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+           url.host != nil, !recipient.isEmpty {
+            scopeSuffix = ":" + imageContentHash(try encoder.encode([gateway, recipient]))
+        }
+        let statement = try prepare("UPDATE \(table) SET resource_generation = lower(hex(randomblob(16))) || ? WHERE \(column) = ?;")
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: scopeSuffix)
+        try bindText(statement, index: 2, value: identifier)
+        try stepDone(statement)
     }
 
     func markWatchLightMessageRead(messageId: String) throws -> WatchLightMessage? {
@@ -1612,6 +1749,7 @@ private final class WatchLocalSQLiteStore {
         )
         try execute("CREATE INDEX IF NOT EXISTS idx_watch_light_things_updated_at ON watch_light_things(updated_at DESC, thing_id DESC);", db: db)
         try ensureWatchDeliveryRecordsSchema(db: db)
+        try ensureImageResourceSchema(db: db)
         try execute(
             """
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -1682,6 +1820,57 @@ private final class WatchLocalSQLiteStore {
             type: "TEXT",
             db: db
         )
+    }
+
+    private static func ensureImageResourceSchema(db: OpaquePointer) throws {
+        // SQLite DDL and its one-time generation backfill share one commit.
+        // A crash must not leave an added-but-unpopulated generation column.
+        try execute("BEGIN IMMEDIATE TRANSACTION;", db: db)
+        do {
+            try execute("""
+                CREATE TABLE IF NOT EXISTS watch_image_resource_refs (
+                    owner_key TEXT NOT NULL,
+                    owner_stamp TEXT NOT NULL,
+                    request_key TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    PRIMARY KEY(owner_key, request_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_watch_image_resource_refs_hash
+                    ON watch_image_resource_refs(content_hash);
+                """, db: db)
+            for (table, idColumn, prefix) in [
+                ("watch_light_messages", "message_id", "watch-message:"),
+                ("watch_light_events", "event_id", "watch-event:"),
+                ("watch_light_things", "thing_id", "watch-thing:"),
+            ] {
+                let columns = try tableColumns(table: table, db: db)
+                if !columns.contains(where: { $0.name == "resource_generation" }) {
+                    try execute("ALTER TABLE \(table) ADD COLUMN resource_generation TEXT;", db: db)
+                    try execute("UPDATE \(table) SET resource_generation = lower(hex(randomblob(16)));", db: db)
+                }
+                try execute("""
+                    CREATE TRIGGER IF NOT EXISTS \(table)_image_generation_v1
+                    AFTER INSERT ON \(table) WHEN NEW.resource_generation IS NULL OR NEW.resource_generation = ''
+                    BEGIN
+                        UPDATE \(table) SET resource_generation = lower(hex(randomblob(16))) WHERE \(idColumn) = NEW.\(idColumn);
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS \(table)_image_delete_v1
+                    AFTER DELETE ON \(table) BEGIN
+                        DELETE FROM watch_image_resource_refs WHERE owner_key = '\(prefix)' || OLD.\(idColumn);
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS \(table)_image_source_update_v1
+                    AFTER UPDATE OF image_url, resource_generation ON \(table)
+                    WHEN OLD.image_url IS NOT NEW.image_url OR OLD.resource_generation IS NOT NEW.resource_generation
+                    BEGIN
+                        DELETE FROM watch_image_resource_refs WHERE owner_key = '\(prefix)' || OLD.\(idColumn);
+                    END;
+                    """, db: db)
+            }
+            try execute("COMMIT;", db: db)
+        } catch {
+            try? execute("ROLLBACK;", db: db)
+            throw error
+        }
     }
 
     private static var watchDeliveryRecordColumns: [String] {

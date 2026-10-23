@@ -326,19 +326,21 @@ private struct PushgoImagePreviewOverlay: View {
     @State private var baseScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
-    @State private var loadedImage: PreviewPlatformImage?
-    @State private var previewSourceURL: URL?
+    @Environment(\.pushgoResourceOwner) private var resourceOwner
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var originalData: Data?
+    @State private var coverImage: CGImage?
+    @State private var loadFailed = false
+    @State private var previewIsStale = false
+    @State private var retryGeneration = 0
     @State private var previewIsAnimated = false
+    @State private var previewIsAnimationLimited = false
     @State private var previewIsAnimating = false
-    @State private var animatedPlaybackPhase: AnimatedPlaybackPhase = .unavailable
     @State private var animatedPlaybackToken = UUID()
-    @State private var singleLoopPlaybackDuration: TimeInterval = 0
-    @State private var playbackStopTask: Task<Void, Never>?
+    @State private var playbackPermit = UUID()
     @State private var previewLoadGeneration = UUID()
 #if os(iOS)
     @State private var sharePayload: PushGoImageSharePayload?
-#elseif os(macOS)
-    @State private var macShareFileURL: URL?
 #endif
 
     var body: some View {
@@ -348,10 +350,28 @@ private struct PushgoImagePreviewOverlay: View {
 
                 previewMediaView(maxWidth: geo.size.width, maxHeight: geo.size.height)
                     .overlay(alignment: .bottomTrailing) {
-                        if shouldShowReplayButton {
+                        if previewIsAnimationLimited {
+                            Label(LocalizedStringKey("image_static_preview"), systemImage: "photo")
+                                .font(.caption)
+                                .foregroundStyle(Color.appOverlayForeground)
+                                .padding(8)
+                                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                                .padding(20)
+                        } else if shouldShowReplayButton {
                             replayButton
                                 .padding(.trailing, 20)
                                 .padding(.bottom, 20)
+                        }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        if previewIsStale {
+                            Button { retryGeneration += 1 } label: {
+                                Label(LocalizedStringKey("image_cached_preview_retry"), systemImage: "clock.arrow.circlepath")
+                                    .font(.caption).padding(8)
+                                    .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                            .foregroundStyle(Color.appOverlayForeground)
+                            .padding(20)
                         }
                     }
                     .zIndex(0)
@@ -406,8 +426,8 @@ private struct PushgoImagePreviewOverlay: View {
                         .padding(.top, 16)
 #elseif os(macOS)
                         HStack(spacing: 8) {
-                            PushGoMacShareButton(fileURL: macShareFileURL)
-                                .pushgoMacPreviewActionChrome(isEnabled: macShareFileURL != nil)
+                            PushGoMacShareButton(originalData: originalData)
+                                .pushgoMacPreviewActionChrome(isEnabled: originalData != nil)
                             Button {
                                 Task {
                                     await saveImageToDisk()
@@ -457,59 +477,62 @@ private struct PushgoImagePreviewOverlay: View {
 #if os(macOS)
         .frame(minWidth: 980, minHeight: 620)
 #endif
-        .task(id: imageURL) {
+        .task(id: PreviewIdentity(url: imageURL, owner: resourceOwner, retry: retryGeneration, active: scenePhase == .active)) {
             let generation = UUID()
             previewLoadGeneration = generation
             resetPreviewStateForNewImage()
+            guard scenePhase == .active else { return }
             PushGoAnimatedImageRuntime.bootstrapIfNeeded()
-            let cachedSourceURL = SharedImageCache.cachedFileURL(
-                for: imageURL,
-                rendition: .original
-            )
-            guard isCurrentPreviewLoad(generation) else { return }
-            previewSourceURL = cachedSourceURL ?? imageURL
-            if let cachedSourceURL {
-                let metadata = await Self.animationMetadata(at: cachedSourceURL)
+            do {
+                let resolved = try await SharedImageCache.resolve(
+                    for: imageURL, rendition: .original,
+                    maxBytes: AppConstants.maxMessageImageBytes, timeout: 10,
+                    owner: resourceOwner
+                )
+                defer { withExtendedLifetime(resolved) {} }
                 guard isCurrentPreviewLoad(generation) else { return }
-                applyAnimationMetadata(metadata, autoPlay: true)
-            } else {
-                applyAnimationMetadata(.unavailable, autoPlay: false)
+                guard let metadata = ImageDisplayPolicy.metadata(for: resolved.data),
+                      let cover = await ResourceImageDecode.shared.image(
+                        data: resolved.data,
+                        immutableFile: resolved.isPersistent ? resolved.fileURL : nil,
+                        rendition: .original
+                      )
+                else { loadFailed = true; return }
+                guard isCurrentPreviewLoad(generation) else { return }
+                originalData = resolved.data
+                previewIsStale = resolved.isStale
+                coverImage = cover
+                // The cover is cheap; full animation is a per-view, user-triggered session.
+                // no-store bytes remain exclusively in memory, including playback.
+                previewIsAnimated = metadata.mayAnimate
+                previewIsAnimationLimited = metadata.isAnimated && !metadata.mayAnimate
+                previewIsAnimating = false
+            } catch {
+                guard isCurrentPreviewLoad(generation) else { return }
+                loadFailed = true
             }
-
-            let resolvedSourceURL = await SharedImageCache.sourceURL(
-                for: imageURL,
-                rendition: .original,
-                maxBytes: AppConstants.maxMessageImageBytes,
-                timeout: 10
-            )
-            guard isCurrentPreviewLoad(generation) else { return }
-            let previousSourceURL = previewSourceURL
-            previewSourceURL = resolvedSourceURL
-            let metadata = await Self.animationMetadata(at: resolvedSourceURL)
-            guard isCurrentPreviewLoad(generation) else { return }
-            let shouldRestartPlayback = previousSourceURL != resolvedSourceURL || animatedPlaybackPhase != .playing
-            applyAnimationMetadata(metadata, autoPlay: shouldRestartPlayback)
-#if os(macOS)
-            macShareFileURL = Self.localShareableSourceURL(
-                primaryURL: resolvedSourceURL,
-                fallbackURL: imageURL
-            )
-#endif
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                previewLoadGeneration = UUID()
+                stopAnimatedPlayback()
+                originalData = nil
+                coverImage = nil
+            }
         }
         .onDisappear {
             onDismiss?()
             previewLoadGeneration = UUID()
-            playbackStopTask?.cancel()
-            playbackStopTask = nil
-            previewIsAnimating = false
-            animatedPlaybackPhase = .unavailable
+            stopAnimatedPlayback()
+            originalData = nil
+            coverImage = nil
         }
         .onAppear {
             onPresent?()
         }
 #if os(iOS)
         .sheet(item: $sharePayload) { payload in
-            PushGoShareSheet(activityItems: [payload.fileURL])
+            PushGoShareSheet(fileURL: payload.fileURL)
         }
         .toastOverlay(environment: environment)
 #else
@@ -524,13 +547,12 @@ private struct PushgoImagePreviewOverlay: View {
     @ViewBuilder
     private func previewMediaView(maxWidth: CGFloat, maxHeight: CGFloat) -> some View {
 #if canImport(SDWebImageSwiftUI) && !os(watchOS)
-        if previewIsAnimated, let sourceURL = previewSourceURL {
-            AnimatedImage(
-                url: sourceURL,
-                options: [.matchAnimatedImageClass, .fromLoaderOnly],
-                isAnimating: $previewIsAnimating
-            )
-            .customLoopCount(1)
+        if previewIsAnimated, previewIsAnimating, let originalData {
+            AnimatedImage(data: originalData, isAnimating: $previewIsAnimating)
+            .maxBufferSize(ImageDisplayPolicy.animationBufferBytes)
+            .pausable(true)
+            .purgeable(true)
+            .customLoopCount(0)
             .resizable()
             .scaledToFit()
             .frame(maxWidth: maxWidth, maxHeight: maxHeight)
@@ -542,9 +564,6 @@ private struct PushgoImagePreviewOverlay: View {
             .highPriorityGesture(combinedGesture)
             .id(animatedPlaybackToken)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if previewIsAnimated {
-            ProgressView().foregroundStyle(Color.appOverlayForeground)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             staticPreviewMediaView(maxWidth: maxWidth, maxHeight: maxHeight)
         }
@@ -553,9 +572,10 @@ private struct PushgoImagePreviewOverlay: View {
 #endif
     }
 
+    @ViewBuilder
     private func staticPreviewMediaView(maxWidth: CGFloat, maxHeight: CGFloat) -> some View {
-        RemoteImageView(url: previewSourceURL, rendition: .original) { image in
-            image
+        if let coverImage {
+            Image(decorative: coverImage, scale: 1)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: maxWidth, maxHeight: maxHeight)
@@ -565,10 +585,23 @@ private struct PushgoImagePreviewOverlay: View {
                 .animation(.spring(response: 0.2, dampingFraction: 0.85), value: offset)
                 .onTapGesture(count: 2) { toggleZoom() }
                 .highPriorityGesture(combinedGesture)
-        } placeholder: {
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if loadFailed {
+            Button { retryGeneration += 1 } label: {
+                Label(LocalizedStringKey("retry"), systemImage: "arrow.clockwise")
+            }
+            .foregroundStyle(Color.appOverlayForeground)
+        } else {
             ProgressView().foregroundStyle(Color.appOverlayForeground)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private struct PreviewIdentity: Hashable {
+        let url: URL
+        let owner: SharedImageCache.ResourceOwner?
+        let retry: Int
+        let active: Bool
     }
 
     private var dragGesture: some Gesture {
@@ -609,73 +642,55 @@ private struct PushgoImagePreviewOverlay: View {
 
     @MainActor
     private func restartAnimatedPlayback() {
-        guard previewIsAnimated, previewSourceURL != nil else {
-            previewIsAnimating = false
-            animatedPlaybackPhase = .unavailable
+        guard previewIsAnimated, originalData != nil, scenePhase == .active else { return }
+        guard ImagePlaybackBudget.acquire(playbackPermit) else {
+            // No queued or hidden player. Keep the already decoded cover.
             return
         }
-        playbackStopTask?.cancel()
-        playbackStopTask = nil
-        let playbackToken = UUID()
-        animatedPlaybackToken = playbackToken
-        animatedPlaybackPhase = .playing
+        animatedPlaybackToken = UUID()
+        previewIsAnimating = true
+    }
+
+    @MainActor
+    private func stopAnimatedPlayback() {
+        ImagePlaybackBudget.release(playbackPermit)
         previewIsAnimating = false
-
-        // Restart on next run loop to ensure a fresh animation session starts from frame zero.
-        DispatchQueue.main.async {
-            guard animatedPlaybackToken == playbackToken else { return }
-            previewIsAnimating = true
-        }
-
-        let playbackDuration = max(singleLoopPlaybackDuration, 0.9) + 0.12
-        playbackStopTask = Task { @MainActor in
-            let nanos = UInt64(playbackDuration * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanos)
-            guard !Task.isCancelled else { return }
-            guard animatedPlaybackToken == playbackToken else { return }
-            previewIsAnimating = false
-            animatedPlaybackPhase = previewIsAnimated ? .ready : .unavailable
-        }
     }
 
     @MainActor
     private func resetPreviewStateForNewImage() {
-        playbackStopTask?.cancel()
-        playbackStopTask = nil
-        previewSourceURL = nil
+        stopAnimatedPlayback()
         previewIsAnimated = false
+        previewIsAnimationLimited = false
         previewIsAnimating = false
-        animatedPlaybackPhase = .unavailable
         animatedPlaybackToken = UUID()
-        singleLoopPlaybackDuration = 0
-        loadedImage = nil
+        originalData = nil
+        coverImage = nil
+        loadFailed = false
+        previewIsStale = false
         currentScale = 1
         baseScale = 1
         offset = .zero
         lastOffset = .zero
-#if os(macOS)
-        macShareFileURL = nil
-#elseif os(iOS)
+#if os(iOS)
         sharePayload = nil
 #endif
     }
 
     @MainActor
     private func isCurrentPreviewLoad(_ generation: UUID) -> Bool {
-        !Task.isCancelled && previewLoadGeneration == generation
+        !Task.isCancelled && scenePhase == .active && previewLoadGeneration == generation
     }
 
     private var shouldShowReplayButton: Bool {
-        previewIsAnimated
-            && previewSourceURL?.isFileURL == true
-            && animatedPlaybackPhase == .ready
+        previewIsAnimated && originalData != nil
     }
 
     private var replayButton: some View {
         Button {
-            restartAnimatedPlayback()
+            if previewIsAnimating { stopAnimatedPlayback() } else { restartAnimatedPlayback() }
         } label: {
-            Image(systemName: "play.fill")
+            Image(systemName: previewIsAnimating ? "pause.fill" : "play.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.appOverlayForegroundMuted)
                 .frame(width: 44, height: 44)
@@ -689,59 +704,25 @@ private struct PushgoImagePreviewOverlay: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(LocalizedStringKey("play"))
+        .accessibilityLabel(LocalizedStringKey(previewIsAnimating ? "pause" : "play"))
     }
 
-    private func resolveLoadedImage() async -> PreviewPlatformImage? {
-        if let loadedImage {
-            return loadedImage
-        }
-        if let cached = await RemoteImageCache.cachedImage(for: imageURL, rendition: .original) {
-            await MainActor.run {
-                loadedImage = cached
-            }
-            return cached
-        }
-        do {
-            let loaded = try await RemoteImageCache.loadImage(from: imageURL, rendition: .original)
-            await MainActor.run {
-                loadedImage = loaded
-            }
-            return loaded
-        } catch {
-            return nil
-        }
-    }
-
+    /// User-initiated export is an attachment, not the HTTP reuse cache. Copy exact acquired
+    /// bytes, including animation, orientation and color metadata; never encode the cover.
     private func shareableImageFileURL() async -> URL? {
-        guard let image = await resolveLoadedImage(),
-              let (data, contentType) = Self.normalizedImageDataAndType(from: image)
-        else {
-            return nil
-        }
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pushgo-share-preview", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let fileURL = directory
-                .appendingPathComponent("pushgo-image-\(UUID().uuidString)")
-                .appendingPathExtension(contentType.preferredFilenameExtension ?? "png")
-            try data.write(to: fileURL, options: .atomic)
-            return fileURL
-        } catch {
-            return nil
-        }
+        guard let originalData, let metadata = ImageDisplayPolicy.metadata(for: originalData) else { return nil }
+        return try? PushGoOriginalImageExport.write(originalData, contentType: UTType(metadata.contentTypeIdentifier))
     }
+
 
 #if os(macOS)
     @MainActor
     private func saveImageToDisk() async {
-        guard let image = await resolveLoadedImage() else {
-            showSaveFailure(reason: "Unable to load image.")
-            return
-        }
-        guard let (data, contentType) = Self.normalizedImageDataAndType(from: image) else {
-            showSaveFailure(reason: "Unable to convert image to a supported format.")
+        guard let data = originalData,
+              let metadata = ImageDisplayPolicy.metadata(for: data),
+              let contentType = UTType(metadata.contentTypeIdentifier)
+        else {
+            showSaveFailure(reason: "Unable to load original image.")
             return
         }
 
@@ -779,31 +760,7 @@ private struct PushgoImagePreviewOverlay: View {
         }
     }
 
-    private static func normalizedImageDataAndType(from image: NSImage) -> (Data, UTType)? {
-        if let png = PushGoMacImageExportEncoder.pngData(from: image) {
-            return (png, .png)
-        }
-        guard let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff)
-        else {
-            return nil
-        }
-        if let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.94]) {
-            return (jpeg, .jpeg)
-        }
-        return nil
-    }
 #elseif os(iOS)
-    private static func normalizedImageDataAndType(from image: UIImage) -> (Data, UTType)? {
-        if let png = image.pngData() {
-            return (png, .png)
-        }
-        if let jpeg = image.jpegData(compressionQuality: 0.94) {
-            return (jpeg, .jpeg)
-        }
-        return nil
-    }
-
     @MainActor
     private func prepareSharePayload() async {
         guard let fileURL = await shareableImageFileURL() else {
@@ -832,160 +789,20 @@ private struct PushgoImagePreviewOverlay: View {
         )
     }
 
-    private static func isSupportedAnimatedImage(at url: URL) -> Bool {
-        guard url.isFileURL else {
-            return false
-        }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-            return sdWebImageAnimatedFrameCount(at: url) > 1
-        }
-        let frameCount = CGImageSourceGetCount(source)
-        if frameCount > 1 {
-            return true
-        }
-        return sdWebImageAnimatedFrameCount(at: url) > 1
-    }
 
-    @MainActor
-    private func applyAnimationMetadata(_ metadata: AnimationMetadata, autoPlay: Bool) {
-        previewIsAnimated = metadata.isAnimated
-        singleLoopPlaybackDuration = metadata.singleLoopDuration
-        playbackStopTask?.cancel()
-        playbackStopTask = nil
-        previewIsAnimating = false
-        if metadata.isAnimated {
-            animatedPlaybackPhase = .ready
-            if autoPlay {
-                restartAnimatedPlayback()
-            }
-        } else {
-            animatedPlaybackPhase = .unavailable
-        }
-    }
-
-    nonisolated private static func animationMetadata(at url: URL) async -> AnimationMetadata {
-        await Task(priority: .utility) {
-            readAnimationMetadata(at: url)
-        }
-        .value
-    }
-
-    nonisolated private static func readAnimationMetadata(at url: URL) -> AnimationMetadata {
-        guard url.isFileURL else { return .unavailable }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-            let fallbackFrameCount = sdWebImageAnimatedFrameCount(at: url)
-            guard fallbackFrameCount > 1 else { return .unavailable }
-            return .animated(singleLoopDuration: fallbackDuration(frameCount: fallbackFrameCount))
-        }
-
-        let frameCount = CGImageSourceGetCount(source)
-        guard frameCount > 1 else { return .unavailable }
-
-        var duration: TimeInterval = 0
-        for frameIndex in 0 ..< frameCount {
-            guard
-                let properties = CGImageSourceCopyPropertiesAtIndex(source, frameIndex, nil) as? [CFString: Any]
-            else {
-                duration += 0.1
-                continue
-            }
-            duration += max(frameDelay(from: properties), 0.02)
-        }
-
-        if duration <= 0 {
-            duration = fallbackDuration(frameCount: UInt(frameCount))
-        }
-        return .animated(singleLoopDuration: min(max(duration, 0.12), 60))
-    }
-
-    nonisolated private static func fallbackDuration(frameCount: UInt) -> TimeInterval {
-        min(max(TimeInterval(frameCount) * 0.1, 0.9), 60)
-    }
-
-    nonisolated private static func frameDelay(from properties: [CFString: Any]) -> TimeInterval {
-        let dictionaries: [[CFString: Any]] = [
-            properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
-            properties[kCGImagePropertyPNGDictionary] as? [CFString: Any],
-            properties[kCGImagePropertyWebPDictionary] as? [CFString: Any],
-            properties["WebP" as CFString] as? [CFString: Any],
-            properties["{WebP}" as CFString] as? [CFString: Any],
-        ]
-        .compactMap { $0 }
-
-        for dictionary in dictionaries {
-            if let unclamped = readDelayValue(from: dictionary, matching: "UnclampedDelayTime"), unclamped > 0 {
-                return max(unclamped, 0.02)
-            }
-            if let delay = readDelayValue(from: dictionary, matching: "DelayTime"), delay > 0 {
-                return max(delay, 0.02)
-            }
-        }
-        return 0.1
-    }
-
-    nonisolated private static func readDelayValue(
-        from dictionary: [CFString: Any],
-        matching keyword: String
-    ) -> TimeInterval? {
-        for (key, value) in dictionary {
-            let keyString = (key as String).lowercased()
-            guard keyString.contains(keyword.lowercased()) else { continue }
-            if let number = value as? NSNumber {
-                return number.doubleValue
-            }
-        }
-        return nil
-    }
-
-    nonisolated private static func sdWebImageAnimatedFrameCount(at fileURL: URL) -> UInt {
-#if canImport(SDWebImage) && !os(watchOS)
-        guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-              let animatedImage = SDAnimatedImage(data: data)
-        else {
-            return 0
-        }
-        return animatedImage.animatedImageFrameCount
-#else
-        return 0
-#endif
-    }
-
-#if os(macOS)
-    private static func localShareableSourceURL(primaryURL: URL?, fallbackURL: URL) -> URL? {
-        if let primaryURL, primaryURL.isFileURL {
-            return primaryURL
-        }
-        if fallbackURL.isFileURL {
-            return fallbackURL
-        }
-        return nil
-    }
-#endif
-
-    private enum AnimatedPlaybackPhase {
-        case unavailable
-        case ready
-        case playing
-    }
-
-    private struct AnimationMetadata: Sendable {
-        let isAnimated: Bool
-        let singleLoopDuration: TimeInterval
-
-        static let unavailable = AnimationMetadata(isAnimated: false, singleLoopDuration: 0)
-
-        static func animated(singleLoopDuration: TimeInterval) -> AnimationMetadata {
-            AnimationMetadata(isAnimated: true, singleLoopDuration: singleLoopDuration)
-        }
-    }
 }
 
 #if os(iOS)
 private struct PushGoShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
+    let fileURL: URL
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            // The native publisher has completed or been cancelled. Never remove the file
+            // while a sharing service still owns the operation.
+            try? FileManager.default.removeItem(at: fileURL)
+        }
         if let sheet = controller.sheetPresentationController {
             sheet.detents = [.medium(), .large()]
             sheet.prefersGrabberVisible = true
@@ -1026,10 +843,10 @@ private extension View {
 }
 
 private struct PushGoMacShareButton: NSViewRepresentable {
-    let fileURL: URL?
+    let originalData: Data?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(fileURL: fileURL)
+        Coordinator(originalData: originalData)
     }
 
     func makeNSView(context: Context) -> NSButton {
@@ -1041,7 +858,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         button.contentTintColor = .white
         button.toolTip = LocalizationProvider.localized("share_image")
         button.setAccessibilityIdentifier("action.image.preview.share")
-        button.isEnabled = fileURL != nil
+        button.isEnabled = originalData != nil
         button.target = context.coordinator
         button.action = #selector(Coordinator.shareTapped(_:))
         return button
@@ -1050,10 +867,10 @@ private struct PushGoMacShareButton: NSViewRepresentable {
     func updateNSView(_ nsView: NSButton, context: Context) {
         nsView.target = context.coordinator
         nsView.action = #selector(Coordinator.shareTapped(_:))
-        context.coordinator.fileURL = fileURL
+        context.coordinator.originalData = originalData
         nsView.setAccessibilityIdentifier("action.image.preview.share")
-        nsView.isEnabled = fileURL != nil
-        nsView.contentTintColor = fileURL == nil ? NSColor.white.withAlphaComponent(0.45) : .white
+        nsView.isEnabled = originalData != nil
+        nsView.contentTintColor = originalData == nil ? NSColor.white.withAlphaComponent(0.45) : .white
         nsView.image = Self.shareIcon()
     }
 
@@ -1069,18 +886,30 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         return icon?.withSymbolConfiguration(configuration)
     }
 
-    final class Coordinator: NSObject {
-        var fileURL: URL?
+    @MainActor
+    final class Coordinator: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate {
+        var originalData: Data?
+        private var activePicker: NSSharingServicePicker?
+        private var activeExport: URL?
+        private weak var shareButton: NSButton?
 
-        init(fileURL: URL?) {
-            self.fileURL = fileURL
+        init(originalData: Data?) {
+            self.originalData = originalData
         }
 
         @MainActor
         @objc
         func shareTapped(_ sender: NSButton) {
-            guard let fileURL else { return }
+            guard activeExport == nil, let originalData,
+                  let metadata = ImageDisplayPolicy.metadata(for: originalData),
+                  let fileURL = try? PushGoOriginalImageExport.write(
+                    originalData, contentType: UTType(metadata.contentTypeIdentifier)
+                  ) else { return }
             let picker = NSSharingServicePicker(items: [fileURL])
+            activeExport = fileURL
+            activePicker = picker
+            shareButton = sender
+            picker.delegate = self
             let anchorRect = NSRect(
                 x: sender.bounds.midX - 1,
                 y: sender.bounds.midY - 1,
@@ -1089,12 +918,29 @@ private struct PushGoMacShareButton: NSViewRepresentable {
             )
             picker.show(relativeTo: anchorRect, of: sender, preferredEdge: .maxY)
         }
+
+        func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, delegateFor sharingService: NSSharingService) -> (any NSSharingServiceDelegate)? {
+            self
+        }
+
+        func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
+            if service == nil { finishPublication() }
+        }
+
+        func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {
+            finishPublication()
+        }
+
+        func sharingService(_ sharingService: NSSharingService, didFailToShareItems items: [Any], error: any Error) {
+            finishPublication()
+        }
+
+        private func finishPublication() {
+            if let activeExport { try? FileManager.default.removeItem(at: activeExport) }
+            activeExport = nil
+            activePicker = nil
+            shareButton?.isEnabled = originalData != nil
+        }
     }
 }
-#endif
-
-#if os(iOS)
-private typealias PreviewPlatformImage = UIImage
-#elseif os(macOS)
-private typealias PreviewPlatformImage = NSImage
 #endif

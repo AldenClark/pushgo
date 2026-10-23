@@ -306,6 +306,8 @@ private struct EventDetailPanel: View {
         }
         .background(EntityVisualTokens.pageBackground)
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
+        .environment(\.pushgoResourceOwner, .entity(type: "event", localID: event.id))
+        .environment(\.pushgoResourceRevision, event.updatedAt.hashValue ^ event.timeline.count.hashValue ^ (event.timeline.first?.id.hashValue ?? 0))
     }
 }
 
@@ -336,7 +338,7 @@ private struct EventAttachmentImageStrip: View {
                             .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Image attachment for \(url.lastPathComponent)"))
+                    .accessibilityLabel(Text(LocalizedStringKey("image_attachment")))
                 } placeholder: {
                     Rectangle()
                         .fill(EntityVisualTokens.secondarySurface)

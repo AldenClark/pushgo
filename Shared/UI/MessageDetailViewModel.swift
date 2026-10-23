@@ -120,29 +120,12 @@ final class MessageDetailViewModel {
                 id: messageId,
                 revision: revision
             )
-            scheduleDetailImageMetadataPreheat(for: resolvedMessage)
         } else {
             message = nil
         }
     }
 
-    private func scheduleDetailImageMetadataPreheat(for message: PushMessage) {
-        let bodyText = message.resolvedBody.rawText
-        let directImageURLs = message.imageURLs
-        Task.detached(priority: .utility) {
-            let imageURLs = resolvedDetailImageAssetURLs(
-                bodyText: bodyText,
-                directImageURLs: directImageURLs
-            )
-            guard !imageURLs.isEmpty else { return }
-            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
-            await SharedImageCache.preheatMetadata(
-                for: imageURLs,
-                maxBytes: AppConstants.maxMessageImageBytes,
-                timeout: 10
-            )
-        }
-    }
+
 }
 
 func resolvedDetailImageAssetURLs(for message: PushMessage) -> [URL] {

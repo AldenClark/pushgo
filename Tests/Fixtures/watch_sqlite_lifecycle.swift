@@ -142,12 +142,124 @@ private func runLifecycleTests() throws {
     }
 }
 
+#if WATCH_RESOURCE_TESTS
+private func runResourceTests() throws {
+    let hashA = String(repeating: "a", count: 64)
+    let hashB = String(repeating: "b", count: 64)
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-immutable")
+        _ = try store.ingestWatchDelivery(delivery("resource-delivery", messageID: "resource-message"))
+        let owner = ImageResourceOwner.watchMessage(localID: "resource-message")
+        let initial = try store.imageResourceSnapshot(owner: owner)!
+        try require(try store.bindImageResource(snapshot: initial, requestKey: "request", contentHash: hashA), "first acquisition must bind")
+        try require(try !store.bindImageResource(snapshot: initial, requestKey: "request", contentHash: hashB), "a later response must not replace the historical binding")
+        _ = try store.markWatchLightMessageRead(messageId: "resource-message")
+        _ = try store.ingestWatchDelivery(delivery("resource-delivery", messageID: "resource-message", body: "Enriched body"))
+        try require(try store.imageResourceSnapshot(owner: owner) == initial, "read state and duplicate metadata may not invalidate acquired content")
+        try require(try store.imageResourceBinding(snapshot: initial, requestKey: "request") == hashA, "historical bytes must remain bound")
+        print("PASS resource_immutable_binding_and_read_enrichment")
+    }
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-shared")
+        _ = try store.ingestWatchDelivery(delivery("shared-a", messageID: "shared-a"))
+        _ = try store.ingestWatchDelivery(delivery("shared-b", messageID: "shared-b"))
+        let first = try store.imageResourceSnapshot(owner: .watchMessage(localID: "shared-a"))!
+        let second = try store.imageResourceSnapshot(owner: .watchMessage(localID: "shared-b"))!
+        try require(first.scope == second.scope, "same proved Gateway and recipient can share a resource")
+        try require(try store.bindImageResource(snapshot: first, requestKey: "request", contentHash: hashA), "first reference must bind")
+        try require(try store.bindImageResource(snapshot: second, requestKey: "request", contentHash: hashA), "second reference must bind")
+        let object = URL(fileURLWithPath: ProcessInfo.processInfo.environment["WATCH_SQLITE_TEST_ROOT"]!).appendingPathComponent("resource-object")
+        try Data("retained original".utf8).write(to: object)
+        let firstMessage = try store.loadWatchLightMessage(messageId: "shared-a")!
+        try require(try store.deleteWatchLightMessage(matching: firstMessage, config: nil, localConfig: nil), "first delete must commit")
+        try require(try !store.collectImageResource(contentHash: hashA, remove: { try? FileManager.default.removeItem(at: object) }), "another business reference must prevent unlink")
+        try require(FileManager.default.fileExists(atPath: object.path), "shared bytes were deleted too early")
+        try require(try !store.bindImageResource(snapshot: first, requestKey: "late-request", contentHash: hashB), "deleted owner's late fetch may not revive a reference")
+        let secondMessage = try store.loadWatchLightMessage(messageId: "shared-b")!
+        try require(try store.deleteWatchLightMessage(matching: secondMessage, config: nil, localConfig: nil), "second delete must commit")
+        try require(try store.collectImageResource(contentHash: hashA, remove: { try? FileManager.default.removeItem(at: object) }), "unreferenced bytes must be collectable")
+        try require(!FileManager.default.fileExists(atPath: object.path), "collection must unlink the original")
+        print("PASS resource_shared_reference_delete_and_late_bind")
+    }
+    do {
+        let reopened = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-immutable")
+        let snapshot = try reopened.imageResourceSnapshot(owner: .watchMessage(localID: "resource-message"))!
+        try require(try reopened.imageResourceBinding(snapshot: snapshot, requestKey: "request") == hashA, "reopen must preserve acquired resource identity")
+        print("PASS resource_reference_reopen")
+    }
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-aba")
+        _ = try store.ingestWatchDelivery(delivery("aba-old", messageID: "aba-message"))
+        let before = try store.imageResourceSnapshot(owner: .watchMessage(localID: "aba-message"))!
+        let content = try store.loadWatchLightMessage(messageId: "aba-message")!
+        try require(try store.deleteWatchLightMessage(matching: content, config: nil, localConfig: nil), "ABA delete must commit")
+        try store.upsertWatchLightPayload(.message(content))
+        let recreated = try store.imageResourceSnapshot(owner: .watchMessage(localID: "aba-message"))!
+        try require(before.stamp != recreated.stamp, "identical bytes/time after delete must have a new lifecycle")
+        try require(try !store.bindImageResource(snapshot: before, requestKey: "late", contentHash: hashA), "ABA old response must not bind the new row")
+        try require(try store.bindImageResource(snapshot: recreated, requestKey: "request", contentHash: hashA), "recreated content may acquire its own bytes")
+        try require(try store.deleteWatchLightMessage(matching: content, config: nil, localConfig: nil), "second identical delete must commit")
+        try store.upsertWatchLightPayload(.message(content))
+        let unprovedReplacement = try store.imageResourceSnapshot(owner: .watchMessage(localID: "aba-message"))!
+        try require(unprovedReplacement.scope != recreated.scope, "an unknown-source replacement may not fresh-hit another lifecycle's cache namespace")
+        _ = try store.ingestWatchDelivery(delivery("aba-new", messageID: "aba-message"))
+        let newDelivery = try store.imageResourceSnapshot(owner: .watchMessage(localID: "aba-message"))!
+        try require(newDelivery.stamp != recreated.stamp, "a genuine new delivery must not inherit old content bindings")
+        try require(try store.imageResourceBinding(snapshot: newDelivery, requestKey: "request") == nil, "new delivery must start without the old binding")
+        print("PASS resource_delete_recreate_and_new_delivery_generations")
+    }
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-entities")
+        try store.upsertWatchLightPayload(.event(WatchLightEvent(eventId: "resource-event", title: "Event", summary: nil, state: nil, severity: nil, decryptionState: nil, imageURL: nil, updatedAt: Date(timeIntervalSince1970: 123))))
+        try store.upsertWatchLightPayload(.thing(WatchLightThing(thingId: "resource-thing", title: "Thing", summary: nil, attrsJSON: nil, decryptionState: nil, imageURL: nil, updatedAt: Date(timeIntervalSince1970: 123))))
+        let event = try store.imageResourceSnapshot(owner: .watchEntity(type: "event", localID: "resource-event"))!
+        let thing = try store.imageResourceSnapshot(owner: .watchEntity(type: "thing", localID: "resource-thing"))!
+        try require(event.scope != thing.scope, "unproved imported owners must not share a scope")
+        try require(try store.bindImageResource(snapshot: event, requestKey: "request", contentHash: hashA), "event reference must bind")
+        try require(try store.bindImageResource(snapshot: thing, requestKey: "request", contentHash: hashA), "thing reference must bind")
+        try store.clearWatchLightStore()
+        try require(try store.imageResourceSnapshot(owner: event.owner) == nil, "reset must remove canonical event")
+        try require(try store.collectImageResource(contentHash: hashA, remove: {}), "reset must release both entity references")
+        print("PASS resource_entity_scopes_and_reset_release")
+    }
+    do {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["WATCH_SQLITE_TEST_ROOT"]!).appendingPathComponent("resource-old-schema", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        try require(sqlite3_open(root.appendingPathComponent("watch.sqlite").path, &db) == SQLITE_OK, "old test database must open")
+        let oldSQL = """
+            CREATE TABLE watch_light_messages(message_id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, image_url TEXT, url TEXT, severity TEXT, received_at REAL NOT NULL, is_read INTEGER NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT, notification_request_id TEXT);
+            INSERT INTO watch_light_messages VALUES('old-resource-message', 'Preserved title', 'Preserved body', NULL, NULL, NULL, 123, 0, 'message', 'old-resource-message', 'old-resource-request');
+            """
+        let migrated: ImageResourceOwnerSnapshot
+        try require(sqlite3_exec(db, oldSQL, nil, nil, nil) == SQLITE_OK, "explicit old schema fixture must be valid")
+        sqlite3_close(db)
+        do {
+            let store = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-old-schema")
+            try require(try store.loadWatchLightMessage(messageId: "old-resource-message")?.body == "Preserved body", "resource schema upgrade may not discard old content")
+            migrated = try store.imageResourceSnapshot(owner: .watchMessage(localID: "old-resource-message"))!
+            try require(migrated.scope.hasPrefix("isolated:"), "old unproved source must remain owner-local")
+            try require(try store.bindImageResource(snapshot: migrated, requestKey: "request", contentHash: hashA), "migrated existing content may bind safely")
+        }
+        let reopened = try WatchLocalSQLiteStore(appGroupIdentifier: "resource-old-schema")
+        try require(try reopened.imageResourceSnapshot(owner: migrated.owner) == migrated, "reopen may not renew migrated generation")
+        try require(try reopened.imageResourceBinding(snapshot: migrated, requestKey: "request") == hashA, "migration must be idempotent")
+        print("PASS resource_old_schema_migration_and_reopen")
+    }
+}
+#endif
+
 @main
 private enum WatchSQLiteLifecycleTests {
     static func main() {
         do {
             try runLifecycleTests()
+#if WATCH_RESOURCE_TESTS
+            try runResourceTests()
+            print("RESULT passed=13 failed=0 layer=host_production_watch_sqlite")
+#else
             print("RESULT passed=7 failed=0 layer=host_production_watch_sqlite")
+#endif
         } catch {
             FileHandle.standardError.write(Data("FAIL \(error)\n".utf8))
             exit(1)

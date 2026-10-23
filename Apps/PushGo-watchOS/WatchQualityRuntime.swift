@@ -439,8 +439,8 @@ enum WatchQualityRuntime {
         guard let data = Data(base64Encoded: standardImagePNGBase64),
               let source = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceCreateImageAtIndex(source, 0, nil) != nil,
-              await SharedImageCache.store(data: data, for: standardImageURL) != nil,
-              await SharedImageCache.cachedData(for: standardImageURL) == data
+              let file = await SharedImageCache.store(data: data, for: standardImageURL),
+              (try? Data(contentsOf: file)) == data
         else {
             throw WatchQualityRuntimeError.mediaPreparationFailed
         }

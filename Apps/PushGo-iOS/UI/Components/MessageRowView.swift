@@ -78,7 +78,7 @@ struct MessageRowView: View {
         GeometryReader { proxy in
             HStack(spacing: Layout.imageSpacing) {
                 ForEach(message.imageURLs.prefix(visibleImageCount(for: proxy.size.width)), id: \.absoluteString) { imageURL in
-                    RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                    RemoteImageView(url: imageURL, rendition: .listThumbnail, owner: .message(localID: message.id)) { image in
                         image
                             .resizable()
                             .scaledToFill()

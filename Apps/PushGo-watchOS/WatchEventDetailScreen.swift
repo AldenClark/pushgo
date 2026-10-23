@@ -56,12 +56,14 @@ struct WatchEventDetailScreen: View {
                     Section(LocalizationManager.shared.localized("image")) {
                         WatchCachedImage(
                             url: imageURL,
+                            owner: .watchEntity(type: "event", localID: event.eventId),
+                            revision: event.updatedAt.hashValue ^ event.hashValue,
                             accessibilityLabel: LocalizationManager.shared.localized("image")
                         ) { phase in
                             switch phase {
                             case let .success(image):
                                 Button {
-                                    previewImageItem = WatchEventImagePreviewItem(url: imageURL)
+                                    previewImageItem = WatchEventImagePreviewItem(url: imageURL, eventId: event.eventId)
                                 } label: {
                                     image
                                         .resizable()
@@ -93,6 +95,7 @@ struct WatchEventDetailScreen: View {
                     Color.appImagePreviewScrim.ignoresSafeArea()
                     WatchCachedImage(
                         url: item.url,
+                        owner: .watchEntity(type: "event", localID: item.eventId),
                         accessibilityLabel: LocalizationManager.shared.localized("image")
                     ) { phase in
                         switch phase {
@@ -119,5 +122,6 @@ struct WatchEventDetailScreen: View {
 
 private struct WatchEventImagePreviewItem: Identifiable {
     let url: URL
-    var id: String { url.absoluteString }
+    let eventId: String
+    var id: String { "\(eventId)|\(url.absoluteString)" }
 }

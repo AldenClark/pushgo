@@ -316,9 +316,6 @@ struct MessageSplitScreen: View {
             selectedMessageSnapshot = loaded
             synchronizedMessageRevision = revision
         }
-        if let loaded {
-            scheduleDetailImageMetadataPrime(for: loaded)
-        }
         guard markRead, let loaded else { return }
         await markMessageReadIfNeeded(loaded, messageId: messageId)
     }
@@ -340,19 +337,6 @@ struct MessageSplitScreen: View {
                 selectedMessageSnapshot = message
                 onOpenMessageHandled?()
             }
-            scheduleDetailImageMetadataPrime(for: message)
-        }
-    }
-
-    private func scheduleDetailImageMetadataPrime(for message: PushMessage) {
-        let bodyText = message.resolvedBody.rawText
-        let directImageURLs = message.imageURLs
-        Task.detached(priority: .utility) {
-            let imageURLs = resolvedDetailImageAssetURLs(
-                bodyText: bodyText,
-                directImageURLs: directImageURLs
-            )
-            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
         }
     }
 

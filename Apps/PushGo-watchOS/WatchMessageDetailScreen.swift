@@ -47,6 +47,7 @@ struct WatchMessageDetailScreen: View {
                     Section(localizationManager.localized("image")) {
                         WatchCachedImage(
                             url: imageURL,
+                            owner: .watchMessage(localID: message.messageId),
                             accessibilityLabel: localizationManager.localized("image")
                         ) { phase in
                             switch phase {

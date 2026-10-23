@@ -20,6 +20,8 @@
 		0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */; };
 		10C96E0F516BE3B0A1357BB3 /* PushGoNotificationNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */; };
 		15359658F593774559F8D496 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000001 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000001 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		159B33CC9CF15A8C440BF97C /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		191B7610626749B9B12E1045 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */; };
 		1E08B6C84A13AD8A716A9F21 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
@@ -47,6 +49,8 @@
 		61354C5D3790413DBD29BCFB /* PlatformColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */; };
 		6176829B302E1663E05959E7 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40915CA9B3604BF1991DC27A /* ToastView.swift */; };
 		622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000002 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000002 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		65F43DA819F3DB0B9D12AE54 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		66DA6DAD09A94C5AB57BCB21 /* AppFormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F995116FFE4856B0C30372 /* AppFormControls.swift */; };
 		6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
@@ -82,6 +86,8 @@
 		AA8E2C582EF2359D00AD1834 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		AA8E2C5C2EF2359D00AD1834 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		AA8E2C5D2EF2359D00AD1834 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000003 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000003 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		AA8E2C5F2EF2359D00AD1834 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		AA8E2C602EF2359D00AD1834 /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		AA8E2C612EF2359D00AD1834 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
@@ -98,6 +104,8 @@
 		AA8E2C842EF2359D00AD1834 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		AA8E2C882EF2359D00AD1834 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		AA8E2C892EF2359D00AD1834 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000004 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000004 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		AA8E2C8B2EF2359D00AD1834 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		AA8E2C8C2EF2359D00AD1834 /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		AA8E2C8D2EF2359D00AD1834 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
@@ -113,6 +121,8 @@
 		AAE0B0B32F6A000100C0FFEE /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		AAE0B0B42F6A000100C0FFEE /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000005 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000005 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		AAE0B0B72F6A000100C0FFEE /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		AAE0B0B82F6A000100C0FFEE /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		AAE0B0B92F6A000100C0FFEE /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
@@ -248,6 +258,8 @@
 		D2F100000000000000000002 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
 		D2F100000000000000000003 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
 		D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
+		F72410250000000000000006 /* ImageResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241025ABCDE000000000001 /* ImageResourceStore.swift */; };
+		F72410240000000000000006 /* ImageDisplayPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */; };
 		DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
 		E7BAE8A0353490E88EF117FA /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
@@ -700,6 +712,8 @@
 		FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSearchIndex.swift; sourceTree = "<group>"; };
 		FEE100102F80000100C0FFEE /* WatchLightModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightModels.swift; sourceTree = "<group>"; };
 		FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightQuantizer.swift; sourceTree = "<group>"; };
+		F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDisplayPolicy.swift; sourceTree = "<group>"; };
+		F7241025ABCDE000000000001 /* ImageResourceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageResourceStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1192,6 +1206,8 @@
 				C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */,
 				C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */,
 				AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */,
+				F7241025ABCDE000000000001 /* ImageResourceStore.swift */,
+				F7241024ABCDE000000000001 /* ImageDisplayPolicy.swift */,
 				AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */,
 				FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */,
 			);
@@ -1801,6 +1817,8 @@
 				92D2AB2E26195994810976E0 /* ServerConfig.swift in Sources */,
 				47149B48AA28628BBD2D912D /* UserInfoSanitizer.swift in Sources */,
 				15359658F593774559F8D496 /* SharedImageCache.swift in Sources */,
+				F72410250000000000000001 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000001 /* ImageDisplayPolicy.swift in Sources */,
 				ABB5C85DDC69BE814D6B8875 /* KeychainStore.swift in Sources */,
 				FEE100002F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 			);
@@ -1886,6 +1904,8 @@
 				AA8E2C842EF2359D00AD1834 /* AnyCodable.swift in Sources */,
 				AA8E2C882EF2359D00AD1834 /* AppError.swift in Sources */,
 				AA8E2C892EF2359D00AD1834 /* SharedImageCache.swift in Sources */,
+				F72410250000000000000004 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000004 /* ImageDisplayPolicy.swift in Sources */,
 				AA8E2C8B2EF2359D00AD1834 /* LocalizationProvider.swift in Sources */,
 				AA8E2C8C2EF2359D00AD1834 /* PushGoMarkdownCore.swift in Sources */,
 				C0A1B2C3D4E5F60718293B16 /* ChannelNameValidator.swift in Sources */,
@@ -2000,6 +2020,8 @@
 				AA8E2C582EF2359D00AD1834 /* AnyCodable.swift in Sources */,
 				AA8E2C5C2EF2359D00AD1834 /* AppError.swift in Sources */,
 				AA8E2C5D2EF2359D00AD1834 /* SharedImageCache.swift in Sources */,
+				F72410250000000000000003 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000003 /* ImageDisplayPolicy.swift in Sources */,
 				AA8E2C5F2EF2359D00AD1834 /* LocalizationProvider.swift in Sources */,
 				AA8E2C602EF2359D00AD1834 /* PushGoMarkdownCore.swift in Sources */,
 				C0A1B2C3D4E5F60718293B17 /* ChannelNameValidator.swift in Sources */,
@@ -2081,6 +2103,8 @@
 				FEE1000C2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
 				C0A1B2C3D4E5F60718293A5E /* SwiftDataModels.swift in Sources */,
 				AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
+				F72410250000000000000005 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000005 /* ImageDisplayPolicy.swift in Sources */,
 				F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */,
 				FEE100062F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100072F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
@@ -2133,6 +2157,8 @@
 				FEE1000D2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
 				5C17E6647F8876BCE0F0F47B /* SwiftDataModels.swift in Sources */,
 				622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */,
+				F72410250000000000000002 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000002 /* ImageDisplayPolicy.swift in Sources */,
 				FE2C0ABFC6BCA89762F248D1 /* KeychainStore.swift in Sources */,
 				FEE100082F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100092F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
@@ -2198,6 +2224,8 @@
 				71F38D714BD4191EFC16C7AA /* PushGoMarkdownCore.swift in Sources */,
 				10C96E0F516BE3B0A1357BB3 /* PushGoNotificationNames.swift in Sources */,
 				D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */,
+				F72410250000000000000006 /* ImageResourceStore.swift in Sources */,
+				F72410240000000000000006 /* ImageDisplayPolicy.swift in Sources */,
 				E7BAE8A0353490E88EF117FA /* UserInfoSanitizer.swift in Sources */,
 				FEE1000A2F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE1000B2F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,

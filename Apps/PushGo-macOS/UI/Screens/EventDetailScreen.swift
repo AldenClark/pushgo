@@ -213,6 +213,8 @@ private struct EventDetailPanel: View {
         }
         .background(EntityVisualTokens.pageBackground)
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
+        .environment(\.pushgoResourceOwner, .entity(type: "event", localID: event.id))
+        .environment(\.pushgoResourceRevision, event.updatedAt.hashValue ^ event.timeline.count.hashValue ^ (event.timeline.first?.id.hashValue ?? 0))
     }
 }
 

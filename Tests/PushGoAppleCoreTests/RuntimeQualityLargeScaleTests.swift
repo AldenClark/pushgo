@@ -280,6 +280,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v26_output_system_snapshot_work"))
             #expect(applied.contains("v27_watch_standalone_alert_window"))
             #expect(applied.contains("v28_delivery_only_processed_retention"))
+            #expect(applied.contains("v29_immutable_image_content_references"))
 
             let migratedTables = try await dbQueue.read { db in
                 try Set(
@@ -1079,6 +1080,9 @@ struct RuntimeQualityLargeScaleTests {
                 DROP TRIGGER IF EXISTS messages_stats_after_delete;
                 DROP TRIGGER IF EXISTS messages_stats_after_update;
                 DROP TRIGGER IF EXISTS messages_revision_after_update;
+                DROP TRIGGER IF EXISTS image_references_after_message_delete;
+                DROP TABLE IF EXISTS image_content_references;
+                DROP TABLE IF EXISTS image_resource_owners;
                 DROP TABLE IF EXISTS message_facet_index;
                 DROP TABLE IF EXISTS message_summary_projection;
                 DROP TABLE IF EXISTS message_derived_state;
@@ -1103,7 +1107,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v25_canonical_derived_work_outbox',
                     'v26_output_system_snapshot_work',
                     'v27_watch_standalone_alert_window',
-                    'v28_delivery_only_processed_retention'
+                    'v28_delivery_only_processed_retention',
+                    'v29_immutable_image_content_references'
                 );
                 """)
         }

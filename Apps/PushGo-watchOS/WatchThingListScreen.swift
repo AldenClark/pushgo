@@ -126,6 +126,8 @@ private struct WatchLightThingRow: View {
         HStack(spacing: 8) {
             WatchEntityAvatar(
                 url: thing.imageURL,
+                owner: .watchEntity(type: "thing", localID: thing.thingId),
+                revision: thing.updatedAt.hashValue ^ thing.hashValue,
                 loadedImageAccessibilityIdentifier: "image.thing.row.\(thing.thingId)",
                 loadedImageAccessibilityLabel: localizationManager.localized("image")
             )

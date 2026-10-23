@@ -40,13 +40,15 @@ struct EntitySelectionBackground: View {
 }
 
 struct EntityThumbnail: View {
+    var owner: SharedImageCache.ResourceOwner? = nil
+    var revision: Int? = nil
     let url: URL?
     var size: CGFloat = 44
     var placeholderSystemImage: String = "cube.fill"
     var showsBorder: Bool = true
 
     var body: some View {
-        RemoteImageView(url: url, rendition: .listThumbnail) { image in
+        RemoteImageView(url: url, rendition: .listThumbnail, owner: owner, revision: revision) { image in
             image
                 .resizable()
                 .scaledToFill()

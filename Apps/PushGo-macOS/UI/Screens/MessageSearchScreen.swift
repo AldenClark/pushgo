@@ -326,7 +326,7 @@ struct MessageSearchResultRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let imageURL = message.imageURL {
-                    RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                    RemoteImageView(url: imageURL, rendition: .listThumbnail, owner: .message(localID: message.id)) { image in
                         image
                             .resizable()
                             .scaledToFill()

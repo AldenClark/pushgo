@@ -1,3 +1,4 @@
+import Foundation
 import ImageIO
 import SwiftUI
 
@@ -7,40 +8,93 @@ enum WatchCachedImagePhase {
     case failure
 }
 
+/// Watch has no animated resource player. Decode exactly the first frame at display size,
+/// rather than creating a full-resolution image (or materializing animation frames).
+private actor WatchImageDecoder {
+    static let shared = WatchImageDecoder()
+
+    func firstFrame(from data: Data, maximumPixelDimension: Int) -> CGImage? {
+        guard !Task.isCancelled, (1...512).contains(maximumPixelDimension) else { return nil }
+        return ImageDisplayPolicy.firstFrame(for: data, maximumPixelSize: maximumPixelDimension)
+    }
+}
+
 struct WatchCachedImage<Content: View>: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     let url: URL
+    let owner: SharedImageCache.ResourceOwner
+    var revision: Int? = nil
     let accessibilityLabel: String
+    var maximumPixelDimension: Int = 512
     @ViewBuilder let content: (WatchCachedImagePhase) -> Content
 
+    private struct LoadIdentity: Hashable {
+        let url: URL
+        let owner: SharedImageCache.ResourceOwner
+        let maximumPixelDimension: Int
+        let isActive: Bool
+        let isVisible: Bool
+        let retry: Int
+        let revision: Int?
+    }
+
     @State private var phase: WatchCachedImagePhase = .empty
+    @State private var isVisible = false
+    @State private var isStale = false
+    @State private var retry = 0
+    @State private var isAnimatedSource = false
 
     var body: some View {
         ZStack {
             content(phase)
         }
-        .task(id: url) {
+        .accessibilityHint(isAnimatedSource ? Text(LocalizedStringKey("image_static_preview")) : Text(""))
+        .overlay(alignment: .bottomTrailing) {
+            if isStale {
+                Button { retry += 1 } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption2).padding(4)
+                }
+                .accessibilityLabel(LocalizedStringKey("image_cached_preview_retry"))
+            }
+        }
+        .task(id: LoadIdentity(
+            url: url, owner: owner, maximumPixelDimension: maximumPixelDimension,
+            isActive: scenePhase == .active, isVisible: isVisible, retry: retry, revision: revision
+        )) {
             phase = .empty
+            isStale = false
+            isAnimatedSource = false
+            guard scenePhase == .active, isVisible else { return }
             do {
-                let data = try await SharedImageCache.fetchData(
-                    from: url,
+                let resource = try await SharedImageCache.resolve(
+                    for: url,
                     maxBytes: 8 * 1024 * 1024,
-                    timeout: 10
+                    timeout: 10,
+                    owner: owner
                 )
-                guard !Task.isCancelled,
-                      let source = CGImageSourceCreateWithData(data as CFData, nil),
-                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-                else {
-                    if !Task.isCancelled { phase = .failure }
+                defer { withExtendedLifetime(resource) {} }
+                guard let image = await WatchImageDecoder.shared.firstFrame(
+                    from: resource.data,
+                    maximumPixelDimension: maximumPixelDimension
+                ), !Task.isCancelled, isVisible, scenePhase == .active else {
+                    if !Task.isCancelled, isVisible, scenePhase == .active { phase = .failure }
                     return
                 }
-                phase = .success(
-                    Image(image, scale: 1, label: Text(accessibilityLabel))
-                )
+                isStale = resource.isStale
+                isAnimatedSource = ImageDisplayPolicy.metadata(for: resource.data, inspectAnimationFrames: false)?.isAnimated == true
+                phase = .success(Image(image, scale: 1, label: Text(accessibilityLabel)))
             } catch is CancellationError {
                 return
             } catch {
-                phase = .failure
+                if !Task.isCancelled, isVisible, scenePhase == .active { phase = .failure }
             }
+        }
+        .onAppear { isVisible = true }
+        .onDisappear {
+            isVisible = false
+            phase = .empty
         }
     }
 }
@@ -96,6 +150,8 @@ enum WatchEntityVisualTokens {
 
 struct WatchEntityAvatar: View {
     let url: URL?
+    let owner: SharedImageCache.ResourceOwner
+    var revision: Int? = nil
     var size: CGFloat = 32
     let loadedImageAccessibilityIdentifier: String
     let loadedImageAccessibilityLabel: String
@@ -103,7 +159,13 @@ struct WatchEntityAvatar: View {
     var body: some View {
         Group {
             if let url {
-                WatchCachedImage(url: url, accessibilityLabel: loadedImageAccessibilityLabel) { phase in
+                WatchCachedImage(
+                    url: url,
+                    owner: owner,
+                    revision: revision,
+                    accessibilityLabel: loadedImageAccessibilityLabel,
+                    maximumPixelDimension: 128
+                ) { phase in
                     switch phase {
                     case let .success(image):
                         image

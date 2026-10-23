@@ -298,6 +298,8 @@ private struct ThingDetailPanel: View {
         }
         .background(EntityVisualTokens.pageBackground)
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
+        .environment(\.pushgoResourceOwner, .entity(type: "thing", localID: thing.id))
+        .environment(\.pushgoResourceRevision, thing.updatedAt.hashValue ^ thing.relatedUpdates.count.hashValue ^ (thing.relatedUpdates.first?.id.hashValue ?? 0))
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(event: event)
                 .toastOverlay(environment: environment)
@@ -562,7 +564,7 @@ private struct ThingAttachmentImageStrip: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(Text("Image attachment for \(url.lastPathComponent)"))
+                        .accessibilityLabel(Text(LocalizedStringKey("image_attachment")))
                     } placeholder: {
                         Rectangle()
                             .fill(EntityVisualTokens.secondarySurface)

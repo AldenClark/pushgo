@@ -16,6 +16,9 @@ struct QualityLegacyStoreMigrationTests {
                 try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM pragma_table_info('app_settings') WHERE name = 'watch_alert_window_minutes'") != 0
             }
             #expect(!legacyHasWatchColumn)
+            #expect(try await database.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('image_resource_owners', 'image_content_references')")
+            } == 0)
 
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             #expect(store.storageState.mode == .persistent)
@@ -36,6 +39,9 @@ struct QualityLegacyStoreMigrationTests {
                 try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM pragma_table_info('app_settings') WHERE name = 'watch_alert_window_minutes'")
             }
             #expect(watchColumnCount == 1)
+            #expect(try await database.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations WHERE identifier = 'v29_immutable_image_content_references'")
+            } == 1)
             LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
             let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             #expect(reopened.storageState.mode == .persistent)

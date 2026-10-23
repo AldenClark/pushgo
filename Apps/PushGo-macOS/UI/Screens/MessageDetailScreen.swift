@@ -84,6 +84,7 @@ struct MessageDetailScreen: View {
             )
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
+        .environment(\.pushgoResourceOwner, viewModel.message.map { .message(localID: $0.id) })
         .background(detailBackgroundColor)
         .userActivity(
             PushGoUserActivityBuilder.messageActivityType,

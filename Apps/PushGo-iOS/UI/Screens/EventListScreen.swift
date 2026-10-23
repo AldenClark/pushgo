@@ -815,7 +815,7 @@ struct EventListRow: View {
             if !previewImageAttachments.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(previewImageAttachments, id: \.absoluteString) { url in
-                        RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                        RemoteImageView(url: url, rendition: .listThumbnail, owner: .entity(type: "event", localID: event.id), revision: event.updatedAt.hashValue ^ event.timeline.count.hashValue ^ (event.timeline.first?.id.hashValue ?? 0)) { image in
                             image
                                 .resizable()
                                 .scaledToFill()

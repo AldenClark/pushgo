@@ -66,47 +66,6 @@ final class MessageStateCoordinator {
         return changed
     }
 
-    func deleteMessage(messageId: UUID) async throws {
-        let message = try await dataStore.loadMessage(id: messageId)
-        try await dataStore.deleteMessage(id: messageId)
-        if let message {
-            removeDeliveredNotifications(identifiers: notificationRequestIds(from: [message]))
-            await purgeImages(for: [message])
-        }
-        await refreshCountsAndNotify()
-    }
-
-    @discardableResult
-    func deleteMessages(messageIds: [UUID]) async throws -> Int {
-        let uniqueIds = Array(Set(messageIds))
-        guard !uniqueIds.isEmpty else { return 0 }
-        let candidates = try await dataStore.loadMessages(ids: uniqueIds)
-        let deleted = try await dataStore.deleteMessages(ids: uniqueIds)
-        guard deleted > 0 else { return 0 }
-        removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
-        await purgeImages(for: candidates)
-        await refreshCountsAndNotify()
-        return deleted
-    }
-
-    func deleteMessage(notificationRequestId: String, messageId: String?) async throws {
-        var message: PushMessage?
-        if let messageId {
-            message = try await dataStore.loadMessage(messageId: messageId)
-        }
-        if message == nil {
-            message = try await dataStore.loadMessage(notificationRequestId: notificationRequestId)
-        }
-        if let message {
-            try await dataStore.deleteMessage(id: message.id)
-            await purgeImages(for: [message])
-        } else {
-            try await dataStore.deleteMessage(notificationRequestId: notificationRequestId)
-        }
-        removeDeliveredNotifications(identifiers: [notificationRequestId])
-        await refreshCountsAndNotify()
-    }
-
     func deleteMessages(channel: String?, readState: Bool?) async throws -> Int {
         if channel == nil && readState == nil {
             return try await deleteAllMessages()

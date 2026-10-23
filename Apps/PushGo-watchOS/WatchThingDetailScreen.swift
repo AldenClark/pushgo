@@ -17,6 +17,8 @@ struct WatchThingDetailScreen: View {
                     HStack(alignment: .top, spacing: 10) {
                         WatchEntityAvatar(
                             url: thing.imageURL,
+                            owner: .watchEntity(type: "thing", localID: thing.thingId),
+                            revision: thing.updatedAt.hashValue ^ thing.hashValue,
                             size: 44,
                             loadedImageAccessibilityIdentifier: "image.thing.detail.\(thing.thingId)",
                             loadedImageAccessibilityLabel: localizationManager.localized("image")

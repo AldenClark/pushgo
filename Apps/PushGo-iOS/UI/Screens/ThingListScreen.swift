@@ -766,6 +766,8 @@ private struct ThingListRow: View {
         VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
             HStack(alignment: .top, spacing: 10) {
                 EntityThumbnail(
+                    owner: .entity(type: "thing", localID: thing.id),
+                    revision: thing.updatedAt.hashValue ^ thing.relatedUpdates.count.hashValue ^ (thing.relatedUpdates.first?.id.hashValue ?? 0),
                     url: primaryImageURL,
                     size: Layout.primaryImageSize,
                     placeholderSystemImage: "cube.box",
@@ -823,7 +825,7 @@ private struct ThingListRow: View {
                     let visibleAttachments = Array(previewImageAttachments.prefix(visibleCount))
                     HStack(spacing: Layout.attachmentImageSpacing) {
                         ForEach(visibleAttachments, id: \.absoluteString) { url in
-                            RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                            RemoteImageView(url: url, rendition: .listThumbnail, owner: .entity(type: "thing", localID: thing.id), revision: thing.updatedAt.hashValue ^ thing.relatedUpdates.count.hashValue ^ (thing.relatedUpdates.first?.id.hashValue ?? 0)) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()

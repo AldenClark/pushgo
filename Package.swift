@@ -135,6 +135,8 @@ let package = Package(
                 "Utilities/ProjectionSemantics.swift",
                 "Utilities/PushGoMarkdownCore.swift",
                 "Utilities/SharedImageCache.swift",
+                "Utilities/ImageDisplayPolicy.swift",
+                "Utilities/ImageResourceStore.swift",
                 "Utilities/PushRegistrationSemantics.swift",
                 "Utilities/SearchQuerySemantics.swift",
                 "Utilities/UserInfoSanitizer.swift",

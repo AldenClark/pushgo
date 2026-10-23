@@ -9,7 +9,6 @@ struct MarkdownRenderer: View {
     var font: Font = .body
     var foreground: Color = .primary
     var attachmentWidthHint: CGFloat? = nil
-    @State private var previewingImage: MarkdownImagePreviewItem?
 
     private var displayText: String {
         guard let max = maxNewlines else { return text }
@@ -30,10 +29,6 @@ struct MarkdownRenderer: View {
 
     var body: some View {
         markdownContent
-            .pushgoImagePreviewOverlay(
-                previewItem: $previewingImage,
-                imageURL: \.url
-            )
     }
 }
 
@@ -54,40 +49,9 @@ extension MarkdownRenderer {
         .transaction { transaction in
             transaction.animation = nil
         }
-        .textual.imageAttachmentLoader(
-            .adaptiveImage(
-                backend: .sdWebImage,
-                sizeProvider: markdownImageSizeProvider,
-                syncSizeProvider: markdownImageSyncSizeProvider
-            )
-        )
-        .textual.imageAttachmentURLResolver(
-            .init { url in
-                let cachedBeforeResolve = SharedImageCache.cachedFileURL(for: url, rendition: .original) != nil
-                if let sourceURL = await SharedImageCache.localSourceURL(
-                    for: url,
-                    rendition: .original,
-                    maxBytes: AppConstants.maxMessageImageBytes,
-                    timeout: 10
-                ) {
-                    recordMarkdownAttachmentResolutionMetric(
-                        usedCache: cachedBeforeResolve,
-                        resolvedToLocalSource: true
-                    )
-                    return sourceURL
-                }
-                recordMarkdownAttachmentResolutionMetric(
-                    usedCache: cachedBeforeResolve,
-                    resolvedToLocalSource: false
-                )
-                return url
-            }
-        )
-        .textual.imageAttachmentTapAction(
-            .init { tappedURL in
-                previewingImage = MarkdownImagePreviewItem(url: tappedURL)
-            }
-        )
+        // App-owned attachment rendering consumes the same controlled bytes as every other
+        // image entry. Textual owns parsing/layout, never an independent remote fallback.
+        .textual.imageAttachmentLoader(PushGoResourceAttachmentLoader())
         .textual.imageAttachmentWidthHint(attachmentWidthHint)
         .attachmentRenderingMode(.interactive)
         .textual.fontScale(Self.textualScale)
@@ -139,69 +103,6 @@ private func markdownPresentationStyle(for text: String) -> MarkdownPresentation
     case .plainText:
         return text.contains("\n") ? .structuredText : .inlineText
     }
-}
-
-let markdownImageSizeProvider: URLImageAttachmentSizeProvider = { url in
-    let metadata: ImageAssetMetadata?
-    if let cached = await SharedImageCache.metadata(for: url) {
-        recordMarkdownAttachmentMetadataMetric(source: "async", isAnimated: cached.isAnimated)
-        metadata = cached
-    } else {
-        let ensured = await SharedImageCache.ensureMetadataFromCache(for: url)
-        if let ensured {
-            recordMarkdownAttachmentMetadataMetric(source: "async", isAnimated: ensured.isAnimated)
-        } else {
-            recordMarkdownAttachmentMetadataMetric(source: "miss", isAnimated: false)
-        }
-        metadata = ensured
-    }
-    if let metadata,
-       metadata.pixelWidth > 0,
-       metadata.pixelHeight > 0
-    {
-        return CGSize(width: metadata.pixelWidth, height: metadata.pixelHeight)
-    }
-    return nil
-}
-
-let markdownImageSyncSizeProvider: URLImageAttachmentSyncSizeProvider = { url in
-    guard let metadata = SharedImageCache.metadataSnapshot(for: url),
-          metadata.pixelWidth > 0,
-          metadata.pixelHeight > 0
-    else {
-        recordMarkdownAttachmentMetadataMetric(source: "miss", isAnimated: false)
-        return nil
-    }
-    recordMarkdownAttachmentMetadataMetric(source: "sync", isAnimated: metadata.isAnimated)
-    return CGSize(width: metadata.pixelWidth, height: metadata.pixelHeight)
-}
-
-private func recordMarkdownAttachmentResolutionMetric(
-    usedCache: Bool,
-    resolvedToLocalSource: Bool
-) {
-    #if DEBUG
-    Task { @MainActor in
-        PushGoAutomationRuntime.shared.recordMarkdownAttachmentResolved(
-            usedCache: usedCache,
-            resolvedToLocalSource: resolvedToLocalSource
-        )
-    }
-    #endif
-}
-
-private func recordMarkdownAttachmentMetadataMetric(
-    source: String,
-    isAnimated: Bool
-) {
-    #if DEBUG
-    Task { @MainActor in
-        PushGoAutomationRuntime.shared.recordMarkdownAttachmentMetadataProbe(
-            source: source,
-            isAnimated: isAnimated
-        )
-    }
-    #endif
 }
 
 private func recordMarkdownDisplayModeEvaluationMetric() {
@@ -269,6 +170,51 @@ enum MarkdownImageURLExtractor {
 private struct MarkdownImagePreviewItem: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+private struct PushGoResourceAttachmentLoader: AttachmentLoader {
+    func provisionalAttachment(for url: URL, text: String, environment: ColorEnvironmentValues) -> PushGoResourceAttachment? {
+        PushGoResourceAttachment(url: url, description: text)
+    }
+
+    func attachment(for url: URL, text: String, environment: ColorEnvironmentValues) async throws -> PushGoResourceAttachment {
+        PushGoResourceAttachment(url: url, description: text)
+    }
+}
+
+private struct PushGoResourceAttachment: Attachment {
+    let url: URL
+    let description: String
+
+    @MainActor var body: some View {
+        MarkdownControlledImage(url: url, text: description)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
+        let width = max(min(proposal.width ?? environment.imageAttachmentWidthHint ?? 240, 960), 1)
+        // A stable attachment box avoids an unowned metadata GET before the controlled view
+        // resolves its canonical owner. scaledToFit preserves all source pixels; the viewer
+        // offers zoom/pan on the same acquired original rather than a second remote loader.
+        return CGSize(width: min(width, 240), height: min(width, 240) * 9 / 16)
+    }
+}
+
+private struct MarkdownControlledImage: View {
+    let url: URL
+    let text: String
+    @State private var previewingImage: MarkdownImagePreviewItem?
+
+    var body: some View {
+        RemoteImageView(url: url, rendition: .listThumbnail) { image in
+            image.resizable().scaledToFit()
+                .contentShape(Rectangle())
+                .onTapGesture { previewingImage = MarkdownImagePreviewItem(url: url) }
+        } placeholder: {
+            ProgressView()
+        }
+        .accessibilityLabel(Text(text))
+        .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
+    }
 }
 
 private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import GRDB
 import os
 
@@ -1044,6 +1045,7 @@ actor LocalDataStore {
         }
         await rebuildNotificationContextSnapshot()
         await refreshSystemSurfaceSnapshot()
+        _ = await SharedImageCache.purgeExpired(using: self)
     }
 
     nonisolated func enqueueTrackedWrite(
@@ -2138,6 +2140,20 @@ actor LocalDataStore {
     func loadMessage(id: UUID) async throws -> PushMessage? {
         let backend = try requireBackend()
         return try await backend.loadMessage(id: id)
+    }
+
+    // Resource ownership follows the canonical row, never current settings.
+    func imageResourceSnapshot(owner: ImageResourceOwner) async throws -> ImageResourceOwnerSnapshot? {
+        try await requireBackend().imageResourceSnapshot(owner: owner)
+    }
+    func imageResourceBinding(snapshot: ImageResourceOwnerSnapshot, requestKey: String) async throws -> String? {
+        try await requireBackend().imageResourceBinding(snapshot: snapshot, requestKey: requestKey)
+    }
+    func bindImageResource(snapshot: ImageResourceOwnerSnapshot, requestKey: String, contentHash: String) async throws -> Bool {
+        try await requireBackend().bindImageResource(snapshot: snapshot, requestKey: requestKey, contentHash: contentHash)
+    }
+    func collectImageResource(contentHash: String, remove: @escaping @Sendable () -> Void) async throws -> Bool {
+        try await requireBackend().collectImageResource(contentHash: contentHash, remove: remove)
     }
 
     func loadMessages(ids: [UUID]) async throws -> [PushMessage] {
@@ -4302,6 +4318,9 @@ private actor GRDBStore {
                 DROP TRIGGER IF EXISTS messages_stats_after_delete;
                 DROP TRIGGER IF EXISTS messages_stats_after_update;
                 DROP TRIGGER IF EXISTS messages_revision_after_update;
+                DROP TRIGGER IF EXISTS image_references_after_message_delete;
+                DROP TABLE IF EXISTS image_content_references;
+                DROP TABLE IF EXISTS image_resource_owners;
                 DROP TABLE IF EXISTS canonical_derived_work;
                 DROP TABLE IF EXISTS pending_local_deletions;
                 DROP TABLE IF EXISTS message_facet_index;
@@ -5531,6 +5550,28 @@ private actor GRDBStore {
                 ON pending_inbound_messages(message_id);
                 CREATE INDEX IF NOT EXISTS idx_operation_ledger_message_operation
                 ON operation_ledger(message_id, op_id);
+                """)
+        }
+        migrator.registerMigration("v29_immutable_image_content_references") { db in
+            try db.execute(sql: """
+                CREATE TABLE image_resource_owners (
+                    message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                    source_fingerprint TEXT NOT NULL,
+                    source_scope TEXT NOT NULL,
+                    generation TEXT NOT NULL
+                );
+                CREATE TABLE image_content_references (
+                    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                    owner_stamp TEXT NOT NULL,
+                    request_key TEXT NOT NULL,
+                    content_hash TEXT NOT NULL CHECK(length(content_hash) = 64),
+                    PRIMARY KEY(message_id, request_key)
+                );
+                CREATE INDEX idx_image_content_references_hash ON image_content_references(content_hash);
+                CREATE TRIGGER image_references_after_message_delete AFTER DELETE ON messages BEGIN
+                    DELETE FROM image_content_references WHERE message_id = OLD.id;
+                    DELETE FROM image_resource_owners WHERE message_id = OLD.id;
+                END;
                 """)
         }
 	        return migrator
@@ -9806,6 +9847,95 @@ private actor GRDBStore {
 	                .map { $0.toPushMessage(decoder: decoder) }
 	        }
 	    }
+
+    private static func resourceSnapshot(owner: ImageResourceOwner, createIfMissing: Bool = false, db: Database) throws -> ImageResourceOwnerSnapshot? {
+        let row: Row?
+        switch owner {
+        case let .message(id):
+            row = try Row.fetchOne(db, sql: "SELECT * FROM messages WHERE id = ?", arguments: [id.uuidString])
+        case let .entity(type, id):
+            let table: String
+            let column: String
+            if type == "event" { table = "event_projection_heads"; column = "event_id" }
+            else if type == "thing" { table = "thing_projection_heads"; column = "thing_id" }
+            else { return nil }
+            row = try Row.fetchOne(db, sql: "SELECT m.* FROM messages m JOIN \(table) p ON p.id=m.id WHERE p.\(column)=?", arguments: [id])
+        case .watchMessage, .watchEntity: return nil
+        }
+        guard let row else { return nil }
+        let record = GRDBMessageRecord(row: row)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let message = record.toPushMessage(decoder: decoder)
+        let knownScope = notificationProvenOriginScope(message).map { "origin:" + $0 }
+        // A replay or decrypt/recovery enrichment can refresh receivedAt and
+        // delivery metadata on this SAME canonical row. Resource incarnation
+        // follows its physical row and business identity, not those mutable fields.
+        let fingerprint = imageContentHash(Data((record.id.uuidString + "|" + (message.messageId ?? "")).utf8))
+        let existing = try Row.fetchOne(db, sql: "SELECT source_fingerprint,source_scope,generation FROM image_resource_owners WHERE message_id=?", arguments: [record.id.uuidString])
+        let previousFingerprint: String? = existing?["source_fingerprint"]
+        let previousScope: String? = existing?["source_scope"]
+        let stamp: String
+        let scope: String
+        let mayRetainScope = previousScope.map { stored in
+            (stored.hasPrefix("isolated:") && knownScope == nil) || knownScope == stored
+        } ?? false
+        let provesPreviouslyUnknownScope = previousScope?.hasPrefix("isolated:") == true && knownScope != nil
+        if previousFingerprint == fingerprint, mayRetainScope || provesPreviouslyUnknownScope,
+           let generation: String = existing?["generation"], let storedScope = previousScope {
+            stamp = generation
+            if provesPreviouslyUnknownScope, let knownScope {
+                guard createIfMissing else { return nil }
+                // More provenance cannot replace the already acquired content.
+                // Binding keys are URL-only inside this canonical owner.
+                try db.execute(sql: "UPDATE image_resource_owners SET source_scope=? WHERE message_id=?", arguments: [knownScope, record.id.uuidString])
+                scope = knownScope
+            } else { scope = storedScope }
+        } else {
+            // Losing known provenance does not authorize a guessed new scope.
+            if previousScope?.hasPrefix("origin:") == true && knownScope == nil { return nil }
+            guard createIfMissing else { return nil }
+            if existing != nil {
+                try db.execute(sql: "DELETE FROM image_content_references WHERE message_id=?", arguments: [record.id.uuidString])
+                try db.execute(sql: "DELETE FROM image_resource_owners WHERE message_id=?", arguments: [record.id.uuidString])
+            }
+            stamp = UUID().uuidString
+            scope = knownScope ?? ("isolated:" + record.id.uuidString + ":" + stamp)
+            try db.execute(sql: "INSERT INTO image_resource_owners(message_id,source_fingerprint,source_scope,generation)VALUES(?,?,?,?)", arguments: [record.id.uuidString, fingerprint, scope, stamp])
+        }
+        return ImageResourceOwnerSnapshot(owner: owner, stamp: stamp, scope: scope, canonicalID: record.id.uuidString)
+    }
+    func imageResourceSnapshot(owner: ImageResourceOwner) async throws -> ImageResourceOwnerSnapshot? {
+        if let existing = try read({ try Self.resourceSnapshot(owner: owner, db: $0) }) { return existing }
+        return try write { try Self.resourceSnapshot(owner: owner, createIfMissing: true, db: $0) }
+    }
+    func imageResourceBinding(snapshot: ImageResourceOwnerSnapshot, requestKey: String) async throws -> String? {
+        try read { db in
+            guard try Self.resourceSnapshot(owner: snapshot.owner, db: db) == snapshot else { return nil }
+            return try String.fetchOne(db, sql: "SELECT content_hash FROM image_content_references WHERE message_id=? AND owner_stamp=? AND request_key=?", arguments: [snapshot.canonicalID, snapshot.stamp, requestKey])
+        }
+    }
+    func bindImageResource(snapshot: ImageResourceOwnerSnapshot, requestKey: String, contentHash: String) async throws -> Bool {
+        guard contentHash.count == 64, contentHash.allSatisfy({ $0.isHexDigit }) else { return false }
+        return try write { db in
+            guard try Self.resourceSnapshot(owner: snapshot.owner, db: db) == snapshot,
+                  FileManager.default.fileExists(atPath: SharedImageCache.originalFileURL(contentHash: contentHash).path) else { return false }
+            // A prior version is immutable. Duplicate subscribers may confirm
+            // the same hash but cannot replace a historical message binding.
+            if let existing = try String.fetchOne(db, sql: "SELECT content_hash FROM image_content_references WHERE message_id=? AND request_key=?", arguments: [snapshot.canonicalID, requestKey]) {
+                return existing == contentHash
+            }
+            try db.execute(sql: "INSERT INTO image_content_references(message_id,owner_stamp,request_key,content_hash)VALUES(?,?,?,?)", arguments: [snapshot.canonicalID, snapshot.stamp, requestKey, contentHash])
+            return true
+        }
+    }
+    func collectImageResource(contentHash: String, remove: @escaping @Sendable () -> Void) async throws -> Bool {
+        try write { db in
+            guard try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM image_content_references WHERE content_hash=? LIMIT 1)", arguments: [contentHash])! else { return false }
+            remove() // short filesystem unlink; never a network operation
+            return true
+        }
+    }
 
     func loadMessage(id: UUID) async throws -> PushMessage? {
         try read { db in

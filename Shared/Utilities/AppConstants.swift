@@ -2899,23 +2899,19 @@ enum NotificationMediaResolver {
     ) async -> UNNotificationAttachment? {
         guard URLSanitizer.isAllowedRemoteURL(url) else { return nil }
         do {
-            let data = try await SharedImageCache.fetchData(
-                from: url,
-                maxBytes: maxBytes,
-                timeout: timeout
-            )
-            guard isImageData(data) else { return nil }
-
-            let fileExt = normalizedExtension(from: url, utType: nil)
-            let targetURL = SharedImageCache.cachedFileURL(for: url)
-                ?? FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(fileExt)")
-            if !FileManager.default.fileExists(atPath: targetURL.path) {
-                try data.write(to: targetURL, options: .atomic)
-            }
-
-            let utType = UTType(filenameExtension: fileExt) ?? .image
-            let typeHint = utType.identifier
-            let options: [AnyHashable: Any] = [UNNotificationAttachmentOptionsTypeHintKey: typeHint]
+            let resource = try await SharedImageCache.resolve(for: url, maxBytes: maxBytes, timeout: timeout)
+            // Notification attachments are imported into system-owned storage.
+            // A no-store response cannot be copied there as a hidden snapshot.
+            guard resource.isPersistent, isImageData(resource.data),
+                  let source = CGImageSourceCreateWithData(resource.data as CFData, nil),
+                  let typeID = CGImageSourceGetType(source), let type = UTType(typeID as String) else { return nil }
+            let fileExt = type.preferredFilenameExtension ?? "img"
+            let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(fileExt)")
+            // UNNotificationAttachment may move its input. Never hand it the
+            // shared original referenced by business content.
+            try resource.data.write(to: targetURL, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: targetURL) }
+            let options: [AnyHashable: Any] = [UNNotificationAttachmentOptionsTypeHintKey: type.identifier]
             return try UNNotificationAttachment(identifier: identifier, url: targetURL, options: options)
         } catch {
             return nil
