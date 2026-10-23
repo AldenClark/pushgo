@@ -279,6 +279,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v25_canonical_derived_work_outbox"))
             #expect(applied.contains("v26_output_system_snapshot_work"))
             #expect(applied.contains("v27_watch_standalone_alert_window"))
+            #expect(applied.contains("v28_delivery_only_processed_retention"))
 
             let migratedTables = try await dbQueue.read { db in
                 try Set(
@@ -1101,7 +1102,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v24_durable_pending_local_deletions',
                     'v25_canonical_derived_work_outbox',
                     'v26_output_system_snapshot_work',
-                    'v27_watch_standalone_alert_window'
+                    'v27_watch_standalone_alert_window',
+                    'v28_delivery_only_processed_retention'
                 );
                 """)
         }

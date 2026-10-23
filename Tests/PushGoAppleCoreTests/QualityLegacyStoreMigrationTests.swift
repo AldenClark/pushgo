@@ -26,6 +26,10 @@ struct QualityLegacyStoreMigrationTests {
                 try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations WHERE identifier = 'v27_watch_standalone_alert_window'")
             }
             #expect(migrationCount == 1)
+            let deliveryIndexCount = try await database.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_operation_ledger_delivery_only_expiry'")
+            }
+            #expect(deliveryIndexCount == 1)
             let watchColumnCount = try await database.read { db in
                 // The production Store migrated through another connection;
                 // read SQLite directly rather than this connection's schema cache.
@@ -36,6 +40,9 @@ struct QualityLegacyStoreMigrationTests {
             let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             #expect(reopened.storageState.mode == .persistent)
             #expect(try await reopened.loadMessage(messageId: "quality-legacy-v17-message")?.body == legacy?.body)
+            #expect(try await database.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations WHERE identifier = 'v28_delivery_only_processed_retention'")
+            } == 1)
         }
     }
 

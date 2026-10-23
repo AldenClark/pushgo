@@ -3881,6 +3881,28 @@ struct LocalDataStoreTests {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, occurred_at_epoch DESC, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, occurred_at_epoch DESC, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            // This synthetic v15 fixture must include v15's identity table;
+            // the real source schema already has it before later indexes.
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS operation_ledger (
+                    scope_key TEXT PRIMARY KEY NOT NULL, message_id TEXT NOT NULL,
+                    op_id TEXT NOT NULL, channel_id TEXT, entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL, delivery_id TEXT, applied_at REAL NOT NULL,
+                    CHECK (length(trim(scope_key)) > 0), CHECK (length(trim(message_id)) > 0)
+                );
+                CREATE INDEX IF NOT EXISTS idx_operation_ledger_applied_at ON operation_ledger(applied_at DESC);
+                CREATE TABLE IF NOT EXISTS pending_inbound_messages (
+                    pending_id TEXT PRIMARY KEY NOT NULL, thing_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL, raw_payload_json TEXT NOT NULL,
+                    title TEXT NOT NULL, body TEXT NOT NULL, channel TEXT, url TEXT,
+                    received_at REAL NOT NULL, status TEXT NOT NULL, decryption_state TEXT,
+                    notification_request_id TEXT, delivery_id TEXT, operation_id TEXT,
+                    entity_type TEXT NOT NULL, entity_id TEXT, event_id TEXT, event_state TEXT,
+                    event_time_epoch INTEGER, observed_time_epoch INTEGER, occurred_at_epoch INTEGER,
+                    created_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0), CHECK (length(trim(message_id)) > 0)
+                );
+                """)
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS grdb_migrations (
                     identifier TEXT NOT NULL PRIMARY KEY

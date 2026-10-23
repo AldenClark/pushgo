@@ -1082,3 +1082,30 @@ iOS标准消息诊断截图/原SQLite ledger证实：DEBUG伪v17夹具先创建v
 未知旧来源的策略精确项仍 BLOCKED 待用户决定：旧 operation row 缺 Gateway/recipient、canonical 已删除且 retained journal 无可靠终态映射。该分支不擅自选择新的拒绝或归属语义；保留原记录和原行为。当前提交是可证明来源与新处理事实的修复检查点，不称所有历史已闭合。后续资源专题仅需沿用此处理终态与缓存失效边界，不在本轮改资源加载。
 
 Watch 最终后继：7/7 production SQLite cases PASS；覆盖删除/reopen/ACK可用终态、新身份、不同Gateway及同message_id再占用后的旧重放。新 message_id 索引在实际 Store 的 EXPLAIN 为 covering range SEARCH。af050d 的同源码第7负控明确失败，前6通过。结果范围为 host exact-source SQLite，不外推 watchOS/native。
+
+## 2026-10-24 后继：同一确认删除约束覆盖 Event/Thing
+
+补核正常 NotificationPersistence 的实际分派后发现：初始 Message 检查点并未保护 Event/Thing，旧 business operation row 在 canonical 删除后不足以阻止重建。新增两个实际 Notification 入口 oracle 在 2db1602 生产源码上可编译并各自因复活而失败（../apple-entity-2db-negative.log）；它们不是 fixture/编译错误负控。只在本轮用户明确的删除重放范围补齐，不新增业务功能。
+
+后继复用同一 operation_ledger 和 payload-free duplicate。Event/Thing 可证明来源的 op 事实使用独立 namespace＋既有 business scope＋稳定 parentThing 域，delivery 事实分类型；原业务 key 和 pending/canonical 碰撞逻辑不变，projection 显示转换不成为新生命周期。Entity 事实主要在确认删除仍存在的真实记录时保留，正常有 op 的 Entity 不为此新增逐条热路径双记录。Event 确认快照/删除补齐同 event_id 的等待记录；Thing/channel 同事务保留实际等待子项事实。generic writers 和等待区激活共用同一 terminal helper，ACK worker 可对无正文 duplicate 发回原 Gateway/recipient，未伪造正文。
+
+保留期核查纠正：不能因为放入已有表就把纯 delivery 事实视作永久。原 operation_ledger 有 op 记录无常规 GC；原 journal terminal 为35天。新增纯 delivery 仅正常通知首次 canonical 提交可建立 first applied_at，沿同一35天常量；duplicate/delete/reopen 不刷新，过期 exact-key 的新成功接纳建立新窗口。v28 仅部分索引，复用 canonical 事务有界清64行，无新后台对象。旧无 origin op 以及缺 journal/可信首次时间的旧纯 delivery（含等待类）仍 BLOCKED 待策略决定，不猜来源/时间、不宣称历史全覆盖。
+
+测试过程保留：第一次后继 focused 的4项断言误用了只返回普通顶层 Message 的 loadMessages 观察 Entity，改为按真实 canonical ID/SQL 核验，不放宽存储结果；另一次 Event-only pending 确认明确暴露旧快照未包含等待行，已与删除事务一并修复。原 ThingChildLifecycle 的离线历史注入与真实 derived worker 写锁竞争，改为 join 真实 worker 再注入，不加 sleep/retry。首轮最终214相关方法的9项共同失败来自手写假v15测试库漏建真实v15早已存在的 operation_ledger，补fixture原表，不使产品忽略损坏 schema；原失败 ../apple-entity-related-final.log 保留。修后214/214、11 suites、0 skip、8.834s PASS（../apple-entity-related-final-v2.log），最终独立Gateway/recipient参数及v28索引/reopen断言另见后继最终收据。
+
+证据保护：2db的202方法原收据与日志复制为 ../evidence/apple-checkpoint-2db-results.json；在收到binary保全要求前，新负控已重新链接同路径，原202 binary未保全。../evidence/apple-checkpoint-2db-binary-status.json 明确记录该限制；实际2db生产源码＋新负控测试binary另存，不伪称原产物。不会为重新封存而重跑旧202。
+
+
+### 历史政策批准后最终收口
+
+用户明确批准后，已将先前BLOCKED的两条变为实施：无来源/无可证明journal且canonical已删除的旧op返回typed identity_conflict/noACK；归属完整、现在真实确认删除的无first-time旧pure delivery，以同一删除事务起算一次35天过渡。没有给早已删除且删除时间也未知的记录伪造时间。新事实和已知时间继续原寿命，不混淆op长期关联与pure delivery有限窗口。
+
+新策略首轮216中7 issues来自过宽legacy guard：把仍存活的无来源canonical也拒绝，或者忽略已保留的qualified事实、把不同来源的新身份误伤；另使既有pending业务op碰撞消费错误阻断parent。只收窄新admission冲突边界，保留已accepted pending原碰撞规则，并用已有qualified事实证明旧归属而不认领给新来源。补严格非空recipient证明、缺recipient旧row实际删除→新recipient重放仍conflict/noACK。原 `apple-historical-policy-final.log` 保留；后继216/217相关绿色均单独留存。
+
+v28只加3个必要索引，无业务表列/新权威/worker/timer。GC共用canonical事务，最多删64条；先排除存活/等待引用后LIMIT，可能扫描expired live前缀，不声称最多SQL检查64或性能收益。已知expired事实保留引用可供删除辨别旧first，删除不得借GC清走证据而误开新窗口；只有新的真实成功accept能替换expired exact-key。mixed batch实际整体rollback、全部failed/noACK，后续单独健康batch可正常persist/ACK，沿原30s/60s等恢复退避，不新增调度机制。
+
+最终生产源码经独立只读复核 NO_ADDITIONAL_FINDINGS；最终217方法/11 suites的精确日志为 `../apple-historical-policy-final-v5.log`，test binary与源哈希另存receipt。此前214 checkpoint的binary已复制并哈希绑定 `../evidence/apple-checkpoint-214-before-policy.json`；原202 binary未保全的限制仍诚实保留。v28使既有script registry guard发现v17模拟回退漏撤新迁移，补其真实后缀列表，不降低断言；脚本最终回执见 `../apple-impact-policy-final.log`。
+
+已删除且时间完全未知的pure delivery不在自动迁移支持内。最小后续为备份上逐条导入真实journal/旧客户端可证明的来源、ID和first/delete时间，保留证据；没有证据不批量造Date。本轮无原生UI/NSE/APNs/WatchOS/性能/断电或发布验收，停止该批。
+
+最终执行补记：`apple-historical-policy-final-v5.log` 精确217/217、11 suites、0skip、9.888秒PASS；同一生产输入最终补齐v28 registry断言后，原200记录v17→current升级方法单独1/1、0.265秒PASS（`apple-v28-migration-registry-final.log`），不是性能实验。281脚本检查7.829秒PASS，impact READY/release、plan-only；脚本中的 runtime-warning FAILED_TEST_SYSTEM 文本来自既有分类器负控，整体命令exit0，不是一次原生运行告警。完整原生PR/release仍NOT RUN。后继源和两个分段binary分别绑定，不把1方法运行当217重跑。

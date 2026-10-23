@@ -275,6 +275,10 @@ struct ThingChildLifecycleTests {
                 "formal|formal-event-stable-id|Formal event survives|formal event body",
                 "pending|formal-event-stable-id|Pending event must not overwrite|pending event body",
             ])
+            // The next mutation is an offline historical-state injection,
+            // not a competing production writer. Join the real projections
+            // first so the fixture does not race their database transaction.
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
             try await queue.write { db in
                 try db.execute(sql: "DELETE FROM messages WHERE message_id = 'ledger-seed-message';")
             }

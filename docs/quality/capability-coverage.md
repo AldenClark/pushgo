@@ -640,6 +640,22 @@ Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言
 - 新增 Apple GRDB/生产 NotificationPersistence/ProviderIngress ACK 定向和相关最终回归 202/202 PASS（8 suites，0 skip，8.610 秒）。已有 journal 的 validated/applied 或 discarded 事实按完整来源精确查询；只在同来源正文不存在时返回无正文 duplicate，有存活内容仍正常 enrichment。冷启动无 journal 文件不阻塞新消息，现存 journal 不可读取则 failed/no ACK。既有 35 天 journal 维护规则不变，不做全窗口加载。平台通知运行与真实外部服务不据此推断。
 
 - 最终补齐 generic saveMessage/saveMessages/saveMessagesBatch：已经删除的普通 Message 迟到 snapshot 不可 upsert，其他来源复用旧全局 message_id 时也不可被旧来源覆盖。现存 canonical enrichment、新 identity 与 Event/Thing 原逻辑保留；saveMessages 返回实际 stored 结果，解密恢复不把被丢弃的旧 snapshot 计作成功更新。最终 202 仅为 host production Store/notification/ACK 证据，不等于原生平台链路。
-- BLOCKED/待产品决定：旧无来源 operation 行、canonical 已删除且无可证明的 retained journal 时，历史归属无法恢复。本地检查点不改变该分支原行为，不把它列为已修复；原记录保留。
+- 2db 检查点曾将无来源旧 operation 的已删历史列为 BLOCKED；用户后续已批准保守 identity_conflict/no ACK，最终实现见下节，不把旧记录归给当前账户。
 
 - Watch 后继补齐同 Gateway/delivery 与另一 Gateway 复用 message_id 的所有权负控：最终 exact-production SQLite 7/7 PASS，新增 message_id 索引的实际 EXPLAIN 为 covering range SEARCH；af050d 负控前六项通过、第七项明确因跨 Gateway 旧重放覆盖新正文失败。没有用索引存在或单独 SQL 文本代替数据结果。watchOS 编译与系统运行仍 NOT RUN。
+
+### 2026-10-24 后继：Event/Thing 同投递删除重放与有限 delivery 事实
+
+- I/M Events/Things Delete confirmation、Ingress/ACK：正常 NotificationPersistence 入口也适用同一无正文 processed duplicate。确认删除实际 canonical/pending 记录时，沿现有 operation_ledger 保存可证明来源的处理事实；Event/Thing 原业务 operation key、父子等待/激活碰撞规则不改。新增事实区分完整 Gateway/recipient、类型、原 op 与稳定 parent 域，不把会随投影转换的 projection_destination 当新生命周期。真正新 op/new delivery 可继续接收，同内容不永久屏蔽。
+- 同一 helper 覆盖通知写入、generic saveMessages/saveEntityRecords 和等待区激活；检查早于缺父项入队。Event 确认快照包含同 event_id 的已接纳等待 Event，删除和处理事实在同一事务提交，不影响另一 Event。可归属的历史 journal 仍按原来源精确查询。
+- 有 op 的事实沿原 operation_ledger 生命周期。纯 delivery 新事实仅由正常通知首次 canonical 成功提交建立，沿既有 journal 的 **35 天**窗口，重复/确认删除/重开不刷新 first applied_at；到期不再作终态，新的成功接纳可替换尚未物理清掉的过期同 key。v28 只建 op_id='' 的部分索引，既有 canonical 写事务最多清 64 条，不增加 timer/worker、配额或新账本。用户后续批准的旧记录过渡仅在来源完整、现在实际确认删除时以该提交建立一次35天窗口；这不是伪造首次处理时间。已经删除且无可证明首次/删除时间的历史仍不支持自动补齐，见下节。
+- 2db1602 的两个正常 Event/Thing 通知删除重放负控均实际失败；原生 host GRDB/Notification/ACK 的后继相关 suite 以最终收据为准，组件结果不外推 iOS/macOS 系统通知、NSE、真实 APNs/物理 Watch。上一检查点 202 个方法的日志与哈希保留，但 binary 在新增负控首次链接后已被替换；明确记录未保全原 binary，不追认后继 binary 为原 202 产物。
+
+
+### 用户批准的历史边界最终落地
+
+- 已删旧 operation 既缺 Gateway/recipient 归属，又无可证明 journal/canonical 时，保留旧事实并返回明确 `identity_conflict`，不重建、不成功 ACK。仍存活的旧内容、新身份和可证明来源不被这项狭窄拒绝误伤。实际 mixed batch 会沿既有事务整体回滚/no ACK；之后独立健康 batch 可保存并 ACK。沿用原退避，不加重试器；同批 head-of-line 是明确限制。
+- 源明确要求规范化完整 Gateway 与非空原 recipient；Gateway-only 旧内容仍可显示，但不能成为新来源证明或过渡时间依据。仅当前确实删除且无可靠首次时间的旧纯 delivery，以该删除提交建立一次35天过渡；已有时间（含过期但仍引用的事实）不刷新，重放/重开/重复删除不续期。有真实 op 的事实及其 delivery 查找索引沿原 op 生命周期，纯 delivery 才适用35天。
+- v28 总计3个查找索引（纯 delivery 过期、pending message_id、ledger message_id/op），无新表、后台对象或协调所有者。物理清理最多删除64条并跳过仍被内容/等待区引用的过期事实；可能扫描过期的存活前缀，**不声称最多检查64条或性能已验收**。清理可继续处理其后的无引用候选，不让前64个存活引用永久挡住清理。
+- 最终相关 host production/Core：217个方法、11 suites，0 fail/skip；含独立 Gateway/recipient 参数、Event/Thing、确认删除/重开、generic 恢复、真实 ACK worker、历史冲突与批回滚、35天不续期/过期新窗口及v17→v28升级。最终日志 `../apple-historical-policy-final-v5.log`、完整输入/binary/source绑定见隔离证据；不等同原生平台、NSE、真实 Provider、性能或完整 PR/release。
+- 已经删除且既无首次处理时间、也无删除时间的纯 delivery：无法从“现在没有正文”推导出应创建哪个历史事实。最小后续仅允许在独立备份上，对真实 journal/旧客户端导出等可验证证据做逐条 scope＋identity＋真实时间导入；无证据不批量合成时间、不宣称本轮已迁移。

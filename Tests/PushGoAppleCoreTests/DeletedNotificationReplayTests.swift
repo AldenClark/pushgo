@@ -160,7 +160,7 @@ struct DeletedNotificationReplayTests {
     }
 
     @Test
-    func oldUnattributableOperationDoesNotPoisonAnotherGatewayScope() async throws {
+    func oldUnattributableOperationFailsWithoutAckAndDoesNotBlockLaterNormalMessages() async throws {
         try await withIsolatedLocalDataStore { store, group in
             let databaseURL = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group)
                 .appendingPathComponent(AppConstants.databaseStoreFilename)
@@ -178,12 +178,36 @@ struct DeletedNotificationReplayTests {
             }
             var incoming = message("new-origin", delivery: "new-origin-delivery", operation: "unknown-origin-op")
             incoming.rawPayload["entity_id"] = AnyCodable("unknown-origin-entity")
-            guard case .persisted = try await store.persistNotificationMessageIfNeeded(incoming) else {
-                Issue.record("An unattributable old row must not be assigned to a new Gateway by guesswork.")
-                return
+            do {
+                _ = try await store.persistNotificationMessageIfNeeded(incoming)
+                Issue.record("A historical operation with no provable owner must conflict.")
+            } catch {
+                guard case let AppError.local(problem) = error else { throw error }
+                #expect(problem.code == "identity_conflict")
+                #expect(problem.category == .conflict)
             }
+            let payload = incoming.rawPayload.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value.value }
+            let result = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                payload, requestIdentifier: "new-origin-delivery", dataStore: store)
+            #expect(!ProviderIngressPersistenceResult(result).allowsAck)
+            let healthy = message("healthy-peer", delivery: "healthy-delivery", operation: "healthy-operation")
+            let healthyPayload = healthy.rawPayload.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value.value }
+            let batch = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([
+                .init(payload: healthyPayload, requestIdentifier: "healthy-delivery"),
+                .init(payload: payload, requestIdentifier: "new-origin-delivery"),
+            ], dataStore: store)
+            #expect(batch.count == 2)
+            #expect(batch.allSatisfy { !ProviderIngressPersistenceResult($0).allowsAck })
+            #expect(try await store.loadMessages().isEmpty)
             #expect(try await queue.read { try Double.fetchOne($0, sql: "SELECT applied_at FROM operation_ledger WHERE message_id = 'old-unknown-origin-message';") } == 123)
-            #expect(try await store.loadMessages().map(\.messageId) == [incoming.messageId])
+            let laterBatch = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([
+                .init(payload: healthyPayload, requestIdentifier: "healthy-delivery"),
+            ], dataStore: store)
+            guard case .persistedMain = laterBatch.first else {
+                Issue.record("Conflict must not globally stop a later valid message."); return
+            }
+            #expect(laterBatch.allSatisfy { ProviderIngressPersistenceResult($0).allowsAck })
+            #expect(try await store.loadMessages().map(\.messageId) == [healthy.messageId])
         }
     }
 
@@ -324,6 +348,174 @@ struct DeletedNotificationReplayTests {
         switch outcome {
         case .persisted, .persistedPending: return false
         default: return true
+        }
+    }
+
+    @Test
+    func deliveryOnlyWindowIsNotRenewedByDuplicateDeletionOrReopen() async throws {
+        try await withIsolatedAutomationStorage { root, group in
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let original = message("finite-window", delivery: "finite-delivery", operation: nil)
+            _ = try await store.persistNotificationMessageIfNeeded(original)
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            let queue = try databaseQueue(group: group)
+            let first = try #require(try await queue.read { db in
+                try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'finite-delivery' AND op_id = '';")
+            })
+            _ = try await store.persistNotificationMessageIfNeeded(original)
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [original.id])))
+            #expect(isProcessedDuplicate(try await store.persistNotificationMessageIfNeeded(original)))
+            #expect(try await store.loadMessage(messageId: original.messageId!) == nil)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            #expect(isProcessedDuplicate(try await reopened.persistNotificationMessageIfNeeded(original)))
+            #expect(try await queue.read { db in
+                try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'finite-delivery' AND op_id = '';")
+            } == first)
+            #expect(DurableIngressJournal.processedDeliveryRetentionInterval == 35 * 24 * 60 * 60)
+        }
+    }
+
+    @Test
+    func expiredExactDeliveryCanStartANewWindowWhileCleanupStaysBounded() async throws {
+        try await withIsolatedLocalDataStore { store, group in
+            let original = message("expired-window", delivery: "expired-delivery", operation: nil)
+            _ = try await store.persistNotificationMessageIfNeeded(original)
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [original.id])))
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            let queue = try databaseQueue(group: group)
+            let expired = Date().addingTimeInterval(-DurableIngressJournal.processedDeliveryRetentionInterval - 60)
+                .timeIntervalSince1970 * 1_000
+            // Explicit synthetic age/fanout injection, not natural old data.
+            try await queue.write { db in
+                try db.execute(sql: "UPDATE operation_ledger SET applied_at = ? WHERE delivery_id = 'expired-delivery';", arguments: [expired])
+                for index in 0..<70 {
+                    try db.execute(sql: """
+                        INSERT INTO operation_ledger(scope_key, message_id, op_id, entity_type, entity_id, delivery_id, applied_at)
+                        VALUES (?, ?, '', 'message', ?, ?, ?);
+                        """, arguments: ["delivery:synthetic-\(index)", "old-\(index)", "old-\(index)", "old-\(index)", expired - 1_000])
+                }
+                try db.execute(sql: """
+                    INSERT INTO operation_ledger(scope_key, message_id, op_id, entity_type, entity_id, applied_at)
+                    VALUES ('preserved-real-operation', 'old-op', 'real-op', 'message', 'old-op', ?);
+                    """, arguments: [expired - 1_000])
+            }
+            guard case .persisted = try await store.persistNotificationMessageIfNeeded(original) else {
+                Issue.record("An expired window must not suppress a new accepted delivery."); return
+            }
+            let state = try await queue.read { db in
+                (
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM operation_ledger WHERE op_id = '';"),
+                    try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'expired-delivery';"),
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM operation_ledger WHERE scope_key = 'preserved-real-operation';")
+                )
+            }
+            #expect(state.0 == 7) // One canonical write removes at most 64 old facts.
+            #expect(try #require(state.1) > expired)
+            #expect(state.2 == 1)
+            let plan = try await queue.read { db in
+                try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN SELECT scope_key FROM operation_ledger WHERE op_id = '' AND applied_at <= ? ORDER BY applied_at, scope_key LIMIT 64;", arguments: [expired])
+                    .map { $0["detail"] as String }.joined(separator: "\n")
+            }
+            #expect(plan.contains("idx_operation_ledger_delivery_only_expiry"))
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [original.id])))
+            #expect(isProcessedDuplicate(try await store.persistNotificationMessageIfNeeded(original)))
+            #expect(try await store.loadMessages().isEmpty)
+        }
+    }
+
+    private func databaseQueue(group: String) throws -> DatabaseQueue {
+        let url = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group)
+            .appendingPathComponent(AppConstants.databaseStoreFilename)
+        return try DatabaseQueue(path: url.path)
+    }
+
+    @Test
+    func actualDeletionOfKnownLegacyDeliveryStartsOnlyOneFiniteTransitionWindow() async throws {
+        try await withIsolatedAutomationStorage { root, group in
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let old = message("known-old-delivery", delivery: "known-old-delivery", operation: nil)
+            // Generic import models an existing visible row, with no reliable
+            // first local apply timestamp. Do not pretend it was notified now.
+            try await store.saveMessage(old)
+            let queue = try databaseQueue(group: group)
+            #expect(try await queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM operation_ledger;") } == 0)
+            let confirmation = try await store.prepareLocalDeletion(intent: .messages(ids: [old.id]))
+            let earliest = Date().timeIntervalSince1970 * 1_000
+            _ = try await store.deleteConfirmedLocalData(confirmation)
+            let first = try #require(try await queue.read { db in
+                try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'known-old-delivery';")
+            })
+            #expect(first >= earliest)
+            #expect(first <= Date().timeIntervalSince1970 * 1_000)
+            _ = try await store.deleteConfirmedLocalData(confirmation)
+            #expect(isProcessedDuplicate(try await store.persistNotificationMessageIfNeeded(old)))
+            #expect(try await store.loadMessages().isEmpty)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            #expect(isProcessedDuplicate(try await reopened.persistNotificationMessageIfNeeded(old)))
+            #expect(try await queue.read { db in
+                try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'known-old-delivery';")
+            } == first)
+            var anotherGateway = old
+            anotherGateway.messageId = "same-delivery-other-origin"
+            anotherGateway.rawPayload["message_id"] = AnyCodable("same-delivery-other-origin")
+            anotherGateway.rawPayload["base_url"] = AnyCodable("https://gateway-b.invalid/prefix")
+            guard case .persisted = try await reopened.persistNotificationMessageIfNeeded(anotherGateway) else {
+                Issue.record("A proven transition must not poison another origin."); return
+            }
+        }
+    }
+
+    @Test
+    func deletingAnExpiredButStillVisibleDeliveryDoesNotRenewItsKnownFirstTime() async throws {
+        try await withIsolatedLocalDataStore { store, group in
+            let old = message("known-expired-first", delivery: "known-expired-first", operation: nil)
+            _ = try await store.persistNotificationMessageIfNeeded(old)
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            let queue = try databaseQueue(group: group)
+            let expired = Date().addingTimeInterval(-DurableIngressJournal.processedDeliveryRetentionInterval - 60)
+                .timeIntervalSince1970 * 1_000
+            try await queue.write { db in
+                try db.execute(sql: "UPDATE operation_ledger SET applied_at = ? WHERE delivery_id = 'known-expired-first';", arguments: [expired])
+            }
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [old.id])))
+            #expect(try await store.loadMessages().isEmpty)
+            // GC must leave referenced expired facts until this deletion can
+            // distinguish a known first time from an unknown legacy row.
+            #expect(try await queue.read { db in
+                try Double.fetchOne(db, sql: "SELECT applied_at FROM operation_ledger WHERE delivery_id = 'known-expired-first';")
+            } == expired)
+        }
+    }
+
+    @Test
+    func gatewayWithoutRecipientCannotClaimTheHistoricalDeletionTransition() async throws {
+        try await withIsolatedLocalDataStore { store, group in
+            var old = message("missing-recipient", delivery: "missing-recipient", operation: "missing-recipient-op")
+            old.rawPayload["provider_device_key"] = nil
+            try await store.saveMessage(old)
+            #expect(try await store.loadMessage(messageId: old.messageId!)?.body == old.body)
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [old.id])))
+            let queue = try databaseQueue(group: group)
+            #expect(try await queue.read { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM operation_ledger WHERE scope_key LIKE 'origin:%' OR op_id = '';")
+            } == 0)
+            let payload = old.rawPayload.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value.value }
+            let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                payload, requestIdentifier: "missing-recipient", dataStore: store)
+            #expect(!ProviderIngressPersistenceResult(outcome).allowsAck)
+            var otherRecipient = payload
+            otherRecipient["provider_device_key"] = "new-recipient"
+            let unprovenClaim = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                otherRecipient, requestIdentifier: "missing-recipient", dataStore: store)
+            #expect(!ProviderIngressPersistenceResult(unprovenClaim).allowsAck)
+            #expect(try await store.loadMessage(messageId: old.messageId!) == nil)
         }
     }
 

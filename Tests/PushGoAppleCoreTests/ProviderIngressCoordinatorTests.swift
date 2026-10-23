@@ -601,8 +601,8 @@ struct ProviderIngressCoordinatorTests {
         }
     }
 
-    @Test
-    func deletedDirectReplayStillDrainsAckToItsOriginalGatewayWithoutRestoringContent() async throws {
+    @Test(arguments: ["message", "event", "thing"])
+    func deletedDirectReplayStillDrainsAckToItsOriginalGatewayWithoutRestoringContent(_ entityType: String) async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "deleted-direct-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/OriginalGateway"))
@@ -611,13 +611,15 @@ struct ProviderIngressCoordinatorTests {
                 appGroupIdentifier: appGroupIdentifier, httpState: httpState,
                 capture: ProviderIngressCapture(results: []), persistToStore: true)
             defer { context.cleanup() }
-            let payload: [AnyHashable: Any] = [
-                "entity_type": "message", "entity_id": "deleted-direct-message",
+            var payload: [AnyHashable: Any] = [
+                "entity_type": entityType, "entity_id": "deleted-direct-message",
                 "message_id": "deleted-direct-message", "delivery_id": "deleted-direct-delivery",
                 "op_id": "deleted-direct-operation", "channel_id": "lifecycle",
                 "title": "Exact deleted title", "body": "Exact deleted body",
                 "base_url": baseURL.absoluteString, "provider_device_key": "original-device",
             ]
+            if entityType == "event" { payload["event_id"] = "deleted-direct-message" }
+            if entityType == "thing" { payload["thing_id"] = "deleted-direct-message" }
             let first = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
                 payload, requestIdentifier: "deleted-direct-delivery", dataStore: store)
             guard case let .persistedMain(saved) = first else {
@@ -638,7 +640,7 @@ struct ProviderIngressCoordinatorTests {
             #expect(httpState.recordedPaths() == ["/OriginalGateway/messages/ack"])
             #expect(httpState.recordedDeviceKeys() == ["original-device"])
             #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
-            #expect(try await store.loadMessages().isEmpty)
+            #expect(try await store.loadMessage(messageId: "deleted-direct-message") == nil)
         }
     }
 

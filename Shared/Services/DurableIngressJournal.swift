@@ -9,6 +9,9 @@ private let ingressSQLiteTransient = unsafeBitCast(-1, to: sqlite3_destructor_ty
 /// host applications. It intentionally owns only ingress/retry state; canonical
 /// Message/Event/Thing data remains in LocalDataStore.
 actor DurableIngressJournal {
+    // Also bounds delivery-only processed identities in the canonical Store.
+    // Operation identities keep their existing operation-ledger lifecycle.
+    static let processedDeliveryRetentionInterval: TimeInterval = 35 * 24 * 60 * 60
     enum JournalError: Error {
         case unavailable
         case unsupportedSchema(Int)
@@ -756,12 +759,15 @@ actor DurableIngressJournal {
                   AND validation_state = 'validated'
                   AND apply_state IN ('applied', 'discarded')
                   AND source != 'ack_import'
+                  AND COALESCE(canonical_applied_at_ms, created_at_ms) > ?
                 LIMIT 1;
                 """)
             defer { sqlite3_finalize(statement) }
             bindText(statement, 1, baseURL)
             bindText(statement, 2, deviceKey)
             bindText(statement, 3, deliveryID)
+            sqlite3_bind_int64(statement, 4, Self.epochMilliseconds(
+                Date().addingTimeInterval(-Self.processedDeliveryRetentionInterval)))
             let result = sqlite3_step(statement)
             guard result == SQLITE_ROW || result == SQLITE_DONE else {
                 throw JournalError.sqlite(String(cString: sqlite3_errmsg(db)))
@@ -1473,7 +1479,7 @@ actor DurableIngressJournal {
         guard force || nowMs - lastMaintenanceAtMilliseconds >= minimumIntervalMs else {
             return .none
         }
-        let terminalRetentionMs: Int64 = 35 * 24 * 60 * 60 * 1_000
+        let terminalRetentionMs = Int64(Self.processedDeliveryRetentionInterval * 1_000)
         let completedClaimRetentionMs: Int64 = 24 * 60 * 60 * 1_000
         let terminalBefore = nowMs - terminalRetentionMs
         let completedClaimBefore = nowMs - completedClaimRetentionMs
