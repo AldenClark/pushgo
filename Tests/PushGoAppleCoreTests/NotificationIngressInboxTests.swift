@@ -149,6 +149,127 @@ private func nMinusOneDecodeFiles<T: Decodable>(
 
 struct NotificationIngressInboxTests {
     @Test
+    func pullFrontierResumesOneMetadataRowWithoutRewritingSameScope() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            let scope = String(repeating: "a", count: 64)
+            let initial = try await journal.beginPullFrontier(scope: scope)
+            #expect(initial.scope == scope)
+            #expect(UUID(uuidString: initial.revision) != nil)
+            #expect(initial.pageToken == nil)
+            let databaseURL = try #require(await journal.databaseURL)
+            let database = try SQLiteTestConnection(url: databaseURL)
+            try database.execute("CREATE TRIGGER reject_frontier_update BEFORE UPDATE OF value ON ingress_meta WHEN OLD.key = 'v2_pull_frontier' BEGIN SELECT RAISE(ABORT, 'test frontier update rejected'); END;")
+            let same = try await journal.beginPullFrontier(scope: scope)
+            #expect(same.revision == initial.revision)
+            try database.execute("DROP TRIGGER reject_frontier_update;")
+
+            let next = try #require(try await journal.checkpointPullFrontier(expected: initial, pageToken: "synthetic-next-page"))
+            #expect(next.revision != initial.revision)
+            let reopened = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            let resumed = try await reopened.beginPullFrontier(scope: scope)
+            let retainedToken = resumed.pageToken == "synthetic-next-page"
+            #expect(retainedToken)
+            #expect(resumed.revision == next.revision)
+            #expect(try database.scalarText("SELECT count(*) FROM ingress_meta WHERE key = 'v2_pull_frontier';") == "1")
+            #expect(try database.scalarText("SELECT value FROM ingress_meta WHERE key = 'schema_version';") == "1")
+            #expect(try database.scalarText("SELECT value FROM ingress_meta WHERE key = 'generation';") == "0")
+            #expect(try database.scalarText("SELECT count(*) FROM ingress_entry;") == "0")
+            #expect(try database.scalarText("SELECT count(*) FROM ack_outbox;") == "0")
+        }
+    }
+
+    @Test
+    func pullFrontierRevisionRejectsLateCheckpointAcrossScopeABAAndPassCompletion() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let first = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            let otherProcess = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            let scopeA = String(repeating: "a", count: 64)
+            let scopeB = String(repeating: "b", count: 64)
+            let original = try await first.beginPullFrontier(scope: scopeA)
+            let progressed = try #require(try await first.checkpointPullFrontier(expected: original, pageToken: "synthetic-a-next"))
+            let oldRevisionRejected = try await otherProcess.checkpointPullFrontier(expected: original, pageToken: "synthetic-late") == nil
+            #expect(oldRevisionRejected)
+            let switched = try await otherProcess.beginPullFrontier(scope: scopeB)
+            #expect(switched.scope == scopeB)
+            #expect(switched.pageToken == nil)
+            let returned = try await first.beginPullFrontier(scope: scopeA)
+            #expect(returned.revision != original.revision)
+            #expect(returned.revision != progressed.revision)
+            #expect(returned.pageToken == nil)
+            let abaRejected = try await first.checkpointPullFrontier(expected: progressed, pageToken: "synthetic-late") == nil
+            #expect(abaRejected)
+            let completed = try #require(try await first.checkpointPullFrontier(expected: returned, pageToken: nil))
+            #expect(completed.pageToken == nil)
+            #expect(completed.revision != returned.revision)
+            let completionFenced = try await otherProcess.checkpointPullFrontier(expected: returned, pageToken: "synthetic-after-completion") == nil
+            #expect(completionFenced)
+            let resumed = try await otherProcess.beginPullFrontier(scope: scopeA)
+            #expect(resumed.revision == completed.revision)
+            #expect(resumed.pageToken == nil)
+        }
+    }
+
+    @Test
+    func pullFrontierWriteFailureDoesNotAdvanceOrAlterDeliveryResponsibilities() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            #expect(await journal.enqueueIngress(codablePayload: ["message_id": AnyCodable("frontier-responsibility")], requestIdentifier: "frontier-responsibility", source: "test.frontier"))
+            let initial = try await journal.beginPullFrontier(scope: String(repeating: "c", count: 64))
+            let databaseURL = try #require(await journal.databaseURL)
+            let database = try SQLiteTestConnection(url: databaseURL)
+            let ingressBefore = try database.scalarText("SELECT count(*) FROM ingress_entry;")
+            let ackBefore = try database.scalarText("SELECT count(*) FROM ack_outbox;")
+            let generationBefore = try database.scalarText("SELECT value FROM ingress_meta WHERE key = 'generation';")
+            try database.execute("CREATE TRIGGER reject_frontier_update BEFORE UPDATE OF value ON ingress_meta WHEN OLD.key = 'v2_pull_frontier' BEGIN SELECT RAISE(ABORT, 'test frontier update rejected'); END;")
+            await #expect(throws: (any Error).self) {
+                _ = try await journal.checkpointPullFrontier(expected: initial, pageToken: "synthetic-rejected")
+            }
+            let unchanged = try await journal.beginPullFrontier(scope: initial.scope)
+            #expect(unchanged.revision == initial.revision)
+            #expect(unchanged.pageToken == nil)
+            #expect(try database.scalarText("SELECT count(*) FROM ingress_entry;") == ingressBefore)
+            #expect(try database.scalarText("SELECT count(*) FROM ack_outbox;") == ackBefore)
+            #expect(try database.scalarText("SELECT value FROM ingress_meta WHERE key = 'generation';") == generationBefore)
+            try database.execute("DROP TRIGGER reject_frontier_update;")
+            let retried = try #require(try await journal.checkpointPullFrontier(expected: initial, pageToken: "synthetic-retry"))
+            #expect(retried.revision != initial.revision)
+        }
+    }
+
+    @Test
+    func pullFrontierBoundsOpaqueUTF8AndRejectsCorruptMetadataWithoutResettingIt() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+            for invalidScope in ["", String(repeating: "a", count: 63), String(repeating: "A", count: 64), String(repeating: "g", count: 64)] {
+                await #expect(throws: (any Error).self) { _ = try await journal.beginPullFrontier(scope: invalidScope) }
+            }
+            let initial = try await journal.beginPullFrontier(scope: String(repeating: "d", count: 64))
+            let boundaryToken = String(repeating: "界", count: 682) + "ab"
+            #expect(boundaryToken.utf8.count == 2_048)
+            let progressed = try #require(try await journal.checkpointPullFrontier(expected: initial, pageToken: boundaryToken))
+            let resumed = try await journal.beginPullFrontier(scope: initial.scope)
+            let intact = resumed.pageToken == boundaryToken
+            #expect(intact)
+            await #expect(throws: (any Error).self) {
+                _ = try await journal.checkpointPullFrontier(expected: progressed, pageToken: boundaryToken + "x")
+            }
+            await #expect(throws: (any Error).self) {
+                _ = try await journal.checkpointPullFrontier(expected: progressed, pageToken: "")
+            }
+            let afterRejectedInput = try await journal.beginPullFrontier(scope: initial.scope)
+            #expect(afterRejectedInput.revision == progressed.revision)
+            let databaseURL = try #require(await journal.databaseURL)
+            let database = try SQLiteTestConnection(url: databaseURL)
+            try database.execute("UPDATE ingress_meta SET value = 'invalid-frontier-encoding' WHERE key = 'v2_pull_frontier';")
+            await #expect(throws: (any Error).self) { _ = try await journal.beginPullFrontier(scope: initial.scope) }
+            await #expect(throws: (any Error).self) { _ = try await journal.beginPullFrontier(scope: String(repeating: "e", count: 64)) }
+            let corruptPreserved = try database.scalarText("SELECT value FROM ingress_meta WHERE key = 'v2_pull_frontier';") == "invalid-frontier-encoding"
+            #expect(corruptPreserved)
+        }
+    }
+
+    @Test
     func enqueueResultReportsDuplicateWithoutScanningCanonicalMessages() async {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)

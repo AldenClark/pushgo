@@ -52,6 +52,17 @@ actor NotificationIngressInbox {
         )
     }
 
+    func beginPullFrontier(scope: String) async throws -> DurableIngressJournal.PullFrontier {
+        try await journal.beginPullFrontier(scope: scope)
+    }
+
+    func checkpointPullFrontier(
+        expected: DurableIngressJournal.PullFrontier,
+        pageToken: String?
+    ) async throws -> DurableIngressJournal.PullFrontier? {
+        try await journal.checkpointPullFrontier(expected: expected, pageToken: pageToken)
+    }
+
     @discardableResult
     func enqueue(
         payload: [AnyHashable: Any],

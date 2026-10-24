@@ -70,6 +70,14 @@ actor DurableIngressJournal {
         static let rejected = EnqueueResult(accepted: false, inserted: false)
     }
 
+    /// A single credential-free continuation for the active Pull scope. A new
+    /// revision also fences old callbacks when a scope returns after switching.
+    struct PullFrontier: Codable, Sendable, Equatable {
+        let scope: String
+        let revision: String
+        let pageToken: String?
+    }
+
     struct DurabilityPragmas: Sendable, Equatable {
         let journalMode: String
         let synchronous: Int
@@ -119,6 +127,92 @@ actor DurableIngressJournal {
             .appendingPathComponent("Application Support", isDirectory: true)
             .appendingPathComponent(Self.directoryName, isDirectory: true)
             .appendingPathComponent(Self.databaseName, isDirectory: false)
+    }
+
+    func beginPullFrontier(scope: String) throws -> PullFrontier {
+        try Self.validatePullFrontierScope(scope)
+        return try withDatabase(write: true) { db in
+            try execute(db, "BEGIN IMMEDIATE;")
+            do {
+                let frontier: PullFrontier
+                if let current = try readPullFrontier(db), current.scope == scope {
+                    frontier = current
+                } else {
+                    frontier = PullFrontier(scope: scope, revision: UUID().uuidString, pageToken: nil)
+                    try writePullFrontier(db, frontier)
+                }
+                try execute(db, "COMMIT;")
+                return frontier
+            } catch {
+                _ = try? execute(db, "ROLLBACK;")
+                throw error
+            }
+        }
+    }
+
+    /// Publish only after this page's durable responsibilities are established.
+    /// A nil token finishes the pass while retaining a new revision against ABA.
+    func checkpointPullFrontier(expected: PullFrontier, pageToken: String?) throws -> PullFrontier? {
+        try Self.validatePullFrontier(expected)
+        guard pageToken.map({ !$0.isEmpty && $0.utf8.count <= 2_048 }) ?? true else { throw JournalError.encoding }
+        return try withDatabase(write: true) { db in
+            try execute(db, "BEGIN IMMEDIATE;")
+            do {
+                guard let current = try readPullFrontier(db),
+                      current.scope == expected.scope, current.revision == expected.revision else {
+                    try execute(db, "COMMIT;")
+                    return nil
+                }
+                let next = PullFrontier(scope: current.scope, revision: UUID().uuidString, pageToken: pageToken)
+                try writePullFrontier(db, next)
+                try execute(db, "COMMIT;")
+                return next
+            } catch {
+                _ = try? execute(db, "ROLLBACK;")
+                throw error
+            }
+        }
+    }
+
+    private static func validatePullFrontierScope(_ scope: String) throws {
+        guard scope.utf8.count == 64,
+              scope.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
+        else { throw JournalError.encoding }
+    }
+
+    private static func validatePullFrontier(_ frontier: PullFrontier) throws {
+        try validatePullFrontierScope(frontier.scope)
+        guard UUID(uuidString: frontier.revision) != nil,
+              frontier.pageToken.map({ !$0.isEmpty && $0.utf8.count <= 2_048 }) ?? true
+        else { throw JournalError.encoding }
+    }
+
+    private func readPullFrontier(_ db: OpaquePointer) throws -> PullFrontier? {
+        let statement = try prepare(db, "SELECT value FROM ingress_meta WHERE key = 'v2_pull_frontier';")
+        defer { sqlite3_finalize(statement) }
+        switch sqlite3_step(statement) {
+        case SQLITE_DONE:
+            return nil
+        case SQLITE_ROW:
+            guard let value = columnText(statement, 0), value.utf8.count <= 8_192,
+                  let data = Data(base64Encoded: value) else { throw JournalError.encoding }
+            let frontier: PullFrontier
+            do { frontier = try decoder.decode(PullFrontier.self, from: data) }
+            catch { throw JournalError.encoding }
+            try Self.validatePullFrontier(frontier)
+            return frontier
+        default:
+            throw JournalError.sqlite(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    private func writePullFrontier(_ db: OpaquePointer, _ frontier: PullFrontier) throws {
+        try Self.validatePullFrontier(frontier)
+        let value = try encoder.encode(frontier).base64EncodedString()
+        let statement = try prepare(db, "INSERT INTO ingress_meta(key, value) VALUES ('v2_pull_frontier', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;")
+        defer { sqlite3_finalize(statement) }
+        bindText(statement, 1, value)
+        try stepDone(db, statement)
     }
 
     func durabilityPragmas() -> DurabilityPragmas? {

@@ -429,7 +429,7 @@ final class NotificationIngressController {
         if results.contains(where: { result in
             switch result {
             case .persisted, .duplicate: true
-            case .rejected, .failed: false
+            case .rejected, .identityConflict, .failed: false
             }
         }) {
             scheduleCountsRefresh()
@@ -442,7 +442,7 @@ final class NotificationIngressController {
         switch outcome {
         case .duplicate, .persistedMain, .persistedPending:
             scheduleCountsRefresh()
-        case .rejected, .failed:
+        case .rejected, .identityConflict, .failed:
             break
         }
     }

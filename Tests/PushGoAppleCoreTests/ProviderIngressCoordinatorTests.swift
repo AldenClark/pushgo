@@ -194,6 +194,8 @@ struct ProviderIngressCoordinatorTests {
         @MainActor final class GatewayConfiguration {
             var baseURL: URL
             var deviceKey = "original-device"
+            let id = UUID()
+            let updatedAt = Date()
             init(baseURL: URL) { self.baseURL = baseURL }
         }
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
@@ -226,7 +228,7 @@ struct ProviderIngressCoordinatorTests {
                 wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier),
                 hooks: .init(
                     isEnabled: { true },
-                    serverConfig: { ServerConfig(baseURL: gateway.baseURL, token: "test-token") },
+                    serverConfig: { ServerConfig(id: gateway.id, baseURL: gateway.baseURL, token: "test-token", updatedAt: gateway.updatedAt) },
                     cachedDeviceKey: { gateway.deviceKey },
                     hasPersistedNotification: { identity in
                         guard let messageID = identity.messageId,
@@ -245,6 +247,7 @@ struct ProviderIngressCoordinatorTests {
                             case .persistedMain: persistedKinds.append("main")
                             case .duplicate: persistedKinds.append("duplicate")
                             case .rejected: persistedKinds.append("rejected")
+                            case .identityConflict: persistedKinds.append("failed")
                             case .failed: persistedKinds.append("failed")
                             }
                         }
@@ -823,6 +826,7 @@ struct ProviderIngressCoordinatorTests {
 
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
             let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let capturedConfig = ServerConfig(baseURL: newBaseURL, token: "token")
             let coordinator = ProviderIngressCoordinator(
                 platformSuffix: "test",
                 dataStore: store,
@@ -832,7 +836,7 @@ struct ProviderIngressCoordinatorTests {
                 wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier),
                 hooks: .init(
                     isEnabled: { true },
-                    serverConfig: { ServerConfig(baseURL: newBaseURL, token: "token") },
+                    serverConfig: { capturedConfig },
                     cachedDeviceKey: { "new-device" },
                     hasPersistedNotification: { identity in
                         if let messageID = identity.messageId,
@@ -1024,6 +1028,7 @@ struct ProviderIngressCoordinatorTests {
             try httpState.handle(request)
         }
         let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+        let capturedConfig = ServerConfig(baseURL: baseURL, token: "token")
         let coordinator = ProviderIngressCoordinator(
             platformSuffix: "test",
             dataStore: store,
@@ -1034,7 +1039,7 @@ struct ProviderIngressCoordinatorTests {
             ackMarkerMinimumAge: 0,
             hooks: .init(
                 isEnabled: { true },
-                serverConfig: { ServerConfig(baseURL: baseURL, token: "token") },
+                serverConfig: { capturedConfig },
                 cachedDeviceKey: { "device-key" },
                 hasPersistedNotification: { _ in false },
                 persistPayloads: { inputs in
@@ -1080,17 +1085,37 @@ private struct CoordinatorContext {
 private final class MixedIngressHTTPState: Sendable {
     private struct State: Sendable {
         var items: [[String: String]]
+        var originalOrder: [String]
         var pageSize: Int
         var paths: [String] = []
+        var requestedPageTokens: [String?] = []
         var acknowledged: [[String]] = []
         var loseAckResponses: Int
+        var rejectContinuationOnce: Bool
         var unavailable = false
         var persistedAt: [String: Double] = [:]
         var ackedAt: [String: Double] = [:]
     }
     private let state: OSAllocatedUnfairLock<State>
-    init(items: [[String: String]], pageSize: Int = 3, loseAckResponses: Int = 0) {
-        state = OSAllocatedUnfairLock(initialState: State(items: items, pageSize: pageSize, loseAckResponses: loseAckResponses))
+    private let supportsContinuation: Bool
+    private let failPullRequestNumber: Int?
+    private let acknowledgementEvents: AsyncStream<String>?
+    private let acknowledgementContinuation: AsyncStream<String>.Continuation?
+    init(items: [[String: String]], pageSize: Int = 3, loseAckResponses: Int = 0,
+         supportsContinuation: Bool = false, failPullRequestNumber: Int? = nil,
+         rejectContinuationOnce: Bool = false) {
+        state = OSAllocatedUnfairLock(initialState: State(items: items, originalOrder: supportsContinuation ? items.compactMap { $0["delivery_id"] } : [],
+            pageSize: max(1, pageSize), loseAckResponses: loseAckResponses, rejectContinuationOnce: rejectContinuationOnce))
+        self.supportsContinuation = supportsContinuation
+        self.failPullRequestNumber = failPullRequestNumber
+        if supportsContinuation {
+            let events = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(256))
+            acknowledgementEvents = events.stream
+            acknowledgementContinuation = events.continuation
+        } else {
+            acknowledgementEvents = nil
+            acknowledgementContinuation = nil
+        }
     }
     func handle(_ request: URLRequest) throws -> (HTTPURLResponse, Data) {
         try state.withLock { state in
@@ -1098,14 +1123,50 @@ private final class MixedIngressHTTPState: Sendable {
             if state.unavailable { throw URLError(.cannotConnectToHost) }
             let body: [String: Any]
             if path.hasSuffix("/v2/messages/pull") {
-                body = ["success": true, "data": ["items": state.items.prefix(state.pageSize).map { ["delivery_id": $0["delivery_id"]!, "payload": $0] as [String: Any] }, "has_more": state.items.count > state.pageSize]]
+                let data = ChannelServiceURLProtocol.bodyData(from: request) ?? Data()
+                let requestBody = (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+                let pageToken = requestBody["page_token"] as? String
+                state.requestedPageTokens.append(pageToken)
+                if let failPullRequestNumber, state.requestedPageTokens.count == failPullRequestNumber { throw URLError(.networkConnectionLost) }
+                if supportsContinuation {
+                    let start: Int
+                    if let pageToken {
+                        guard !state.rejectContinuationOnce,
+                              let bytes = Data(base64Encoded: pageToken),
+                              let lastID = String(data: bytes, encoding: .utf8),
+                              let position = state.originalOrder.firstIndex(of: lastID) else {
+                            state.rejectContinuationOnce = false
+                            let error: [String: Any] = ["success": false, "error_code": "page_token_invalid", "problem": ["code": "page_token_invalid", "category": "validation", "status": 400, "title": "Invalid page token", "retryable": false]]
+                            return (HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!, try JSONSerialization.data(withJSONObject: error))
+                        }
+                        start = position + 1
+                    } else { start = 0 }
+                    // Seek in the original identity order. Removing an ACKed
+                    // item cannot shift an offset and skip its unACKed peer.
+                    let eligibleIDs = Set(state.originalOrder.dropFirst(start))
+                    let remaining = state.items.filter { eligibleIDs.contains($0["delivery_id"]!) }
+                    let selected = Array(remaining.prefix(state.pageSize))
+                    let complete = remaining.count <= state.pageSize
+                    var page: [String: Any] = ["items": selected.map { ["delivery_id": $0["delivery_id"]!, "payload": $0] as [String: Any] },
+                                               "has_more": state.items.count > state.pageSize, "scan_complete": complete,
+                                               "next_page_token": NSNull()]
+                    if !complete, let lastID = selected.last?["delivery_id"] {
+                        page["next_page_token"] = Data(lastID.utf8).base64EncodedString()
+                    }
+                    body = ["success": true, "data": page]
+                } else {
+                    body = ["success": true, "data": ["items": state.items.prefix(state.pageSize).map { ["delivery_id": $0["delivery_id"]!, "payload": $0] as [String: Any] }, "has_more": state.items.count > state.pageSize]]
+                }
             } else if path.hasSuffix("/v2/messages/ack") {
                 let data = ChannelServiceURLProtocol.bodyData(from: request) ?? Data()
                 let ids = ((try JSONSerialization.jsonObject(with: data)) as? [String: Any])?["delivery_ids"] as? [String] ?? []
                 state.acknowledged.append(ids)
                 let before = state.items.count
                 state.items.removeAll { ids.contains($0["delivery_id"]!) }
-                for id in ids { state.ackedAt[id] = ProcessInfo.processInfo.systemUptime }
+                for id in ids {
+                    state.ackedAt[id] = ProcessInfo.processInfo.systemUptime
+                    acknowledgementContinuation?.yield(id)
+                }
                 if state.loseAckResponses > 0 { state.loseAckResponses -= 1; throw URLError(.networkConnectionLost) }
                 let removed = before - state.items.count
                 body = ["success": true, "data": ["removed": removed > 0, "requested_count": ids.count, "removed_count": removed]]
@@ -1113,12 +1174,36 @@ private final class MixedIngressHTTPState: Sendable {
             return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, try JSONSerialization.data(withJSONObject: body))
         }
     }
-    func append(_ items: [[String: String]]) { state.withLock { $0.items += items } }
+    func append(_ items: [[String: String]]) {
+        state.withLock { state in
+            state.items += items
+            if supportsContinuation {
+                for id in items.compactMap({ $0["delivery_id"] }) where !state.originalOrder.contains(id) { state.originalOrder.append(id) }
+            }
+        }
+    }
     func setUnavailable(_ value: Bool) { state.withLock { $0.unavailable = value } }
     func recordPersisted(_ id: String) { state.withLock { $0.persistedAt[id] = ProcessInfo.processInfo.systemUptime } }
     func remaining() -> [String] { state.withLock { $0.items.compactMap { $0["delivery_id"] } } }
     func paths() -> [String] { state.withLock { $0.paths } }
     func acknowledgements() -> [[String]] { state.withLock { $0.acknowledged } }
+    func requestedPageTokens() -> [String?] { state.withLock { $0.requestedPageTokens } }
+    func waitForAcknowledgement(_ deliveryID: String) async -> Bool {
+        guard let acknowledgementEvents else { return false }
+        return await withTaskGroup(of: Bool.self) { tasks in
+            tasks.addTask { [acknowledgementEvents] in
+                for await value in acknowledgementEvents where value == deliveryID { return true }
+                return false
+            }
+            tasks.addTask {
+                try? await Task.sleep(for: .seconds(15))
+                return false
+            }
+            let observed = await tasks.next() ?? false
+            tasks.cancelAll()
+            return observed
+        }
+    }
     func times() -> (persisted: [String: Double], acked: [String: Double]) { state.withLock { ($0.persistedAt, $0.ackedAt) } }
 }
 
@@ -1141,18 +1226,20 @@ private func seedUnattributedMixedOperation(_ group: String) async throws -> Dat
 }
 
 @MainActor
-private func mixedContext(store: LocalDataStore, group: String, state: MixedIngressHTTPState, base: URL) -> CoordinatorContext {
+private func mixedContext(store: LocalDataStore, group: String, state: MixedIngressHTTPState, base: URL,
+                          serverConfig: ServerConfig? = nil) -> CoordinatorContext {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [ChannelServiceURLProtocol.self]
     let session = URLSession(configuration: configuration)
     let host = base.host!
     ChannelServiceURLProtocol.register(host: host) { request in try state.handle(request) }
     let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: group)
+    let capturedConfig = serverConfig ?? ServerConfig(baseURL: base, token: "synthetic-token")
     return CoordinatorContext(coordinator: ProviderIngressCoordinator(platformSuffix: "test", dataStore: store,
         channelSubscriptionService: ChannelSubscriptionService(session: session),
         notificationIngressInbox: NotificationIngressInbox(appGroupIdentifier: group), ackMarkerStore: ackStore,
         wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: group), ackMarkerMinimumAge: 0,
-        hooks: .init(isEnabled: { true }, serverConfig: { ServerConfig(baseURL: base, token: "synthetic-token") }, cachedDeviceKey: { "frozen-device" }, hasPersistedNotification: { _ in false },
+        hooks: .init(isEnabled: { true }, serverConfig: { capturedConfig }, cachedDeviceKey: { "frozen-device" }, hasPersistedNotification: { _ in false },
             persistPayloads: { inputs in
                 let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) }, dataStore: store)
                 for (input, result) in zip(inputs, outcomes) where ProviderIngressPersistenceResult(result).allowsAck { state.recordPersisted(input.requestIdentifier!) }
@@ -1206,8 +1293,177 @@ extension ProviderIngressCoordinatorTests {
             #expect(state.remaining().count == 201)
             #expect(try await store.loadMessages().isEmpty)
             #expect(await NotificationIngressInbox(appGroupIdentifier: group).pendingEntries().count == 200)
-            // V2 has no cursor/exclusion request. Unknown work behind a full
-            // unacknowledgeable head is a protocol limitation, never fake ACK.
+            // A legacy V2 server omits the continuation contract. Unknown work
+            // behind its full unacknowledgeable head still cannot be fake-ACKed.
+        }
+    }
+
+    @Test
+    func modernContinuationPassesTwoHundredIdentityConflictsWithoutAcknowledgingThem() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-poison-\(UUID().uuidString.lowercased()).invalid")!
+            _ = try await seedUnattributedMixedOperation(group)
+            let poisons = (0..<200).map { mixedPayload("modern-poison-\($0)", operation: "ambiguous-op", entity: "ambiguous-entity") }
+            let healthyID = "healthy-after-modern-full-head"
+            let state = MixedIngressHTTPState(items: poisons + [mixedPayload(healthyID)], pageSize: 200, supportsContinuation: true)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let result = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_full_poison", skipInboxMerge: true)
+            #expect(result.completedRequest)
+            // The 5-second turn budget may yield after the first full page.
+            // Await a real server ACK event, never retry the business operation.
+            #expect(await state.waitForAcknowledgement(healthyID))
+            #expect(try await store.loadMessage(messageId: healthyID)?.title == "Exact " + healthyID)
+            #expect(try await store.loadMessages().count == 1)
+            #expect(Set(state.remaining()) == Set(poisons.compactMap { $0["delivery_id"] }))
+            #expect(state.acknowledgements() == [[healthyID]])
+            let tokens = state.requestedPageTokens()
+            #expect(tokens.count == 2)
+            #expect(tokens.first == .some(nil))
+            #expect(tokens.last == .some(Data("modern-poison-199".utf8).base64EncodedString()))
+            let pending = await NotificationIngressInbox(appGroupIdentifier: group).pendingEntries(limit: 256)
+            #expect(Set(pending.compactMap { $0.record.requestIdentifier }) == Set(poisons.compactMap { $0["delivery_id"] }))
+        }
+    }
+
+    @Test
+    func modernContinuationUsesIdentitySeekWhenEarlierHealthyItemsAreAcknowledged() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-seek-\(UUID().uuidString.lowercased()).invalid")!
+            _ = try await seedUnattributedMixedOperation(group)
+            let state = MixedIngressHTTPState(items: [mixedPayload("healthy-before"),
+                mixedPayload("seek-poison", operation: "ambiguous-op", entity: "ambiguous-entity"),
+                mixedPayload("healthy-immediately-after"), mixedPayload("healthy-last")], pageSize: 2, supportsContinuation: true)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let result = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_seek", skipInboxMerge: true)
+            #expect(result.appliedCount == 3)
+            #expect(Set(try await store.loadMessages().compactMap(\.messageId)) == ["healthy-before", "healthy-immediately-after", "healthy-last"])
+            #expect(state.acknowledgements() == [["healthy-before"], ["healthy-immediately-after", "healthy-last"]])
+            #expect(state.remaining() == ["seek-poison"])
+            #expect(state.requestedPageTokens() == [nil, Data("seek-poison".utf8).base64EncodedString()])
+        }
+    }
+
+    @Test
+    func modernDatabaseFailureKeepsFrontierAtSamePageUntilARealWriteCanCommit() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-write-failure-\(UUID().uuidString.lowercased()).invalid")!
+            let file = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group).appendingPathComponent(AppConstants.databaseStoreFilename)
+            let db = try DatabaseQueue(path: file.path)
+            try await db.write { db in try db.execute(sql: "CREATE TRIGGER fail_canonical_write BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'synthetic database failure'); END;") }
+            let state = MixedIngressHTTPState(items: [mixedPayload("write-first"), mixedPayload("write-second"), mixedPayload("write-later")], pageSize: 2, supportsContinuation: true)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let failed = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_write_failed", skipInboxMerge: true)
+            #expect(!failed.completedRequest)
+            #expect(state.requestedPageTokens() == [nil])
+            #expect(state.acknowledgements().isEmpty)
+            #expect(try await store.loadMessages().isEmpty)
+            #expect(state.remaining() == ["write-first", "write-second", "write-later"])
+            #expect(await NotificationIngressInbox(appGroupIdentifier: group).pendingEntries().count == 2)
+            try await db.write { db in try db.execute(sql: "DROP TRIGGER fail_canonical_write;") }
+            let recovered = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_write_recovered", skipInboxMerge: true)
+            #expect(recovered.appliedCount == 3)
+            #expect(state.requestedPageTokens() == [nil, nil, Data("write-second".utf8).base64EncodedString()])
+            #expect(state.remaining().isEmpty)
+            #expect(try await store.loadMessages().count == 3)
+        }
+    }
+
+    @Test
+    func modernContinuationResumesPersistedFrontierAfterCoordinatorAndStoreReopen() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-reopen-\(UUID().uuidString.lowercased()).invalid")!
+            let capturedConfig = ServerConfig(baseURL: base, token: "synthetic-token",
+                updatedAt: Date(timeIntervalSince1970: 1_800_000_000.375))
+            let configDirectory = try #require(PushGoAutomationContext.storageRootOverrideURL)
+                .appendingPathComponent("frontier-protected-config", isDirectory: true)
+            let configStore = LocalKeychainConfigStore(qualityStorageDirectory: configDirectory)
+            try configStore.saveServerConfig(capturedConfig)
+            let state = MixedIngressHTTPState(items: [mixedPayload("resume-first"), mixedPayload("resume-next")], pageSize: 1,
+                supportsContinuation: true, failPullRequestNumber: 2)
+            let first = mixedContext(store: store, group: group, state: state, base: base, serverConfig: capturedConfig)
+            let interrupted = await first.coordinator.syncProviderIngressOutcome(reason: "manual_modern_interrupted", skipInboxMerge: true)
+            #expect(!interrupted.completedRequest)
+            #expect(state.acknowledgements() == [["resume-first"]])
+            #expect(state.remaining() == ["resume-next"])
+            first.cleanup()
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: try #require(PushGoAutomationContext.storageRootOverrideURL))
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let persistedConfig = try configStore.loadServerConfig(backfillGatewayToken: false)
+            let loadedConfig = try #require(persistedConfig)
+            #expect(loadedConfig.id == capturedConfig.id)
+            #expect(loadedConfig.updatedAt != capturedConfig.updatedAt,
+                    "The real persisted ISO8601 precision must exercise the restart boundary.")
+            let resumed = mixedContext(store: reopened, group: group, state: state, base: base, serverConfig: loadedConfig)
+            defer { resumed.cleanup() }
+            let outcome = await resumed.coordinator.syncProviderIngressOutcome(reason: "manual_modern_resume", skipInboxMerge: true)
+            #expect(outcome.appliedCount == 1)
+            let token = Data("resume-first".utf8).base64EncodedString()
+            #expect(state.requestedPageTokens() == [nil, token, token])
+            #expect(state.acknowledgements() == [["resume-first"], ["resume-next"]])
+            #expect(try await reopened.loadMessages().count == 2)
+            #expect(state.remaining().isEmpty)
+        }
+    }
+
+    @Test
+    func modernCheckpointWriteFailureStopsAfterAckAndReopensFromTheUnadvancedHead() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-checkpoint-failure-\(UUID().uuidString.lowercased()).invalid")!
+            let capturedConfig = ServerConfig(baseURL: base, token: "synthetic-token")
+            let journal = DurableIngressJournal(appGroupIdentifier: group)
+            #expect(await journal.durabilityPragmas() != nil)
+            let journalURL = try #require(await journal.databaseURL)
+            let metadata = try DatabaseQueue(path: journalURL.path)
+            try await metadata.write { db in
+                try db.execute(sql: "CREATE TRIGGER fail_frontier_checkpoint BEFORE UPDATE OF value ON ingress_meta WHEN NEW.key = 'v2_pull_frontier' BEGIN SELECT RAISE(ABORT, 'synthetic frontier checkpoint failure'); END;")
+            }
+            let state = MixedIngressHTTPState(items: [mixedPayload("checkpoint-first"), mixedPayload("checkpoint-later")],
+                pageSize: 1, supportsContinuation: true)
+            let first = mixedContext(store: store, group: group, state: state, base: base, serverConfig: capturedConfig)
+            let failed = await first.coordinator.syncProviderIngressOutcome(reason: "manual_checkpoint_write_failed", skipInboxMerge: true)
+            #expect(!failed.completedRequest)
+            #expect(state.requestedPageTokens() == [nil])
+            #expect(state.acknowledgements() == [["checkpoint-first"]])
+            #expect(state.remaining() == ["checkpoint-later"])
+            #expect(try await store.loadMessage(messageId: "checkpoint-first") != nil)
+            #expect(try await store.loadMessage(messageId: "checkpoint-later") == nil)
+            try await metadata.write { db in try db.execute(sql: "DROP TRIGGER fail_frontier_checkpoint;") }
+            first.cleanup()
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: try #require(PushGoAutomationContext.storageRootOverrideURL))
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let resumed = mixedContext(store: reopened, group: group, state: state, base: base, serverConfig: capturedConfig)
+            defer { resumed.cleanup() }
+            let recovered = await resumed.coordinator.syncProviderIngressOutcome(reason: "manual_checkpoint_write_recovered", skipInboxMerge: true)
+            #expect(recovered.appliedCount == 1)
+            #expect(state.requestedPageTokens() == [nil, nil])
+            #expect(state.acknowledgements() == [["checkpoint-first"], ["checkpoint-later"]])
+            #expect(state.remaining().isEmpty)
+            #expect(try await reopened.loadMessages().count == 2)
+        }
+    }
+
+    @Test
+    func modernRejectedPageTokenResetsDurablyAndStopsUntilTheNextTurn() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://modern-reset-\(UUID().uuidString.lowercased()).invalid")!
+            let state = MixedIngressHTTPState(items: [mixedPayload("reset-first"), mixedPayload("reset-next")], pageSize: 1,
+                supportsContinuation: true, rejectContinuationOnce: true)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let invalid = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_invalid_token", skipInboxMerge: true)
+            #expect(!invalid.completedRequest)
+            #expect(state.requestedPageTokens().count == 2)
+            #expect(state.remaining() == ["reset-next"])
+            #expect(state.acknowledgements() == [["reset-first"]])
+            let retry = await context.coordinator.syncProviderIngressOutcome(reason: "manual_modern_next_turn", skipInboxMerge: true)
+            #expect(retry.appliedCount == 1)
+            #expect(state.requestedPageTokens() == [nil, Data("reset-first".utf8).base64EncodedString(), nil])
+            #expect(state.remaining().isEmpty)
+            let rows = try await store.loadMessages()
+            #expect(rows.count == 2)
         }
     }
 
@@ -1221,7 +1477,8 @@ extension ProviderIngressCoordinatorTests {
             let state = MixedIngressHTTPState(items: [mixedPayload("first"), mixedPayload("second")])
             let context = mixedContext(store: store, group: group, state: state, base: base)
             defer { context.cleanup() }
-            _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_write_failed", skipInboxMerge: true)
+            let failed = await context.coordinator.syncProviderIngressOutcome(reason: "manual_write_failed", skipInboxMerge: true)
+            #expect(!failed.completedRequest)
             #expect(try await store.loadMessages().isEmpty)
             #expect(state.acknowledgements().isEmpty)
             #expect(state.remaining() == ["first", "second"])

@@ -212,6 +212,126 @@ struct ChannelSubscriptionServiceTests {
         let allObject = try #require(JSONSerialization.jsonObject(with: allData) as? [String: Any])
         #expect(allObject["device_key"] as? String == "dev-001")
         #expect(allObject["delivery_id"] == nil)
+        #expect(allObject["page_token"] == nil)
+    }
+
+    @Test
+    func continuationKeepsOpaqueBytesAndSeparatesPassCompletionFromPendingWork() async throws {
+        let opaque = String(repeating: "é", count: 1_024)
+        let requests = OSAllocatedUnfairLock(initialState: [String]())
+        let service = ChannelSubscriptionService(requestTransport: { request in
+            let body = try #require(request.httpBody)
+            let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let pageToken = object["page_token"] as? String ?? "missing"
+            requests.withLock { $0.append(pageToken) }
+            #expect(object["delivery_id"] == nil)
+            let data = Data(#"{"success":true,"data":{"items":[],"has_more":true,"next_page_token":null,"scan_complete":true}}"#.utf8)
+            return (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        let result = try await service.pullMessages(baseURL: URL(string: "https://continuation.invalid")!,
+                                                    token: nil, deviceKey: "device", pageToken: opaque)
+        #expect(requests.withLock { $0 } == [opaque])
+        #expect(result.scanComplete == true && result.nextPageToken == nil && result.hasMore)
+    }
+
+    @Test
+    func invalidContinuationOrTargetedCombinationNeverReachesTransport() async throws {
+        let requests = OSAllocatedUnfairLock(initialState: 0)
+        let service = ChannelSubscriptionService(requestTransport: { _ in
+            requests.withLock { $0 += 1 }
+            throw URLError(.unsupportedURL)
+        })
+        for (pageToken, deliveryId, expectedCode) in [
+            ("", nil, "page_token_invalid"),
+            (String(repeating: "é", count: 1_025), nil, "page_token_invalid"),
+            ("opaque", "known-delivery", "page_token_delivery_id_conflict"),
+        ] as [(String, String?, String)] {
+            do {
+                _ = try await service.pullMessages(baseURL: URL(string: "https://continuation.invalid")!,
+                                                   token: nil, deviceKey: "device", deliveryId: deliveryId, pageToken: pageToken)
+                Issue.record("An invalid continuation must fail before transport.")
+            } catch let error as AppError { #expect(error.code == expectedCode) }
+        }
+        #expect(requests.withLock { $0 } == 0)
+    }
+
+    @Test
+    func malformedContinuationResponseCannotBeTreatedAsLegacyOrSavedProgress() async throws {
+        let cases: [([String: Any], String)] = [
+            (["items": [], "has_more": true, "scan_complete": false], "gateway_invalid_response"),
+            (["items": [], "has_more": true, "scan_complete": true, "next_page_token": "opaque"], "provider_pull_page_invalid_response"),
+            (["items": [], "has_more": true, "next_page_token": "opaque"], "gateway_invalid_response"),
+            (["items": [], "has_more": true, "next_page_token": NSNull()], "gateway_invalid_response"),
+            (["items": [], "has_more": true, "next_page_token": NSNull(), "scan_complete": NSNull()], "gateway_invalid_response"),
+            (["items": [], "has_more": true, "scan_complete": true], "gateway_invalid_response"),
+            (["items": [], "has_more": true, "scan_complete": false, "next_page_token": String(repeating: "é", count: 1_025)], "provider_pull_page_invalid_response"),
+        ]
+        for (value, expectedCode) in cases {
+            let data = try JSONSerialization.data(withJSONObject: ["success": true, "data": value])
+            let service = ChannelSubscriptionService(requestTransport: { request in
+                (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            })
+            do {
+                _ = try await service.pullMessages(baseURL: URL(string: "https://continuation.invalid")!, token: nil, deviceKey: "device")
+                Issue.record("An invalid server continuation must remain a failed page.")
+            } catch let error as AppError { #expect(error.code == expectedCode) }
+        }
+    }
+
+    @Test
+    func continuationResetRequiresActualHTTPStatusAndOneUnambiguousServerCode() async throws {
+        typealias Rejection = ChannelSubscriptionService.PullContinuationRejection
+        let cases: [(Int, String, String, Int, Rejection?)] = [
+            (400, "page_token_invalid", "page_token_invalid", 400, .invalidToken),
+            (409, "page_token_scope_changed", "page_token_scope_changed", 409, .scopeChanged),
+            (503, "page_token_invalid", "page_token_invalid", 400, nil),
+            (400, "page_token_invalid", "server_busy", 400, nil),
+            (400, "page_token_invalid", "page_token_scope_changed", 400, nil),
+            (400, "page_token_scope_changed", "page_token_scope_changed", 409, nil),
+            (409, "page_token_scope_changed", "page_token_scope_changed", 400, nil),
+            (200, "page_token_invalid", "page_token_invalid", 400, nil),
+        ]
+        for (status, topCode, problemCode, bodyStatus, expected) in cases {
+            let body: [String: Any] = ["success": false, "error_code": topCode,
+                "problem": ["code": problemCode, "category": "validation", "status": bodyStatus,
+                            "title": "Synthetic rejection", "retryable": false]]
+            let data = try JSONSerialization.data(withJSONObject: body)
+            let service = ChannelSubscriptionService(requestTransport: { request in
+                (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+            })
+            do {
+                _ = try await service.pullMessages(baseURL: URL(string: "https://continuation.invalid")!,
+                                                   token: nil, deviceKey: "device", pageToken: "opaque")
+                Issue.record("A synthetic rejected response cannot be a successful page.")
+            } catch {
+                #expect((error as? Rejection) == expected)
+            }
+        }
+    }
+
+    @Test
+    func failedHTTPStatusCannotBecomeACompletedScanThroughASuccessBody() async throws {
+        let data = Data(#"{"success":true,"data":{"items":[],"has_more":true,"next_page_token":null,"scan_complete":true}}"#.utf8)
+        for status in [400, 409, 503] {
+            let service = ChannelSubscriptionService(requestTransport: { request in
+                (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+            })
+            do {
+                _ = try await service.pullMessages(baseURL: URL(string: "https://continuation.invalid")!,
+                                                   token: nil, deviceKey: "device", pageToken: "opaque")
+                Issue.record("An actual HTTP failure cannot finish or advance the captured pass.")
+            } catch let error as AppError {
+                switch error {
+                case let .gateway(problem):
+                    #expect(problem.status == status)
+                    #expect(status == 400 ? problem.code == nil : problem.code == "server_busy")
+                case let .local(problem):
+                    #expect(status == 409 && problem.code == "gateway_http_failure")
+                default:
+                    Issue.record("A rejected HTTP page must retain its existing actual-status error mapping.")
+                }
+            }
+        }
     }
 
     @Test
@@ -316,6 +436,7 @@ struct ChannelSubscriptionServiceTests {
         )
         #expect(result.hasMore)
         #expect(result.items.first?.deliveryId == "outer-001")
+        #expect(result.nextPageToken == nil && result.scanComplete == nil)
 
         let ack = try await service.ackMessages(
             baseURL: baseURL,

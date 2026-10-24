@@ -1435,7 +1435,7 @@ final class AppEnvironment {
                 switch outcome {
                 case .persistedMain, .persistedPending, .duplicate:
                     result += 1
-                case .rejected, .failed:
+                case .rejected, .identityConflict, .failed:
                     break
                 }
             }
@@ -1603,7 +1603,7 @@ final class AppEnvironment {
             return true
         case .rejected:
             return false
-        case .failed:
+        case .identityConflict, .failed:
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_placeholder",
                 "notification persistence failed"
@@ -2708,7 +2708,7 @@ final class AppEnvironment {
         switch outcome {
         case .persistedMain, .duplicate:
             return true
-        case .persistedPending, .rejected, .failed:
+        case .persistedPending, .rejected, .identityConflict, .failed:
             throw AppError.typedLocal(
                 code: "quality_event_close_delivery_failed",
                 category: .local,

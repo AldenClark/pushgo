@@ -31,6 +31,7 @@ struct ReleaseGatewayJourneyTests {
                 let pending = try await service.pullMessages(baseURL: base, token: auth, deviceKey: device.deviceKey)
                 #expect(pending.items.count == 2)
                 let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: group)
+                let frozenGatewayConfig = ServerConfig(baseURL: base, token: auth)
                 let coordinator = ProviderIngressCoordinator(
                     platformSuffix: "ios", dataStore: store,
                     channelSubscriptionService: service,
@@ -39,7 +40,7 @@ struct ReleaseGatewayJourneyTests {
                     wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: group),
                     hooks: .init(
                         isEnabled: { true },
-                        serverConfig: { ServerConfig(baseURL: base, token: auth) },
+                        serverConfig: { frozenGatewayConfig },
                         cachedDeviceKey: { device.deviceKey },
                         hasPersistedNotification: { identity in
                             guard let id = identity.deliveryId, let rows = try? await store.loadMessages(deliveryId: id) else { return false }

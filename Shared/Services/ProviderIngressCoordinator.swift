@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 enum ProviderLegacyDestructivePullMetadata {
@@ -53,6 +54,9 @@ enum ProviderIngressPersistenceResult {
     case persisted
     case duplicate
     case rejected
+    // Proven per-item identity conflict; it remains unacknowledged and durable.
+    // Unlike an unknown database failure, it does not invalidate peer writes.
+    case identityConflict
     case failed
 
     var isApplied: Bool {
@@ -66,23 +70,23 @@ enum ProviderIngressPersistenceResult {
         switch self {
         case .persisted, .duplicate:
             return true
-        case .rejected, .failed:
+        case .rejected, .identityConflict, .failed:
             return false
         }
     }
 
     var allowsPulledItemRemoval: Bool {
-        if case .failed = self {
-            return false
+        switch self {
+        case .identityConflict, .failed: false
+        case .persisted, .duplicate, .rejected: true
         }
-        return true
     }
 
     var removesSuccessfulInboxEntry: Bool {
         switch self {
         case .persisted, .duplicate:
             return true
-        case .rejected, .failed:
+        case .rejected, .identityConflict, .failed:
             return false
         }
     }
@@ -104,6 +108,8 @@ extension ProviderIngressPersistenceResult {
             self = .duplicate
         case .rejected:
             self = .rejected
+        case .identityConflict:
+            self = .identityConflict
         case .failed:
             self = .failed
         }
@@ -238,6 +244,8 @@ final class ProviderIngressCoordinator {
     private let ackMarkerMinimumAge: TimeInterval
     private var isDrainingAckMarkers = false
     private var isFullSyncInFlight = false
+    private var fullSyncGeneration = UUID()
+    private var pullContinuationTask: Task<Void, Never>?
     private var lastFullSyncAttemptAt = Date.distantPast
     private var inboxMergeTask: Task<Int, Never>?
     private var inboxMergeRequested = false
@@ -247,6 +255,8 @@ final class ProviderIngressCoordinator {
     private var qualityMessageRefreshAttempt = 0
     private let inboxApplyOwner = "app.ingress.\(UUID().uuidString.lowercased())"
     private static let recentFullSyncInterval: TimeInterval = 3
+    private static let pullPagesPerTurn = 4
+    private static let pullTurnInterval: TimeInterval = 5
     // NSE never owns correctness-critical network work. The host may claim a
     // freshly durable ACK immediately; duplicate workers are fenced by lease.
     private static let appAckMarkerMinimumAge: TimeInterval = 0
@@ -577,20 +587,21 @@ final class ProviderIngressCoordinator {
         }
 #endif
         let normalizedDeliveryId = normalizedText(deliveryId)
-        let shouldCoalesceFullSync = normalizedDeliveryId == nil && !bypassesRecentFullSyncCoalescing(reason: reason)
-        if shouldCoalesceFullSync {
+        let isFullSync = normalizedDeliveryId == nil
+        if isFullSync {
+            // Even explicit refreshes share one owner. The metadata revision is
+            // the cross-process fence; this generation protects this request.
             guard !isFullSyncInFlight else { return .skipped }
-            guard Date().timeIntervalSince(lastFullSyncAttemptAt) >= Self.recentFullSyncInterval else {
+            if !bypassesRecentFullSyncCoalescing(reason: reason),
+               Date().timeIntervalSince(lastFullSyncAttemptAt) < Self.recentFullSyncInterval {
                 return .skipped
             }
             isFullSyncInFlight = true
+            fullSyncGeneration = UUID()
             lastFullSyncAttemptAt = Date()
         }
-        defer {
-            if shouldCoalesceFullSync {
-                isFullSyncInFlight = false
-            }
-        }
+        let requestGeneration = fullSyncGeneration
+        defer { if isFullSync { isFullSyncInFlight = false } }
 
         if !skipInboxMerge {
             _ = await mergeInbox(
@@ -599,10 +610,10 @@ final class ProviderIngressCoordinator {
             )
         }
         guard !Task.isCancelled else { return .skipped }
-        guard let config = hooks.serverConfig() else { return .skipped }
+        guard let config = hooks.serverConfig()?.normalized() else { return .skipped }
         guard !Task.isCancelled else { return .skipped }
         guard let deviceKey = await hooks.cachedDeviceKey() else { return .skipped }
-        guard !Task.isCancelled else { return .skipped }
+        guard !Task.isCancelled, hooks.isEnabled(), hooks.serverConfig()?.normalized() == config else { return .skipped }
         _ = gatewayTokenStore.save(token: config.token, baseURL: config.baseURL)
         var wakeupPullLease: ProviderWakeupPullClaimStore.ClaimLease?
         if let normalizedDeliveryId {
@@ -626,19 +637,42 @@ final class ProviderIngressCoordinator {
         }
 
         do {
+            var frontier = isFullSync
+                ? try await notificationIngressInbox.beginPullFrontier(scope: Self.pullScope(config: config, deviceKey: deviceKey))
+                : nil
             var applied = 0
             var targetPersistenceFailed = false
+            var turnFailed = false
             var mayContinue = true
+            var pages = 0
+            let turnStarted = ProcessInfo.processInfo.systemUptime
             while mayContinue {
                 try Task.checkCancellation()
-                let pullResult = try await channelSubscriptionService.pullMessages(
+                guard await pullContextIsCurrent(config: config, deviceKey: deviceKey,
+                                                 generation: requestGeneration, fullSync: isFullSync) else { return .skipped }
+                let pullResult: ChannelSubscriptionService.PullResult
+                do {
+                    pullResult = try await channelSubscriptionService.pullMessages(
                     baseURL: config.baseURL,
                     token: config.token,
                     deviceKey: deviceKey,
-                    deliveryId: normalizedDeliveryId
-                )
+                    deliveryId: normalizedDeliveryId,
+                    pageToken: frontier?.pageToken
+                    )
+                } catch {
+                    if let frontier, error is ChannelSubscriptionService.PullContinuationRejection {
+                        // A reset is durable and CAS-fenced, never a same-turn
+                        // retry loop. Existing due work can start a fresh pass.
+                        _ = try await notificationIngressInbox.checkpointPullFrontier(expected: frontier, pageToken: nil)
+                    }
+                    throw error
+                }
+                guard await pullContextIsCurrent(config: config, deviceKey: deviceKey,
+                                                 generation: requestGeneration, fullSync: isFullSync) else { return .skipped }
+                pages += 1
                 var deliveryIdsToAck: [String] = []
                 var pageContainsFailedItem = false
+                var pageContainsIdentityConflict = false
                 var durableItems: [DurablePulledItem] = []
                 for item in pullResult.items {
                     var payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
@@ -700,6 +734,10 @@ final class ProviderIngressCoordinator {
                             targetPersistenceFailed = true
                         }
                     }
+                    if case .identityConflict = result {
+                        pageContainsIdentityConflict = true
+                        if normalizedDeliveryId == item.deliveryID { targetPersistenceFailed = true }
+                    }
                     switch result {
                     case .persisted, .duplicate:
                         await notificationIngressInbox.markTerminal(
@@ -712,7 +750,7 @@ final class ProviderIngressCoordinator {
                             discarded: true,
                             reason: "canonical_validation_rejected"
                         )
-                    case .failed:
+                    case .identityConflict, .failed:
                         break
                     }
                     if result.allowsPulledItemRemoval {
@@ -720,6 +758,8 @@ final class ProviderIngressCoordinator {
                     }
                 }
 
+                guard await pullContextIsCurrent(config: config, deviceKey: deviceKey,
+                                                 generation: requestGeneration, fullSync: isFullSync) else { return .skipped }
                 var ackSucceeded = true
                 if !deliveryIdsToAck.isEmpty {
                     var pageAckLeases: [ProviderDeliveryAckFailureStore.PendingMarker] = []
@@ -793,12 +833,40 @@ final class ProviderIngressCoordinator {
                     }
                 }
 
-                // A failed item retains its journal/server responsibility. If
-                // healthy peers were ACKed, the non-destructive queue made real
-                // progress and a later page can still contain healthy work. A
-                // poison-only page stops here instead of spinning on itself.
-                mayContinue = pullResult.hasMore && ackSucceeded
-                    && (!pageContainsFailedItem || !deliveryIdsToAck.isEmpty)
+                guard await pullContextIsCurrent(config: config, deviceKey: deviceKey,
+                                                 generation: requestGeneration, fullSync: isFullSync) else { return .skipped }
+                guard !pageContainsFailedItem, ackSucceeded else {
+                    turnFailed = true
+                    break
+                }
+                if let expected = frontier, let scanComplete = pullResult.scanComplete {
+                    // Every returned item has a durable journal/server owner.
+                    // Unknown storage failure stops the pass; only a proven
+                    // per-item identity conflict may be left behind without ACK.
+                    guard let checkpoint = try await notificationIngressInbox.checkpointPullFrontier(
+                        expected: expected, pageToken: pullResult.nextPageToken
+                    ) else { return .skipped }
+                    frontier = checkpoint
+                    mayContinue = !scanComplete
+                    if mayContinue && (pages >= Self.pullPagesPerTurn
+                        || ProcessInfo.processInfo.systemUptime - turnStarted >= Self.pullTurnInterval) {
+                        schedulePullContinuation(config: config, deviceKey: deviceKey, generation: requestGeneration)
+                        break
+                    }
+                } else {
+                    // Old servers provide no continuation. Preserve their
+                    // bounded head behavior, without claiming deep progress.
+                    if let expected = frontier, expected.pageToken != nil {
+                        guard try await notificationIngressInbox.checkpointPullFrontier(
+                            expected: expected, pageToken: nil
+                        ) != nil else { return .skipped }
+                    }
+                    frontier = nil
+                    mayContinue = pullResult.hasMore && ackSucceeded
+                        && (!pageContainsIdentityConflict || !deliveryIdsToAck.isEmpty)
+                    if pages >= Self.pullPagesPerTurn
+                        || ProcessInfo.processInfo.systemUptime - turnStarted >= Self.pullTurnInterval { break }
+                }
             }
             if let wakeupPullLease {
                 if targetPersistenceFailed {
@@ -807,7 +875,7 @@ final class ProviderIngressCoordinator {
                     await wakeupPullClaimStore.markCompleted(wakeupPullLease)
                 }
             }
-            return targetPersistenceFailed ? .failed : .succeeded(appliedCount: applied)
+            return targetPersistenceFailed || turnFailed ? .failed : .succeeded(appliedCount: applied)
         } catch {
             if let wakeupPullLease {
                 await wakeupPullClaimStore.releaseLease(wakeupPullLease)
@@ -866,7 +934,7 @@ final class ProviderIngressCoordinator {
             return .succeeded(appliedCount: 1)
         case .duplicate:
             return .succeeded(appliedCount: 0)
-        case .rejected, .failed:
+        case .rejected, .identityConflict, .failed:
             return .failed
         }
     }
@@ -963,7 +1031,7 @@ final class ProviderIngressCoordinator {
                 discarded: true,
                 reason: "canonical_validation_rejected"
             )
-        case .failed:
+        case .identityConflict, .failed:
             break
         }
         await wakeupPullClaimStore.markCompleted(context.claimLease)
@@ -1153,7 +1221,42 @@ final class ProviderIngressCoordinator {
 
     private func bypassesRecentFullSyncCoalescing(reason: String) -> Bool {
         let normalized = reason.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.contains("pull_to_refresh") || normalized.contains("manual")
+        return normalized.contains("pull_to_refresh") || normalized.contains("manual") || normalized == "pull_continuation"
+    }
+
+    private static func pullScope(config: ServerConfig, deviceKey: String) -> String {
+        // Configuration generation is not a credential fingerprint. Tokens are
+        // only compared in memory; neither token nor token hash is checkpointed.
+        // LocalKeychainConfigStore persists dates with JSONEncoder.iso8601
+        // (whole seconds). Use that same representation before and after a
+        // restart instead of an in-memory fractional Double bit pattern.
+        let configurationDate = ISO8601DateFormatter().string(from: config.updatedAt)
+        let value = [ackBatchKey(for: config.baseURL), deviceKey, config.id.uuidString,
+                     configurationDate].joined(separator: "\n")
+        return SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func pullContextIsCurrent(config: ServerConfig, deviceKey: String,
+                                      generation: UUID, fullSync: Bool) async -> Bool {
+        guard !Task.isCancelled, hooks.isEnabled(),
+              hooks.serverConfig()?.normalized() == config,
+              !fullSync || fullSyncGeneration == generation else { return false }
+        let currentDevice = await hooks.cachedDeviceKey()
+        return !Task.isCancelled && hooks.isEnabled() && currentDevice == deviceKey
+            && hooks.serverConfig()?.normalized() == config
+            && (!fullSync || fullSyncGeneration == generation)
+    }
+
+    private func schedulePullContinuation(config: ServerConfig, deviceKey: String, generation: UUID) {
+        guard pullContinuationTask == nil else { return }
+        pullContinuationTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.pullContinuationTask = nil
+            guard await self.pullContextIsCurrent(config: config, deviceKey: deviceKey,
+                                                  generation: generation, fullSync: true) else { return }
+            _ = await self.syncProviderIngressOutcome(reason: "pull_continuation", skipInboxMerge: true)
+        }
     }
 
     static func ackBatchKey(for baseURL: URL) -> String {

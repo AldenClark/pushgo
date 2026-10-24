@@ -909,7 +909,7 @@ struct NotificationHandlingTests {
                 )
 
                 switch outcome {
-                case .failed:
+                case .identityConflict, .failed:
                     failedCases.append(requestIdentifier)
                 case .rejected:
                     rejectedCases.append(requestIdentifier)

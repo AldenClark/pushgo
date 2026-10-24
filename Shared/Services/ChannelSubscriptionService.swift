@@ -12,6 +12,23 @@ struct ChannelSubscriptionService {
     struct PullResult: Sendable, Equatable {
         let items: [PullItem]
         let hasMore: Bool
+        let nextPageToken: String?
+        let scanComplete: Bool?
+
+        init(items: [PullItem], hasMore: Bool, nextPageToken: String? = nil, scanComplete: Bool? = nil) {
+            self.items = items
+            self.hasMore = hasMore
+            self.nextPageToken = nextPageToken
+            self.scanComplete = scanComplete
+        }
+    }
+
+    // Only the Pull transport can establish this classification from the
+    // actual HTTP status and unambiguous server codes. Local validation and
+    // body-provided status values cannot authorize a durable frontier reset.
+    enum PullContinuationRejection: Error, Equatable {
+        case invalidToken
+        case scopeChanged
     }
 
     private let requestTransport: @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -95,20 +112,51 @@ struct ChannelSubscriptionService {
     struct PullRequest: Encodable {
         let deviceKey: String
         let deliveryId: String?
+        let pageToken: String?
+
+        init(deviceKey: String, deliveryId: String?, pageToken: String? = nil) {
+            self.deviceKey = deviceKey
+            self.deliveryId = deliveryId
+            self.pageToken = pageToken
+        }
 
         enum CodingKeys: String, CodingKey {
             case deviceKey = "device_key"
             case deliveryId = "delivery_id"
+            case pageToken = "page_token"
         }
     }
 
     struct PullResponse: Decodable {
         let items: [PullItem]
         let hasMore: Bool?
+        let nextPageToken: String?
+        let scanComplete: Bool?
 
         enum CodingKeys: String, CodingKey {
             case items
             case hasMore = "has_more"
+            case nextPageToken = "next_page_token"
+            case scanComplete = "scan_complete"
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            items = try values.decode([PullItem].self, forKey: .items)
+            hasMore = try values.decodeIfPresent(Bool.self, forKey: .hasMore)
+            let hasToken = values.contains(.nextPageToken)
+            let hasCompletion = values.contains(.scanComplete)
+            guard hasToken == hasCompletion else { throw ChannelSubscriptionService.invalidPullPageResponse() }
+            if hasCompletion {
+                guard !(try values.decodeNil(forKey: .scanComplete)) else {
+                    throw ChannelSubscriptionService.invalidPullPageResponse()
+                }
+                scanComplete = try values.decode(Bool.self, forKey: .scanComplete)
+                nextPageToken = try values.decodeIfPresent(String.self, forKey: .nextPageToken)
+            } else {
+                scanComplete = nil
+                nextPageToken = nil
+            }
         }
     }
 
@@ -553,15 +601,31 @@ struct ChannelSubscriptionService {
         baseURL: URL,
         token: String?,
         deviceKey: String,
-        deliveryId: String? = nil
+        deliveryId: String? = nil,
+        pageToken: String? = nil
     ) async throws -> PullResult {
         let response = try await requestPullMessages(
             baseURL: baseURL,
             token: token,
             deviceKey: deviceKey,
-            deliveryId: deliveryId
+            deliveryId: deliveryId,
+            pageToken: pageToken
         )
-        return PullResult(items: response.items, hasMore: response.hasMore ?? false)
+        if let next = response.nextPageToken, next.isEmpty || next.utf8.count > 2_048 {
+            throw Self.invalidPullPageResponse()
+        }
+        if let complete = response.scanComplete {
+            guard complete == (response.nextPageToken == nil) else { throw Self.invalidPullPageResponse() }
+        } else if response.nextPageToken != nil {
+            throw Self.invalidPullPageResponse()
+        }
+        return PullResult(items: response.items, hasMore: response.hasMore ?? false,
+                          nextPageToken: response.nextPageToken, scanComplete: response.scanComplete)
+    }
+
+    private static func invalidPullPageResponse() -> AppError {
+        .typedLocal(code: "provider_pull_page_invalid_response", category: .validation,
+                    message: LocalizationProvider.localized("operation_failed"))
     }
 
     private func decodeRequiredV2Payload<T: Decodable>(
@@ -599,7 +663,8 @@ struct ChannelSubscriptionService {
         baseURL: URL,
         token: String?,
         deviceKey: String,
-        deliveryId: String?
+        deliveryId: String?,
+        pageToken: String?
     ) async throws -> PullResponse {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
@@ -628,13 +693,47 @@ struct ChannelSubscriptionService {
         let normalizedDeliveryId = (normalizedDeliveryIdRaw?.isEmpty == false)
             ? normalizedDeliveryIdRaw
             : nil
+        if let pageToken {
+            guard !pageToken.isEmpty, pageToken.utf8.count <= 2_048 else {
+                throw AppError.typedLocal(code: "page_token_invalid", category: .validation,
+                                          message: LocalizationProvider.localized("operation_failed"))
+            }
+            guard normalizedDeliveryId == nil else {
+                throw AppError.typedLocal(code: "page_token_delivery_id_conflict", category: .validation,
+                                          message: LocalizationProvider.localized("operation_failed"))
+            }
+        }
         request.httpBody = try JSONEncoder().encode(
             PullRequest(
                 deviceKey: normalizedDeviceKey,
-                deliveryId: normalizedDeliveryId
+                deliveryId: normalizedDeliveryId,
+                pageToken: pageToken
             )
         )
         let (data, response) = try await requestTransport(request)
+        if let http = response as? HTTPURLResponse,
+           http.statusCode == 400 || http.statusCode == 409,
+           let envelope = try? JSONDecoder().decode(StatusResponse<EmptyPayload>.self, from: data),
+           !envelope.success,
+           envelope.problem.map({ $0.status == 0 || $0.status == http.statusCode }) ?? true {
+            let codes = Set([envelope.errorCode, envelope.problem?.code].compactMap { value -> String? in
+                let code = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+                return code.isEmpty ? nil : code
+            })
+            if http.statusCode == 400, codes == ["page_token_invalid"] {
+                throw PullContinuationRejection.invalidToken
+            }
+            if http.statusCode == 409, codes == ["page_token_scope_changed"] {
+                throw PullContinuationRejection.scopeChanged
+            }
+        }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            // Keep existing structured errors and the exact missing-V2-route
+            // diagnosis. Even a contradictory success body cannot make an
+            // actual failed HTTP request a page/checkpoint success.
+            let _: EmptyPayload = try decodeRequiredV2Payload(EmptyPayload.self, data: data, response: response, path: Self.pullV2Path)
+            throw Self.buildGatewayError(statusCode: http.statusCode, legacyError: nil, errorCode: nil, problem: nil)
+        }
         return try decodeRequiredV2Payload(PullResponse.self, data: data, response: response, path: Self.pullV2Path)
     }
 

@@ -53,6 +53,7 @@ enum NotificationPersistenceOutcome {
     case persistedPending(PushMessage)
     case duplicate
     case rejected
+    case identityConflict
     case failed
 }
 
@@ -313,7 +314,7 @@ enum NotificationPersistenceCoordinator {
         case .duplicateRequest, .duplicateMessage, .duplicateProcessed:
             return .duplicate
         case .identityConflict:
-            return .failed
+            return .identityConflict
         }
     }
 
@@ -838,14 +839,14 @@ enum NotificationHandling {
         switch persistenceOutcome {
         case .persistedMain, .persistedPending, .duplicate:
             shouldReloadCounts = true
-        case .rejected, .failed:
+        case .rejected, .identityConflict, .failed:
             shouldReloadCounts = false
         }
         let shouldPresentAlert: Bool
         switch persistenceOutcome {
         case .rejected:
             shouldPresentAlert = false
-        case .persistedMain, .persistedPending, .duplicate, .failed:
+        case .persistedMain, .persistedPending, .duplicate, .identityConflict, .failed:
             shouldPresentAlert = shouldPresentUserAlert(from: payload)
         }
         return ForegroundPresentationDecision(
@@ -1081,7 +1082,7 @@ enum NotificationHandling {
         switch outcome {
         case .persistedMain, .persistedPending:
             break
-        case .duplicate, .rejected, .failed:
+        case .duplicate, .rejected, .identityConflict, .failed:
             return nil
         }
 

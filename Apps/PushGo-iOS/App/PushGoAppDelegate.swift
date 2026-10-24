@@ -355,7 +355,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
             return .newData
         case .duplicate, .rejected:
             return inboxApplied > 0 ? .newData : .noData
-        case .failed:
+        case .identityConflict, .failed:
             return .failed
         }
     }
