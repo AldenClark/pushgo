@@ -330,6 +330,57 @@ struct QualityRuntimeProfileTests {
         #expect(!root.path.contains(".."))
     }
 
+    @Test("focused UI roots require an exact session-scoped sandbox token")
+    func focusedQualityRootIsExplicitAndContained() {
+        let session = PushGoQualitySessionDescriptor(sessionID: "resource-ui-one", fixture: .messagesStandard)
+        let appBase = URL(fileURLWithPath: "/app/Application Support", isDirectory: true)
+        let temporary = URL(fileURLWithPath: "/app/tmp", isDirectory: true)
+        func base(_ token: String?, for identity: PushGoQualitySessionDescriptor?) -> URL {
+            PushGoAutomationContext.qualitySessionBaseURL(
+                for: identity, applicationSupportURL: appBase,
+                temporaryDirectory: temporary, storageRootToken: token
+            )
+        }
+        #if DEBUG
+        #expect(base("sandbox-tmp:resource-ui-one", for: session).path == "/app/tmp/PushGoQualityIsolated/resource-ui-one")
+        #else
+        #expect(base("sandbox-tmp:resource-ui-one", for: session) == appBase)
+        #endif
+        for token in [nil, "/app/arbitrary", "sandbox-tmp:another-session", "sandbox-tmp:../resource-ui-one", "sandbox-tmp:resource-ui-one/extra"] {
+            #expect(base(token, for: session) == appBase)
+        }
+        #expect(base("sandbox-tmp:resource-ui-one", for: nil) == appBase)
+        let invalid = PushGoQualitySessionDescriptor(sessionID: "../resource-ui-one", fixture: .messagesStandard)
+        #expect(base("sandbox-tmp:../resource-ui-one", for: invalid) == appBase)
+    }
+
+    @Test("focused UI cleanup never enumerates earlier App-owned session roots")
+    func focusedQualityCleanupLeavesPriorSessionsUntouched() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("resource-ui-root-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+        let appBase = root.appendingPathComponent("Application Support", isDirectory: true)
+        let temporary = root.appendingPathComponent("tmp", isDirectory: true)
+        let session = PushGoQualitySessionDescriptor(sessionID: "current-resource-ui", fixture: .messagesStandard)
+        let prior = appBase.appendingPathComponent("PushGoQuality/Sessions/prior-evidence", isDirectory: true)
+        try fileManager.createDirectory(at: prior, withIntermediateDirectories: true)
+        let sentinel = prior.appendingPathComponent("preserve.txt")
+        try Data("prior evidence".utf8).write(to: sentinel)
+        let scopedBase = PushGoAutomationContext.qualitySessionBaseURL(
+            for: session, applicationSupportURL: appBase,
+            temporaryDirectory: temporary, storageRootToken: "sandbox-tmp:current-resource-ui"
+        )
+        #if DEBUG
+        let active = try #require(PushGoAutomationContext.qualitySessionRootURL(for: session, baseURL: scopedBase))
+        try fileManager.createDirectory(at: active, withIntermediateDirectories: true)
+        #expect(try PushGoAutomationContext.cleanupPriorQualitySessions(activeSession: session, baseURL: scopedBase) == 0)
+        #expect(try Data(contentsOf: sentinel) == Data("prior evidence".utf8))
+        #expect(active.path.hasPrefix(temporary.path + "/PushGoQualityIsolated/current-resource-ui/"))
+        #else
+        #expect(scopedBase == appBase)
+        #endif
+    }
+
     @Test("cleanup removes only prior validated quality sessions")
     func cleanupPriorSessionsIsContained() throws {
         let fileManager = FileManager.default

@@ -98,6 +98,7 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
     case messagesFilters = "messages.filters"
     case messagesCleanup = "messages.cleanup"
     case messagesMarkdown = "messages.markdown"
+    case messagesResources = "messages.resources"
     case messagesLarge = "messages.large"
     case eventStandard = "event.standard"
     case thingStandard = "thing.standard"
@@ -503,7 +504,37 @@ enum PushGoAutomationContext {
         else {
             return nil
         }
-        return qualitySessionRootURL(for: session, baseURL: baseURL)
+        return qualitySessionRootURL(
+            for: session,
+            baseURL: qualitySessionBaseURL(
+                for: session,
+                applicationSupportURL: baseURL,
+                temporaryDirectory: FileManager.default.temporaryDirectory,
+                storageRootToken: normalizedString(for: storageRootEnv)
+            )
+        )
+    }
+
+    /// A focused UI journey may reuse the existing sandbox-tmp token, but only for its
+    /// exact typed quality session. This keeps preparation/cleanup below that one test's
+    /// temporary root instead of enumerating older App-owned quality sessions.
+    static func qualitySessionBaseURL(
+        for session: PushGoQualitySessionDescriptor?,
+        applicationSupportURL: URL,
+        temporaryDirectory: URL,
+        storageRootToken: String?
+    ) -> URL {
+        #if DEBUG
+        if let session,
+           session.schemaVersion == PushGoQualitySessionDescriptor.currentSchemaVersion,
+           isValidSessionID(session.sessionID),
+           storageRootToken == sandboxTempStoragePrefix + session.sessionID {
+            return temporaryDirectory
+                .appendingPathComponent("PushGoQualityIsolated", isDirectory: true)
+                .appendingPathComponent(session.sessionID, isDirectory: true)
+        }
+        #endif
+        return applicationSupportURL
     }
 
     static func qualitySessionRootURL(
@@ -575,7 +606,13 @@ enum PushGoAutomationContext {
         else {
             return 0
         }
-        return (try? cleanupPriorQualitySessions(activeSession: session, baseURL: baseURL)) ?? 0
+        let scopedBase = qualitySessionBaseURL(
+            for: session,
+            applicationSupportURL: baseURL,
+            temporaryDirectory: FileManager.default.temporaryDirectory,
+            storageRootToken: normalizedString(for: storageRootEnv)
+        )
+        return (try? cleanupPriorQualitySessions(activeSession: session, baseURL: scopedBase)) ?? 0
 #else
         return 0
 #endif

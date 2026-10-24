@@ -1,6 +1,8 @@
 import AppKit
 import ApplicationServices
+import CryptoKit
 import Darwin
+import ImageIO
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
@@ -1401,6 +1403,127 @@ final class PushGo_macOSUITests: XCTestCase {
         let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
         XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
         XCTAssertEqual(relaunchedBadge.value as? String, "1")
+    }
+
+    @MainActor
+    func testResourceOriginalsAndAnimationUseRealControlsAcrossReentryAndBackground() throws {
+        XCTContext.runActivity(named: "The frame oracle rejects wrong colors, missing pixels and transparency") { _ in
+            XCTAssertTrue(resourceFrameMatches(.red, red: true))
+            XCTAssertFalse(resourceFrameMatches(.red, red: false))
+            XCTAssertTrue(resourceFrameMatches(.blue, red: false))
+            XCTAssertFalse(resourceFrameMatches(.blue, red: true))
+            for absentFrame in [NSColor.black, .white, .gray, .clear, NSColor.red.withAlphaComponent(0)] {
+                XCTAssertFalse(resourceFrameMatches(absentFrame, red: true))
+                XCTAssertFalse(resourceFrameMatches(absentFrame, red: false))
+            }
+        }
+        let sessionID = "macos-resource-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID, fixture: "messages.resources", allowCrossAppDataAccess: true
+        )
+        // The existing sandbox token is accepted only when it exactly names this typed
+        // quality session. Old App-owned sessions and the normal Store remain untouched.
+        setAutomationValue("sandbox-tmp:\(sessionID)", for: "PUSHGO_AUTOMATION_STORAGE_ROOT", in: context.app)
+        let root = isolatedMacOSResourceSessionRoot(sessionID: sessionID)
+        let savedReceipt = root.appendingPathComponent("artifacts/saved-image-destination.txt")
+        launchQuality(context, sessionID: sessionID)
+
+        let staticRow = element(in: context.app, identifier: "message.row.00000000-0000-0000-0000-00000000f001")
+        XCTAssertTrue(staticRow.waitForExistence(timeout: 8))
+        staticRow.click()
+        openResourcePreview(in: context.app)
+        let save = element(in: context.app, identifier: "action.image.preview.save")
+        XCTAssertTrue(save.waitForExistence(timeout: 8) && save.isHittable)
+        save.click()
+        saveImageThroughSystemPanel(in: context.app, expectedFilename: "pushgo-image-\(sessionID).png")
+        let pngURL = waitForSavedImageDestinationReceipt(at: savedReceipt, expectedExtension: "png")
+        let expectedPNG = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="))
+        XCTAssertEqual(try Data(contentsOf: pngURL), expectedPNG, "Save must preserve the acquired original bytes, not re-encode a cover.")
+        element(in: context.app, identifier: "action.image.preview.close").click()
+
+        let animatedRow = element(in: context.app, identifier: "message.row.00000000-0000-0000-0000-00000000f002")
+        XCTAssertTrue(animatedRow.waitForExistence(timeout: 5))
+        animatedRow.click()
+        openResourcePreview(in: context.app)
+        let preview = element(in: context.app, identifier: "dialog.image.preview")
+        let playback = element(in: context.app, identifier: "action.image.preview.playback")
+        XCTAssertTrue(playback.waitForExistence(timeout: 8) && playback.isHittable)
+        let playLabel = playback.label
+        assertResourcePreviewColor(preview, red: true, name: "animated source initially shows its first-frame poster")
+        playback.click()
+        XCTAssertNotEqual(playback.label, playLabel, "The real control must become Pause.")
+        assertResourcePreviewColor(preview, red: false, name: "real animated view reaches the distinct blue frame")
+        playback.click()
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "Pause removes the player and returns to the first-frame poster")
+        let blueWhilePaused = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [self] _, _ in resourcePreviewIsColor(preview, red: false) }, object: nil
+        )
+        blueWhilePaused.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [blueWhilePaused], timeout: 1), .completed,
+                       "Paused media must not advance to the second frame during the observation window.")
+
+        let gifSave = element(in: context.app, identifier: "action.image.preview.save")
+        gifSave.click()
+        saveImageThroughSystemPanel(in: context.app, expectedFilename: "pushgo-image-\(sessionID).gif")
+        let gifURL = waitForSavedImageDestinationReceipt(at: savedReceipt, expectedExtension: "gif")
+        let gifData = try Data(contentsOf: gifURL)
+        XCTAssertEqual(SHA256.hash(data: gifData).map { String(format: "%02x", $0) }.joined(),
+                       "d52c1ecccf9058468d46b7e516c85b3a623f77b2cebb6d156836f4ab9ae8664e")
+        let gifSource = try XCTUnwrap(CGImageSourceCreateWithData(gifData as CFData, nil))
+        XCTAssertEqual(CGImageSourceGetCount(gifSource), 2, "Original export must retain both GIF frames.")
+
+        let share = element(in: context.app, identifier: "action.image.preview.share")
+        XCTAssertTrue(share.exists && share.isHittable)
+        share.click()
+        // The native XPC picker does not expose reliable App-scoped menu geometry.
+        // Retain its cropped platform screenshot as manual handoff evidence; the
+        // following real Close/reopen verifies that Escape restores user control.
+        let shareAttachment = XCTAttachment(screenshot: preview.screenshot())
+        shareAttachment.name = "native sharing picker for the acquired original GIF"
+        shareAttachment.lifetime = .keepAlways
+        add(shareAttachment)
+        context.app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        // AppKit may also apply Escape to the containing SwiftUI sheet. Both
+        // cancellation outcomes must restore an operable, accurate canonical detail.
+        if preview.exists {
+            let closeAfterShare = element(in: context.app, identifier: "action.image.preview.close")
+            XCTAssertTrue(closeAfterShare.isHittable,
+                          "Cancel must leave the remaining image preview operable.")
+            closeAfterShare.click()
+        }
+        XCTAssertTrue(preview.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(element(in: context.app, identifier: "screen.message.detail").exists)
+        XCTAssertTrue(context.app.staticTexts["Resource media"].exists)
+        XCTAssertTrue(context.app.staticTexts["Original bytes remain available."].exists,
+                      "Cancelling Share must preserve the same accurate canonical message body.")
+        openResourcePreview(in: context.app)
+        XCTAssertEqual(playback.label, playLabel)
+
+        playback.click()
+        assertResourcePreviewColor(preview, red: false, name: "explicit restart renders the second frame again")
+        context.app.typeKey("h", modifierFlags: [.command])
+        XCTAssertTrue(context.app.wait(for: .runningBackground, timeout: 5))
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        XCTAssertEqual(playback.label, playLabel, "Returning from background must not restart animation implicitly.")
+        assertResourcePreviewColor(preview, red: true, name: "foreground return restores the same original poster")
+        element(in: context.app, identifier: "action.image.preview.close").click()
+        XCTAssertTrue(preview.waitForNonExistence(timeout: 5))
+        openResourcePreview(in: context.app)
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "closing and reopening creates a paused independent view")
+        element(in: context.app, identifier: "action.image.preview.close").click()
+
+        context.app.terminate()
+        launchQuality(context, sessionID: sessionID)
+        XCTAssertTrue(animatedRow.waitForExistence(timeout: 8))
+        animatedRow.click()
+        openResourcePreview(in: context.app)
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "relaunch restores the same original without shared play state")
     }
 
     @MainActor
@@ -5427,6 +5550,63 @@ final class PushGo_macOSUITests: XCTestCase {
             .appendingPathComponent(sessionID, isDirectory: true)
     }
 
+    private func isolatedMacOSResourceSessionRoot(sessionID: String) -> URL {
+        let hostHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
+        return URL(fileURLWithPath: hostHome, isDirectory: true)
+            .appendingPathComponent("Library/Containers/io.ethan.pushgo/Data/tmp/PushGoQualityIsolated", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+            .appendingPathComponent("PushGoQuality/Sessions", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+    }
+
+    @MainActor
+    private func openResourcePreview(in app: XCUIApplication) {
+        XCTAssertTrue(element(in: app, identifier: "screen.message.detail").waitForExistence(timeout: 8))
+        let image = element(in: app, identifier: "message.image.0")
+        let detailScroll = app.scrollViews.allElementsBoundByIndex
+            .filter { $0.frame.width > 200 && $0.frame.height > 200 }
+            .max { $0.frame.midX < $1.frame.midX }
+        for _ in 0..<6 where !(image.exists && image.isHittable) { detailScroll?.swipeUp() }
+        XCTAssertTrue(image.waitForExistence(timeout: 8) && image.isHittable)
+        image.click()
+        XCTAssertTrue(element(in: app, identifier: "dialog.image.preview").waitForExistence(timeout: 8))
+    }
+
+    private func resourceFrameMatches(_ color: NSColor, red: Bool) -> Bool {
+        guard let color = color.usingColorSpace(.sRGB), color.alphaComponent > 0.95 else { return false }
+        // The display/capture pipeline may transform the source RGB primaries. The UI
+        // purpose is to distinguish the known red and blue frames, not test exact colorimetry.
+        return red
+            ? color.redComponent > max(color.greenComponent, color.blueComponent) + 0.4
+            : color.blueComponent > max(color.greenComponent, color.redComponent) + 0.4
+    }
+
+    @MainActor
+    private func resourcePreviewIsColor(_ preview: XCUIElement, red: Bool) -> Bool {
+        guard preview.exists,
+              let bitmap = NSBitmapImageRep(data: preview.screenshot().pngRepresentation),
+              let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB)
+        else { return false }
+        print("RESOURCE_PREVIEW_PIXELS bounds=\(NSStringFromRect(preview.frame)) bitmap=\(bitmap.pixelsWide)x\(bitmap.pixelsHigh) bits=\(bitmap.bitsPerPixel) profile=\(bitmap.colorSpace.localizedName ?? "unknown") cg=\(String(describing: bitmap.cgImage?.colorSpace?.name)) centerRGBA=\(color.redComponent),\(color.greenComponent),\(color.blueComponent),\(color.alphaComponent) expected=\(red ? "red" : "blue")")
+        return resourceFrameMatches(color, red: red)
+    }
+
+    @MainActor
+    private func assertResourcePreviewColor(_ preview: XCUIElement, red: Bool, name: String,
+                                            file: StaticString = #filePath, line: UInt = #line) {
+        let expectedPixels = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [self] _, _ in resourcePreviewIsColor(preview, red: red) }, object: nil
+        )
+        let result = XCTWaiter.wait(for: [expectedPixels], timeout: 8)
+        XCTContext.runActivity(named: name) { activity in
+            let attachment = XCTAttachment(screenshot: preview.screenshot())
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
+        // Capture the observed pixels before XCTest's stop-on-first-failure unwinds the test.
+        XCTAssertEqual(result, .completed, name, file: file, line: line)
+    }
+
     @MainActor
     private func resizeMainWindowThroughSystemAccessibility(
         _ app: XCUIApplication,
@@ -6395,6 +6575,7 @@ final class PushGo_macOSUITests: XCTestCase {
 
     private func waitForSavedImageDestinationReceipt(
         at receiptURL: URL,
+        expectedExtension: String? = nil,
         timeout: TimeInterval = 5,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -6403,7 +6584,8 @@ final class PushGo_macOSUITests: XCTestCase {
         repeat {
             if let data = try? Data(contentsOf: receiptURL),
                let path = String(data: data, encoding: .utf8),
-               !path.isEmpty
+               !path.isEmpty,
+               expectedExtension == nil || URL(fileURLWithPath: path).pathExtension == expectedExtension
             {
                 return URL(fileURLWithPath: path)
             }

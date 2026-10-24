@@ -490,7 +490,7 @@ final class PushGo_iOSUITests: XCTestCase {
                     "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
                     "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
                 ),
-                33,
+                34,
             ),
         )
         for path, special_profile, methods, expected_count in cases:
@@ -948,8 +948,8 @@ final class PushGo_iOSUITests: XCTestCase {
             "performance_sensitivity_scopes",
         )
 
-        self.assertEqual(35, len(discoverable))
-        self.assertEqual(16, len(positive))
+        self.assertEqual(36, len(discoverable))
+        self.assertEqual(17, len(positive))
         self.assertEqual(14, len(risk))
         self.assertEqual(2, len(system))
         self.assertEqual(1, len(preparation))

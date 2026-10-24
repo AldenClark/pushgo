@@ -1312,9 +1312,12 @@ final class PushGoAutomationRuntime {
             }
             let bundle = try loadStartupFixtureBundle()
             if let fixture = PushGoAutomationContext.qualitySession?.fixture,
-               fixture == .messagesStandard || fixture == .corePositive
+               fixture == .messagesStandard || fixture == .corePositive || fixture == .messagesResources
             {
                 try await prepareQualityStandardMessageImage()
+                if fixture == .messagesResources {
+                    try await prepareQualityAnimatedMessageImage()
+                }
             }
             try await applyFixtureBundle(
                 bundle,
@@ -4068,6 +4071,10 @@ final class PushGoAutomationRuntime {
             messages = [qualityMarkdownFixtureMessage()]
             entityRecords = []
             channelSubscriptions = []
+        case .messagesResources:
+            messages = [qualityResourceFixtureMessage(animated: false), qualityResourceFixtureMessage(animated: true)]
+            entityRecords = []
+            channelSubscriptions = []
         case .messagesLarge:
             messages = (0..<1_000).map { qualityFixtureMessage(index: $0) }
             entityRecords = []
@@ -4206,6 +4213,44 @@ final class PushGoAutomationRuntime {
 
     private static let qualityStandardMessagePNGBase64 =
         "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+
+    private static let qualityAnimatedMessageImageURL = URL(
+        string: "https://quality-media.pushgo.invalid/resource-animation.gif"
+    )!
+
+    // Fixed synthetic two-frame red/blue GIF, also used by the existing Android decoder fixture.
+    // This explicit quality-session import proves display, not an HTTP cache response.
+    private static let qualityAnimatedMessageGIFBase64 =
+        "R0lGODlhAgACAPAAAP8AAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAAAAAACwAAAAAAgACAAACAoRRACH5BAAKAAAALAAAAAACAAIAgAAA/wAAAAIChFEAOw=="
+
+    private func prepareQualityAnimatedMessageImage() async throws {
+        guard let data = Data(base64Encoded: Self.qualityAnimatedMessageGIFBase64),
+              let file = await SharedImageCache.store(data: data, for: Self.qualityAnimatedMessageImageURL),
+              (try? Data(contentsOf: file)) == data
+        else { throw PushGoAutomationError.invalidArgument("quality_animated_message_image") }
+    }
+
+    private func qualityResourceFixtureMessage(animated: Bool) -> [String: Any] {
+        let suffix = animated ? "f002" : "f001"
+        let stableID = animated ? "quality-resource-animated" : "quality-resource-static"
+        let image = animated ? Self.qualityAnimatedMessageImageURL : Self.qualityStandardMessageImageURL
+        let inlineImage = animated ? Self.qualityStandardMessageImageURL : Self.qualityAnimatedMessageImageURL
+        return [
+            "id": "00000000-0000-0000-0000-00000000\(suffix)",
+            "message_id": stableID,
+            "title": animated ? "Quality Resource Animated" : "Quality Resource Static",
+            "body": "# Resource media\n\n![Inline resource](\(inlineImage.absoluteString))\n\nOriginal bytes remain available.",
+            "channel_id": "quality-resources",
+            "is_read": false,
+            "received_at": animated ? "2026-01-15T08:01:00Z" : "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "message", "message_id": stableID,
+                "delivery_id": "quality-delivery-\(stableID)",
+                "images": "[\"\(image.absoluteString)\"]",
+            ],
+            "status": "normal",
+        ]
+    }
 
     private func qualityMarkdownFixtureMessage() -> [String: Any] {
         let longContent = (1...24).map { index in

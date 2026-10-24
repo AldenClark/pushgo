@@ -705,6 +705,7 @@ private struct PushgoImagePreviewOverlay: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(LocalizedStringKey(previewIsAnimating ? "pause" : "play"))
+        .accessibilityIdentifier("action.image.preview.playback")
     }
 
     /// User-initiated export is an attachment, not the HTTP reuse cache. Copy exact acquired
