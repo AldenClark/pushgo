@@ -60,7 +60,17 @@ struct ThingChildCapacityTests {
             )
             #expect(before.pending.count == 2)
             #expect(before.formal.row.contains("Formal sentinel"))
-            #expect(before.formal.ledger.count == 1)
+            // The processed-delivery fact and business-operation fact have
+            // distinct recovery roles in the existing lifecycle contract.
+            #expect(before.formal.ledger.count == 2)
+            let formalScopes = try await database.read { db in
+                try String.fetchAll(db, sql: "SELECT scope_key FROM operation_ledger WHERE message_id = ?;",
+                                    arguments: [formal.messageId!])
+            }
+            #expect(Set(formalScopes) == [
+                "formal-channel|message|formal-entity|formal-operation",
+                "delivery:unscoped|15:formal-delivery",
+            ])
             #expect(before.formal.derived.count == 3)
             #expect(before.children.isEmpty)
             #expect(before.pending.map(\.messageID) == ["capacity-child-message", "capacity-child-event"])

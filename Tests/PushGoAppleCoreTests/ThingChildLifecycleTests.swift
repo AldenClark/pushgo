@@ -446,6 +446,110 @@ struct ThingChildLifecycleTests {
         }
     }
 
+    @Test
+    func pendingReplayActivatesThreePagesInTheOriginalOrderAfterReopen() async throws {
+        try await withIsolatedAutomationStorage { root, group in
+            let thingID = "thing-three-page-replay"
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let children = multiPageChildren(thingID: thingID)
+            let outcomes = try await store.persistNotificationMessagesIfNeeded(children)
+            #expect(outcomes.count == 137)
+            #expect(outcomes.allSatisfy { if case .persistedPending = $0 { return true }; return false })
+            let queue = try databaseQueue(appGroupIdentifier: group)
+            let pending = try await queue.read { db in try PendingChildSnapshot.fetch(db, thingID: thingID) }
+            #expect(pending.count == 137)
+            #expect(try await store.loadMessages().isEmpty)
+
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            try await reopened.saveMessage(parentThing(thingID: thingID))
+            let committed = try await databaseQueue(appGroupIdentifier: group).read { db in
+                // rowid observes actual insertion order only in this test. It
+                // is not a new business ordering key or a persisted cursor.
+                let inserted = try String.fetchAll(db, sql: "SELECT message_id FROM messages WHERE thing_id = ? AND entity_type IN ('message', 'event') ORDER BY rowid;", arguments: [thingID])
+                let remaining = try Int.fetchOne(db, sql: "SELECT count(*) FROM pending_inbound_messages WHERE thing_id = ?;", arguments: [thingID]) ?? 0
+                return (inserted, remaining)
+            }
+            #expect(committed.0 == pending.map(\.messageID))
+            #expect(Set(committed.0).count == 137)
+            #expect(committed.1 == 0)
+            for expected in children {
+                let actual = try #require(try await reopened.loadMessage(messageId: expected.messageId!))
+                #expect(actual.body == expected.body)
+                #expect(actual.thingId == thingID)
+                #expect(actual.isRead == false)
+            }
+        }
+    }
+
+    @Test
+    func pendingReplayFailureOnSecondPageRollsBackAllThreePagesAndCanRetry() async throws {
+        try await withIsolatedAutomationStorage { _, group in
+            let thingID = "thing-three-page-rollback"
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let children = multiPageChildren(thingID: thingID)
+            _ = try await store.persistNotificationMessagesIfNeeded(children)
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            let queue = try databaseQueue(appGroupIdentifier: group)
+            let before = try await queue.read { db in try PendingChildSnapshot.fetch(db, thingID: thingID) }
+            try #require(before.count == 137)
+            let failedPendingID = before[70].pendingID
+            try await queue.write { db in
+                try db.execute(sql: """
+                    CREATE TRIGGER reject_second_replay_page BEFORE DELETE ON pending_inbound_messages
+                    WHEN OLD.pending_id = '\(failedPendingID)'
+                    BEGIN SELECT RAISE(ABORT, 'synthetic second-page pending delete failure'); END;
+                    """)
+            }
+            do {
+                try await store.saveMessage(parentThing(thingID: thingID))
+                Issue.record("A later-page failure must roll back the parent and all earlier replay pages.")
+            } catch {
+                #expect(String(describing: error).contains("synthetic second-page pending delete failure"))
+            }
+            let rolledBack = try await queue.read { db in
+                let canonical = try Int.fetchOne(db, sql: "SELECT count(*) FROM messages;") ?? 0
+                let ledgers = try Int.fetchOne(db, sql: "SELECT count(*) FROM operation_ledger;") ?? 0
+                let derived = try Int.fetchOne(db, sql: "SELECT count(*) FROM canonical_derived_work;") ?? 0
+                return (canonical, ledgers, derived, try PendingChildSnapshot.fetch(db, thingID: thingID))
+            }
+            #expect(rolledBack.0 == 0)
+            #expect(rolledBack.1 == 0)
+            #expect(rolledBack.2 == 0)
+            #expect(rolledBack.3 == before)
+            try await queue.write { db in try db.execute(sql: "DROP TRIGGER reject_second_replay_page;") }
+            try await store.saveMessage(parentThing(thingID: thingID))
+            #expect(try await queue.read { db in try PendingChildSnapshot.fetch(db, thingID: thingID).isEmpty })
+            let ids = try await queue.read { db in
+                try String.fetchAll(db, sql: "SELECT message_id FROM messages WHERE thing_id = ? AND entity_type IN ('message', 'event') ORDER BY rowid;", arguments: [thingID])
+            }
+            #expect(ids == before.map(\.messageID))
+            #expect(Set(ids).count == 137)
+            #expect(try await queue.read { db in
+                try Int.fetchOne(db, sql: "SELECT count(*) FROM messages WHERE thing_id = ?;", arguments: [thingID]) ?? 0
+            } == 138)
+        }
+    }
+
+    private func multiPageChildren(thingID: String) -> [PushMessage] {
+        // Reverse admission order and tie each timestamp dimension in groups;
+        // the production pending ordering, including pending_id ties, decides
+        // activation. The fixture's 137 rows cross two LIMIT-64 boundaries.
+        Array((0..<137).reversed()).map { index in
+            let identifier = "\(thingID)-child-\(index)"
+            let isEvent = index.isMultiple(of: 2)
+            var message = child(messageID: identifier, title: "Child \(index)", body: "Exact pending body \(index)",
+                thingID: thingID, entityType: isEvent ? "event" : "message",
+                eventID: isEvent ? "event-\(identifier)" : nil, operationID: "operation-\(identifier)",
+                eventState: isEvent ? "open" : nil,
+                receivedAt: Date(timeIntervalSince1970: 1_800_100_101 + Double(index / 2)))
+            message.rawPayload["occurred_at"] = AnyCodable(1_800_100_101 + index / 16)
+            message.rawPayload["event_time"] = AnyCodable(1_800_100_101 + index / 4)
+            message.rawPayload["observed_at"] = AnyCodable(1_800_100_101 + index / 2)
+            return message
+        }
+    }
+
     private struct PendingChildSnapshot: Equatable {
         let pendingID: String
         let thingID: String

@@ -7311,55 +7311,63 @@ private actor GRDBStore {
         thingId: String,
         db: Database
     ) throws {
-        let rows = try Row.fetchAll(
-            db,
-            sql: """
-                SELECT *
-                FROM pending_inbound_messages
-                WHERE thing_id = \(Self.sqlQuoted(thingId))
-                ORDER BY occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC;
-                """
-        )
-        guard !rows.isEmpty else { return }
-        for row in rows {
-            let pendingID: String = row["pending_id"]
-            let record = GRDBMessageRecord(pendingRow: row)
-
-            if try isProcessedNotificationWithoutContent(record.toPushMessage(decoder: decoder),
-                rejectsUnattributedLegacyOperation: false, db: db) {
-                try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));")
-                continue
-            }
-
-            if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
-                try db.execute(
-                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
-                )
-                continue
-            }
-            let operationIdentity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder))
-            if let identity = operationIdentity,
-               try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) != nil
-            {
-                try db.execute(
-                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
-                )
-                continue
-            }
-
-            try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
-            try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
-            if let identity = operationIdentity {
-                try upsertOperationLedger(
-                    identity: identity,
-                    messageId: record.messageId,
-                    appliedAt: Date(),
-                    db: db
-                )
-            }
-            try db.execute(
-                sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
+        // Keep the original parent/children transaction and exact ordering.
+        // Every successful branch consumes its pending row; a database error
+        // still throws and rolls the entire caller transaction back. Fetching
+        // the next remaining prefix bounds resident payloads without OFFSET,
+        // another cursor, or a second recovery owner.
+        while true {
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT *
+                    FROM pending_inbound_messages
+                    WHERE thing_id = \(Self.sqlQuoted(thingId))
+                    ORDER BY occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC
+                    LIMIT 64;
+                    """
             )
+            guard !rows.isEmpty else { return }
+            for row in rows {
+                let pendingID: String = row["pending_id"]
+                let record = GRDBMessageRecord(pendingRow: row)
+
+                if try isProcessedNotificationWithoutContent(record.toPushMessage(decoder: decoder),
+                    rejectsUnattributedLegacyOperation: false, db: db) {
+                    try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));")
+                    continue
+                }
+
+                if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
+                    try db.execute(
+                        sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
+                    )
+                    continue
+                }
+                let operationIdentity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder))
+                if let identity = operationIdentity,
+                   try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) != nil
+                {
+                    try db.execute(
+                        sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
+                    )
+                    continue
+                }
+
+                try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+                try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
+                if let identity = operationIdentity {
+                    try upsertOperationLedger(
+                        identity: identity,
+                        messageId: record.messageId,
+                        appliedAt: Date(),
+                        db: db
+                    )
+                }
+                try db.execute(
+                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pendingID));"
+                )
+            }
         }
     }
 
