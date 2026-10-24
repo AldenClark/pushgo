@@ -76,7 +76,10 @@ struct ImageResourceReferenceTests {
 
     @Test func replayTimestampAndProvenanceEnrichmentDoNotReplaceAnAcquiredVersion() async throws {
         try await withIsolatedLocalDataStore { store, _ in
-            let original = PushMessage(messageId: "resource-enrichment", title: "original", body: "body")
+            // Fixed exactly representable time keeps this scope oracle apart
+            // from a Date -> stored milliseconds -> Date rounding difference.
+            let original = PushMessage(messageId: "resource-enrichment", title: "original", body: "body",
+                                       receivedAt: Date(timeIntervalSince1970: 1_800_000_000.125))
             try await store.saveMessage(original)
             let first = try #require(await store.imageResourceSnapshot(owner: .message(localID: original.id)))
             let bytes = Data("existing immutable original".utf8), hash = imageContentHash(bytes)
@@ -97,6 +100,8 @@ struct ImageResourceReferenceTests {
             #expect(try await store.imageResourceBinding(snapshot: first, requestKey: "full-url-hash") == nil)
             enriched.rawPayload["base_url"] = AnyCodable("https://example.com/different-origin")
             try await store.saveMessage(enriched)
+            let storedAfterSwitch = try #require(await store.loadMessage(id: original.id))
+            #expect(storedAfterSwitch.providerSourceBaseURL == "https://example.com/different-origin")
             let switched = try #require(await store.imageResourceSnapshot(owner: .message(localID: original.id)))
             #expect(switched.stamp != current.stamp)
             #expect(try await store.imageResourceBinding(snapshot: switched, requestKey: "full-url-hash") == nil)
@@ -105,19 +110,31 @@ struct ImageResourceReferenceTests {
 
     @Test func resourceOwnerUsesStoredGatewayRecipientAndRetainsFullSourceScope() async throws {
         try await withIsolatedLocalDataStore { store, _ in
-            let a = PushMessage(messageId: "resource-scope-a", title: "a", body: "a", rawPayload: [
-                "base_url": AnyCodable("https://example.com/alpha"),
-                "provider_device_key": AnyCodable("device-a")])
-            let b = PushMessage(messageId: "resource-scope-b", title: "b", body: "b", rawPayload: [
-                "base_url": AnyCodable("https://example.com/beta"),
-                "provider_device_key": AnyCodable("device-a")])
-            try await store.saveMessages([a, b])
+            // Distinct legitimate deliveries enter the real ingress adapter;
+            // changing current settings is not proof of stored ownership.
+            let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([
+                .init(payload: ["entity_type": "message", "message_id": "resource-scope-a",
+                    "delivery_id": "resource-delivery-a", "title": "a", "body": "a",
+                    "base_url": "https://example.com/alpha", "provider_device_key": "device-a"], requestIdentifier: "resource-delivery-a"),
+                .init(payload: ["entity_type": "message", "message_id": "resource-scope-b",
+                    "delivery_id": "resource-delivery-b", "title": "b", "body": "b",
+                    "base_url": "https://example.com/beta", "provider_device_key": "device-a"], requestIdentifier: "resource-delivery-b"),
+            ], dataStore: store)
+            #expect(outcomes.count == 2 && outcomes.allSatisfy { ProviderIngressPersistenceResult($0).allowsAck })
+            let a = try #require(await store.loadMessage(messageId: "resource-scope-a"))
+            let b = try #require(await store.loadMessage(messageId: "resource-scope-b"))
             let first = try #require(await store.imageResourceSnapshot(owner: .message(localID: a.id)))
             let repeatSnapshot = try #require(await store.imageResourceSnapshot(owner: .message(localID: a.id)))
             let other = try #require(await store.imageResourceSnapshot(owner: .message(localID: b.id)))
             #expect(first == repeatSnapshot)
             #expect(first.scope != other.scope)
             #expect(first.canonicalID == a.id.uuidString)
+            let bytes = Data("scope-specific-acquired-content".utf8), hash = imageContentHash(bytes)
+            let file = SharedImageCache.originalFileURL(contentHash: hash)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try bytes.write(to: file, options: .atomic)
+            #expect(try await store.bindImageResource(snapshot: first, requestKey: "same-full-url", contentHash: hash))
+            #expect(try await store.imageResourceBinding(snapshot: other, requestKey: "same-full-url") == nil)
         }
     }
 }

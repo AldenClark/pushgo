@@ -530,8 +530,16 @@ private final class ImageHTTPFixture: @unchecked Sendable {
         }
         try process.run()
         let ready = root.appendingPathComponent("port"), deadline = Date().addingTimeInterval(5)
-        while !FileManager.default.fileExists(atPath: ready.path), process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.002) }
-        guard process.isRunning, let raw = try? String(contentsOf: ready, encoding: .utf8), let number = Int(raw) else {
+        var readyPort: Int?
+        while process.isRunning, Date() < deadline {
+            if let raw = try? String(contentsOf: ready, encoding: .utf8),
+               let number = Int(raw), (1...65_535).contains(number) {
+                readyPort = number
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.002)
+        }
+        guard process.isRunning, let number = readyPort else {
             if process.isRunning { process.terminate() }; throw FixtureTimeout()
         }
         port = number
@@ -599,7 +607,9 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             append("finished.jsonl", {"path": self.path, "bytes": sent}); self.close_connection = True
 server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-(root / "port").write_text(str(server.server_port))
+port_pending = root / "port.pending"
+port_pending.write_text(str(server.server_port))
+port_pending.replace(root / "port")
 server.serve_forever()
 """#
 }

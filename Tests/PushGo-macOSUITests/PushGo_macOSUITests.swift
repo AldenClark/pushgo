@@ -1421,6 +1421,10 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredQualityApp(
             sessionID: sessionID, fixture: "messages.resources", allowCrossAppDataAccess: true
         )
+        let representative = ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_REPRESENTATIVE_FIXTURE"] == "1"
+        if representative {
+            context.app.launchEnvironment["PUSHGO_RESOURCE_REPRESENTATIVE_FIXTURE"] = "1"
+        }
         // The existing sandbox token is accepted only when it exactly names this typed
         // quality session. Old App-owned sessions and the normal Store remain untouched.
         setAutomationValue("sandbox-tmp:\(sessionID)", for: "PUSHGO_AUTOMATION_STORAGE_ROOT", in: context.app)
@@ -1437,8 +1441,19 @@ final class PushGo_macOSUITests: XCTestCase {
         save.click()
         saveImageThroughSystemPanel(in: context.app, expectedFilename: "pushgo-image-\(sessionID).png")
         let pngURL = waitForSavedImageDestinationReceipt(at: savedReceipt, expectedExtension: "png")
-        let expectedPNG = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="))
-        XCTAssertEqual(try Data(contentsOf: pngURL), expectedPNG, "Save must preserve the acquired original bytes, not re-encode a cover.")
+        if representative {
+            let source = try Data(contentsOf: root.appendingPathComponent("artifacts/resource-source-png.json"))
+            let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with: source) as? [String: Any])
+            let saved = try Data(contentsOf: pngURL)
+            XCTAssertEqual(SHA256.hash(data: saved).map { String(format: "%02x", $0) }.joined(), receipt["sha256"] as? String)
+            let imageSource = try XCTUnwrap(CGImageSourceCreateWithData(saved as CFData, nil))
+            let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any])
+            XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 1_024)
+            XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 1_024)
+        } else {
+            let expectedPNG = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="))
+            XCTAssertEqual(try Data(contentsOf: pngURL), expectedPNG, "Save must preserve the acquired original bytes, not re-encode a cover.")
+        }
         element(in: context.app, identifier: "action.image.preview.close").click()
 
         let animatedRow = element(in: context.app, identifier: "message.row.00000000-0000-0000-0000-00000000f002")
@@ -1453,6 +1468,13 @@ final class PushGo_macOSUITests: XCTestCase {
         playback.click()
         XCTAssertNotEqual(playback.label, playLabel, "The real control must become Pause.")
         assertResourcePreviewColor(preview, red: false, name: "real animated view reaches the distinct blue frame")
+        if representative {
+            XCTContext.runActivity(named: "resource-64-frame-active-observation-15-seconds") { _ in
+                // An explicit observation interval in the Runner, not a product
+                // synchronization condition or a performance pass threshold.
+                Thread.sleep(forTimeInterval: 15)
+            }
+        }
         playback.click()
         XCTAssertEqual(playback.label, playLabel)
         assertResourcePreviewColor(preview, red: true, name: "Pause removes the player and returns to the first-frame poster")
@@ -1468,10 +1490,17 @@ final class PushGo_macOSUITests: XCTestCase {
         saveImageThroughSystemPanel(in: context.app, expectedFilename: "pushgo-image-\(sessionID).gif")
         let gifURL = waitForSavedImageDestinationReceipt(at: savedReceipt, expectedExtension: "gif")
         let gifData = try Data(contentsOf: gifURL)
-        XCTAssertEqual(SHA256.hash(data: gifData).map { String(format: "%02x", $0) }.joined(),
-                       "d52c1ecccf9058468d46b7e516c85b3a623f77b2cebb6d156836f4ab9ae8664e")
+        let expectedGIFHash: String
+        if representative {
+            let source = try Data(contentsOf: root.appendingPathComponent("artifacts/resource-source-gif.json"))
+            let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with: source) as? [String: Any])
+            expectedGIFHash = try XCTUnwrap(receipt["sha256"] as? String)
+        } else {
+            expectedGIFHash = "d52c1ecccf9058468d46b7e516c85b3a623f77b2cebb6d156836f4ab9ae8664e"
+        }
+        XCTAssertEqual(SHA256.hash(data: gifData).map { String(format: "%02x", $0) }.joined(), expectedGIFHash)
         let gifSource = try XCTUnwrap(CGImageSourceCreateWithData(gifData as CFData, nil))
-        XCTAssertEqual(CGImageSourceGetCount(gifSource), 2, "Original export must retain both GIF frames.")
+        XCTAssertEqual(CGImageSourceGetCount(gifSource), representative ? 64 : 2, "Original export must retain every acquired GIF frame.")
 
         let share = element(in: context.app, identifier: "action.image.preview.share")
         XCTAssertTrue(share.exists && share.isHittable)
@@ -1515,6 +1544,33 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertEqual(playback.label, playLabel)
         assertResourcePreviewColor(preview, red: true, name: "closing and reopening creates a paused independent view")
         element(in: context.app, identifier: "action.image.preview.close").click()
+
+        if ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_LIFECYCLE_OBSERVE"] == "1" {
+            // Optional bounded resource observation, not a synchronization delay or a
+            // performance threshold. The normal focused journey keeps its original cost.
+            for cycle in 1...6 {
+                XCTContext.runActivity(named: "resource-reentry-cycle-\(cycle)") { _ in
+                    openResourcePreview(in: context.app)
+                    XCTAssertEqual(playback.label, playLabel)
+                    assertResourcePreviewColor(preview, red: true, name: "cycle \(cycle) starts with its own poster")
+                    playback.click()
+                    assertResourcePreviewColor(preview, red: false, name: "cycle \(cycle) plays the acquired original")
+                    playback.click()
+                    XCTAssertEqual(playback.label, playLabel)
+                    assertResourcePreviewColor(preview, red: true, name: "cycle \(cycle) releases the player on Pause")
+                    element(in: context.app, identifier: "action.image.preview.close").click()
+                    XCTAssertTrue(preview.waitForNonExistence(timeout: 5))
+                }
+            }
+            XCTContext.runActivity(named: "resource-closed-passive-observation-30-seconds") { _ in
+                // The separate App process remains responsive. Avoid polling its UI or
+                // decoding another frame while the external CPU/RSS sampler observes it.
+                Thread.sleep(forTimeInterval: 30)
+            }
+            XCTAssertTrue(element(in: context.app, identifier: "screen.message.detail").exists)
+            XCTAssertTrue(context.app.staticTexts["Original bytes remain available."].exists)
+            XCTAssertFalse(preview.exists)
+        }
 
         context.app.terminate()
         launchQuality(context, sessionID: sessionID)

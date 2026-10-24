@@ -52,6 +52,8 @@ final class PushGo_watchOSUITests: XCTestCase {
 
     func testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] = "1"
+        app.launchEnvironment["PUSHGO_RESOURCE_RETRY_FIRST_FAILURE"] = "1"
         let sessionID = UUID().uuidString
         configureHermeticLaunch(app, sessionID: sessionID)
         launchPreparedApp(app)
@@ -76,6 +78,20 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["screen.message.detail"].waitForExistence(timeout: 5), startupFailureDescription(in: app))
         XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Critical"].exists)
+        let retryImage = app.buttons["action.image.retry"]
+        // The image cell is shorter than a full-screen Watch swipe. Move in
+        // small bounded user gestures so the overlaid Retry is not skipped
+        // from below the viewport to behind the navigation bar.
+        for _ in 0..<5 {
+            if retryImage.exists, retryImage.isHittable { break }
+            let moveDown = retryImage.exists && retryImage.frame.midY < 60
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: moveDown ? 0.87 : 0.43))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertTrue(retryImage.exists && retryImage.isHittable, startupFailureDescription(in: app))
+        XCTAssertEqual(retryImage.label, "Retry")
+        retryImage.tap()
         let messageImage = app.descendants(matching: .any)["image.message.quality-watch-message-001"]
         XCTAssertTrue(scrollToExistingElement(messageImage, in: app, maximumSwipes: 2), startupFailureDescription(in: app))
         XCTAssertEqual(messageImage.label, "Image")
@@ -374,6 +390,15 @@ final class PushGo_watchOSUITests: XCTestCase {
         app.launch()
         let alert = XCUIApplication(bundleIdentifier: "com.apple.Carousel").alerts.firstMatch
         guard alert.waitForExistence(timeout: 2) else { return }
+        if app.launchEnvironment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1"
+            || ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1" {
+            let hierarchy = XCTAttachment(string: alert.debugDescription)
+            hierarchy.name = "watch-forbidden-system-permission-alert"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            XCTFail("QUALITY_PRECONDITION: Resource validation cannot act on a Watch system permission alert.")
+            return
+        }
         let text = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
         guard text.contains("PushGo"),
               text.lowercased().contains("notification") || text.contains("通知") else {
@@ -399,6 +424,17 @@ final class PushGo_watchOSUITests: XCTestCase {
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
         app.launchEnvironment["PUSHGO_QUALITY_PROFILE"] = "hermetic"
         app.launchEnvironment["PUSHGO_QUALITY_SCENARIO"] = scenario
+        // Controlled resource fixtures require the existing typed quality
+        // session as well as Watch's scenario. Normal launches set neither.
+        let resourceSession: [String: Any] = [
+            "schema_version": 1, "session_id": "pushgo-watch-\(sessionID)",
+            "fixture": "empty.clean", "allows_system_cold_launch": false,
+        ]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: resourceSession) else {
+            XCTFail("Could not encode the isolated Watch resource session.")
+            return
+        }
+        app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encoded.base64EncodedString()
         // Reuse the existing Debug-only file-backed credential/storage sandbox.
         // Keep the same root across relaunches without relying on Simulator
         // access-group entitlements or data from another quality session.

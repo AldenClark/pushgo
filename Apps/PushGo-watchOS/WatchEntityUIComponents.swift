@@ -45,18 +45,24 @@ struct WatchCachedImage<Content: View>: View {
     @State private var retry = 0
     @State private var isAnimatedSource = false
 
+    private var failed: Bool {
+        if case .failure = phase { return true }
+        return false
+    }
+
     var body: some View {
         ZStack {
             content(phase)
         }
         .accessibilityHint(isAnimatedSource ? Text(LocalizedStringKey("image_static_preview")) : Text(""))
         .overlay(alignment: .bottomTrailing) {
-            if isStale {
+            if isStale || failed {
                 Button { retry += 1 } label: {
-                    Image(systemName: "clock.arrow.circlepath")
+                    Image(systemName: isStale ? "clock.arrow.circlepath" : "arrow.clockwise")
                         .font(.caption2).padding(4)
                 }
-                .accessibilityLabel(LocalizedStringKey("image_cached_preview_retry"))
+                .accessibilityLabel(LocalizedStringKey(isStale ? "image_cached_preview_retry" : "retry"))
+                .accessibilityIdentifier("action.image.retry")
             }
         }
         .task(id: LoadIdentity(
@@ -67,6 +73,14 @@ struct WatchCachedImage<Content: View>: View {
             isStale = false
             isAnimatedSource = false
             guard scenePhase == .active, isVisible else { return }
+#if DEBUG
+            if WatchQualityRuntime.isHermeticRequested,
+               ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_RETRY_FIRST_FAILURE"] == "1",
+               owner == .watchMessage(localID: "quality-watch-message-001"), retry == 0 {
+                phase = .failure
+                return
+            }
+#endif
             do {
                 let resource = try await SharedImageCache.resolve(
                     for: url,

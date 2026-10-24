@@ -1,6 +1,10 @@
 import CryptoKit
 import Foundation
 import SwiftUI
+#if DEBUG && !os(watchOS)
+import ImageIO
+import UniformTypeIdentifiers
+#endif
 
 #if canImport(Darwin)
 import Darwin
@@ -4201,7 +4205,9 @@ final class PushGoAutomationRuntime {
     )!
 
     private func prepareQualityStandardMessageImage() async throws {
-        guard let data = Data(base64Encoded: Self.qualityStandardMessagePNGBase64) else {
+        guard let data = Self.usesRepresentativeResources
+            ? try Self.representativeResource(animated: false)
+            : Data(base64Encoded: Self.qualityStandardMessagePNGBase64) else {
             throw PushGoAutomationError.invalidArgument("quality_standard_message_image")
         }
         guard let file = await SharedImageCache.store(data: data, for: Self.qualityStandardMessageImageURL),
@@ -4209,6 +4215,7 @@ final class PushGoAutomationRuntime {
         else {
             throw PushGoAutomationError.invalidArgument("quality_standard_message_image_cache")
         }
+        if Self.usesRepresentativeResources { try Self.recordRepresentativeResource(data, animated: false) }
     }
 
     private static let qualityStandardMessagePNGBase64 =
@@ -4224,10 +4231,63 @@ final class PushGoAutomationRuntime {
         "R0lGODlhAgACAPAAAP8AAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAAAAAACwAAAAAAgACAAACAoRRACH5BAAKAAAALAAAAAACAAIAgAAA/wAAAAIChFEAOw=="
 
     private func prepareQualityAnimatedMessageImage() async throws {
-        guard let data = Data(base64Encoded: Self.qualityAnimatedMessageGIFBase64),
+        guard let data = Self.usesRepresentativeResources
+            ? try Self.representativeResource(animated: true)
+            : Data(base64Encoded: Self.qualityAnimatedMessageGIFBase64),
               let file = await SharedImageCache.store(data: data, for: Self.qualityAnimatedMessageImageURL),
               (try? Data(contentsOf: file)) == data
         else { throw PushGoAutomationError.invalidArgument("quality_animated_message_image") }
+        if Self.usesRepresentativeResources { try Self.recordRepresentativeResource(data, animated: true) }
+    }
+
+    private static var usesRepresentativeResources: Bool {
+        PushGoAutomationContext.qualitySession?.fixture == .messagesResources
+            && ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_REPRESENTATIVE_FIXTURE"] == "1"
+    }
+
+    // Explicit synthetic display input only. ImageIO writes one bounded frame
+    // at a time; production loading, downsampling and playback are unchanged.
+    private static func representativeResource(animated: Bool) throws -> Data {
+        let side = animated ? 512 : 1_024
+        let frames = animated ? 64 : 1
+        let output = NSMutableData()
+        guard let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8,
+                                      bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let destination = CGImageDestinationCreateWithData(output, (animated ? UTType.gif : .png).identifier as CFString, frames, nil)
+        else { throw PushGoAutomationError.invalidArgument("quality_resource_encoder") }
+        if animated {
+            CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        }
+        for frame in 0..<frames {
+            context.setFillColor(frame.isMultiple(of: 2)
+                ? CGColor(red: 1, green: 0, blue: 0, alpha: 1)
+                : CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+            guard let image = context.makeImage() else { throw PushGoAutomationError.invalidArgument("quality_resource_frame") }
+            let properties: [CFString: Any] = animated
+                ? [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.125]] : [:]
+            CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        }
+        guard CGImageDestinationFinalize(destination) else { throw PushGoAutomationError.invalidArgument("quality_resource_finalize") }
+        return output as Data
+    }
+
+    private static func recordRepresentativeResource(_ data: Data, animated: Bool) throws {
+        guard let root = PushGoAutomationContext.qualitySessionRootURL else {
+            throw PushGoAutomationError.invalidArgument("quality_resource_receipt_root")
+        }
+        let directory = root.appendingPathComponent("artifacts", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let value: [String: Any] = [
+            "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+            "bytes": data.count, "width": animated ? 512 : 1_024,
+            "height": animated ? 512 : 1_024, "frames": animated ? 64 : 1,
+            "source": "explicit-quality-import-not-http"
+        ]
+        try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]).write(
+            to: directory.appendingPathComponent(animated ? "resource-source-gif.json" : "resource-source-png.json"), options: .atomic
+        )
     }
 
     private func qualityResourceFixtureMessage(animated: Bool) -> [String: Any] {

@@ -626,6 +626,157 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
     }
 
+    func testResourceOriginalsRenderPauseAndSurviveLifecycleWithoutPermissionActions() throws {
+        // Negative controls protect the pixel oracle from accepting a placeholder
+        // or the other frame. This journey uses no Gateway, migration or browser.
+        XCTAssertTrue(resourceFrameMatches(.red, red: true))
+        XCTAssertFalse(resourceFrameMatches(.red, red: false))
+        XCTAssertTrue(resourceFrameMatches(.blue, red: false))
+        XCTAssertFalse(resourceFrameMatches(.blue, red: true))
+        for absent in [UIColor.black, .white, .gray, .clear] {
+            XCTAssertFalse(resourceFrameMatches(absent, red: true))
+            XCTAssertFalse(resourceFrameMatches(absent, red: false))
+        }
+
+        let sessionID = "ios-resource-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID, fixture: "messages.resources"
+        )
+        context.app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = "sandbox-tmp:\(sessionID)"
+        context.app.launchEnvironment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] = "1"
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15, expectedSessionID: sessionID)
+        XCTAssertTrue(rejectForbiddenResourceSystemAlert(in: context.app))
+
+        let staticRow = element(in: context.app, identifier: "message.row.00000000-0000-0000-0000-00000000f001")
+        tapWhenHittable(staticRow, timeout: 8)
+        openResourcePreview(in: context.app)
+        let preview = element(in: context.app, identifier: "dialog.image.preview")
+        // The fixed 2x2 PNG is chromatic; loading/empty black or gray is not
+        // a successful display. This does not claim exact original export bytes.
+        assertResourcePreviewPixels(preview, name: "the static PNG renders colored pixels") { color in
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return false }
+            return alpha > 0.95 && max(red, green, blue) - min(red, green, blue) > 0.25
+        }
+        XCTAssertFalse(element(in: context.app, identifier: "action.image.preview.playback").exists)
+        tapWhenHittable(element(in: context.app, identifier: "action.image.preview.share"), timeout: 8)
+        let activity = context.app.otherElements["ActivityListView"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 8), "The acquired original must reach the native share sheet.")
+        XCTAssertTrue(rejectForbiddenResourceSystemAlert(in: context.app))
+        // iOS hosts this sheet in a remote service whose language need not
+        // match the App. Use its observed semantic close identifier rather
+        // than an English label or a content swipe which only scrolls it.
+        let dismissShare = activity.buttons["header.closeButton"].firstMatch
+        tapWhenHittable(dismissShare, timeout: 5)
+        XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
+        closeResourcePreview(in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "action.message.close"), timeout: 5)
+
+        let animatedRow = element(in: context.app, identifier: "message.row.00000000-0000-0000-0000-00000000f002")
+        tapWhenHittable(animatedRow, timeout: 8)
+        openResourcePreview(in: context.app)
+        let playback = element(in: context.app, identifier: "action.image.preview.playback")
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        let playLabel = playback.label
+        assertResourcePreviewColor(preview, red: true, name: "GIF opens on its acquired red first frame")
+        tapWhenHittable(playback, timeout: 5)
+        XCTAssertNotEqual(playback.label, playLabel, "The real control must become Pause.")
+        assertResourcePreviewColor(preview, red: false, name: "GIF playback reaches the acquired blue second frame")
+        tapWhenHittable(playback, timeout: 5)
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "Pause releases playback and restores the first frame")
+        closeResourcePreview(in: context.app)
+        openResourcePreview(in: context.app)
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "reentry creates a paused independent preview")
+
+        tapWhenHittable(playback, timeout: 5)
+        assertResourcePreviewColor(preview, red: false, name: "explicit playback can restart after reentry")
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(context.app.wait(for: .runningBackground, timeout: 5))
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        XCTAssertTrue(rejectForbiddenResourceSystemAlert(in: context.app))
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        XCTAssertEqual(playback.label, playLabel, "Foreground return may not resume animation implicitly.")
+        assertResourcePreviewColor(preview, red: true, name: "background return retains the same original poster")
+        closeResourcePreview(in: context.app)
+
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15, expectedSessionID: sessionID)
+        tapWhenHittable(animatedRow, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Original bytes remain available."].waitForExistence(timeout: 5))
+        openResourcePreview(in: context.app)
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        XCTAssertEqual(playback.label, playLabel)
+        assertResourcePreviewColor(preview, red: true, name: "relaunch preserves original content without shared play state")
+        closeResourcePreview(in: context.app)
+    }
+
+    private func openResourcePreview(in app: XCUIApplication) {
+        assertElementExists("sheet.message.detail", in: app, timeout: 8)
+        let image = element(in: app, identifier: "message.image.0")
+        XCTAssertTrue(image.waitForExistence(timeout: 8))
+        for _ in 0..<6 where !image.isHittable { app.scrollViews.firstMatch.swipeDown() }
+        tapWhenHittable(image, timeout: 8)
+        assertElementExists("dialog.image.preview", in: app, timeout: 8)
+    }
+
+    private func closeResourcePreview(in app: XCUIApplication) {
+        let preview = element(in: app, identifier: "dialog.image.preview")
+        tapWhenHittable(preview.buttons["Close"].firstMatch, timeout: 5)
+        XCTAssertTrue(preview.waitForNonExistence(timeout: 5))
+        assertElementExists("sheet.message.detail", in: app, timeout: 8)
+    }
+
+    private func resourceFrameMatches(_ color: UIColor, red expectedRed: Bool) -> Bool {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha), alpha > 0.95 else { return false }
+        return expectedRed ? red > max(green, blue) + 0.4 : blue > max(green, red) + 0.4
+    }
+
+    private func resourcePreviewCenterColor(_ preview: XCUIElement) -> UIColor? {
+        guard preview.exists, let image = UIImage(data: preview.screenshot().pngRepresentation)?.cgImage,
+              let pixel = image.cropping(to: CGRect(x: CGFloat(image.width / 2), y: CGFloat(image.height / 2), width: 1, height: 1)),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        var rgba = [UInt8](repeating: 0, count: 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                          space: colorSpace, bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return true
+        }
+        guard rendered else { return nil }
+        return UIColor(red: CGFloat(rgba[0]) / 255, green: CGFloat(rgba[1]) / 255,
+                       blue: CGFloat(rgba[2]) / 255, alpha: CGFloat(rgba[3]) / 255)
+    }
+
+    private func assertResourcePreviewPixels(_ preview: XCUIElement, name: String,
+                                             matches: @escaping (UIColor) -> Bool,
+                                             file: StaticString = #filePath, line: UInt = #line) {
+        let pixels = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+            guard let color = resourcePreviewCenterColor(preview) else { return false }
+            return matches(color)
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [pixels], timeout: 8)
+        let attachment = XCTAttachment(screenshot: preview.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(result, .completed, name, file: file, line: line)
+    }
+
+    private func assertResourcePreviewColor(_ preview: XCUIElement, red: Bool, name: String,
+                                            file: StaticString = #filePath, line: UInt = #line) {
+        assertResourcePreviewPixels(preview, name: name, matches: { [self] in resourceFrameMatches($0, red: red) }, file: file, line: line)
+    }
+
     func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
         let sessionID = "ios-cleanup-\(UUID().uuidString.lowercased())"
         let englishLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -5371,6 +5522,7 @@ final class PushGo_iOSUITests: XCTestCase {
             )
         }
         app.launch()
+        guard rejectForbiddenResourceSystemAlert(in: app) else { return }
         guard requiresQualityHandshake else { return }
 
         let runtimeHandshake = app.descendants(matching: .any)
@@ -5389,6 +5541,23 @@ final class PushGo_iOSUITests: XCTestCase {
             runtimeHandshake.waitForExistence(timeout: qualityHandshakeTimeout),
             "QUALITY_PRECONDITION: App-owned runtime handshake did not become observable after one launch."
         )
+        _ = rejectForbiddenResourceSystemAlert(in: app)
+    }
+
+    /// A resource-only run cannot change authorization state. Inspect only
+    /// system-owned alerts so an ordinary in-App error is not mislabeled.
+    private func rejectForbiddenResourceSystemAlert(in app: XCUIApplication) -> Bool {
+        guard app.launchEnvironment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1"
+                || ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1"
+        else { return true }
+        let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
+        guard alert.exists else { return true }
+        let hierarchy = XCTAttachment(string: alert.debugDescription)
+        hierarchy.name = "ios-forbidden-system-permission-alert"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        XCTFail("QUALITY_PRECONDITION: Resource validation cannot act on an iOS system permission alert.")
+        return false
     }
 
     func tapWhenHittable(
