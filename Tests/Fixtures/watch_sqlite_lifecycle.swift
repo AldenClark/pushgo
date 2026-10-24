@@ -39,6 +39,43 @@ private func delivery(
 }
 
 private func runLifecycleTests() throws {
+#if WATCH_FROZEN_PULL_METADATA_TESTS
+    // The Pull adapter must use the response's frozen origin, not a current
+    // configuration/device or a payload's legacy Gateway alias.
+    do {
+        let store = try WatchLocalSQLiteStore(appGroupIdentifier: "frozen-pull-origin")
+        let origin: [String: String] = [
+            "base_url": "https://OLD-GATEWAY.example/Prefix/",
+            "provider_device_key": " original-watch ",
+            "gateway_key": "https://new-gateway.example/Other",
+        ]
+        guard let metadata = WatchDeliveryMetadata.pulled(deliveryId: " frozen-delivery ", payload: origin, now: Date(timeIntervalSince1970: 2_000)) else {
+            throw LifecycleFailure.assertion("a real frozen Pull origin must be accepted")
+        }
+        try require(metadata.gatewayKey == "https://old-gateway.example/Prefix", "Pull must retain normalized request Gateway and path case")
+        try require(metadata.watchDeviceKey == "original-watch", "Pull must retain its request device")
+        try require(metadata.deliveryId == "frozen-delivery", "existing identity normalization must remain")
+        try require(metadata.persistedAt == Date(timeIntervalSince1970: 2_000), "local fact time must be explicit, not from current config")
+        let payload = delivery("frozen-delivery", messageID: "frozen-message").payload
+        let first = try store.ingestWatchDelivery(WatchDeliveryIngestRecord(payload: payload, metadata: metadata))
+        try require(first.disposition == .inserted, "new frozen-origin content must persist")
+#if WATCH_DELIVERY_LOOKUP_TESTS
+        try require(try store.hasWatchDeliveryRecord(gatewayKey: "https://old-gateway.example/Prefix", deliveryId: "frozen-delivery"), "lookup must find the frozen source")
+        try require(try !store.hasWatchDeliveryRecord(gatewayKey: "https://new-gateway.example/Other", deliveryId: "frozen-delivery"), "current/legacy alias cannot acquire old delivery")
+#endif
+        let message = try store.loadWatchLightMessage(messageId: "frozen-message")!
+        try require(try store.deleteWatchLightMessage(matching: message, config: nil, localConfig: nil), "confirmed deletion must commit")
+        let replayMetadata = WatchDeliveryMetadata.pulled(deliveryId: "frozen-delivery", payload: origin, now: Date(timeIntervalSince1970: 3_000))!
+        let replay = try store.ingestWatchDelivery(WatchDeliveryIngestRecord(payload: payload, metadata: replayMetadata))
+        try require(replay.disposition == .duplicateDelivery, "the same frozen source must remain an ACK-safe processed fact")
+        try require(replay.deliveryRecord.persistedAt == Date(timeIntervalSince1970: 2_000), "replay must not renew first fact time")
+        try require(try store.loadWatchLightMessage(messageId: "frozen-message") == nil, "frozen-source replay may not resurrect deleted content")
+        try require(WatchDeliveryMetadata.pulled(deliveryId: "frozen-delivery", payload: ["gateway_key": "https://old-gateway.example/Prefix", "provider_device_key": "original-watch"]) == nil, "legacy alias is not proof of a Pull's source")
+        try require(WatchDeliveryMetadata.pulled(deliveryId: "frozen-delivery", payload: ["base_url": "https://old-gateway.example/Prefix"]) == nil, "missing device may not be borrowed from current configuration")
+        try require(WatchDeliveryMetadata.pulled(deliveryId: "frozen-delivery", payload: ["base_url": "file:///tmp/not-a-gateway", "provider_device_key": "original-watch"]) == nil, "invalid Gateway source must fail closed")
+        print("PASS frozen_pull_origin_metadata_and_deleted_replay")
+    }
+#endif
     // Normal duplicate enrichment remains supported while its content exists.
     do {
         let store = try WatchLocalSQLiteStore(appGroupIdentifier: "normal-duplicate")
@@ -51,6 +88,11 @@ private func runLifecycleTests() throws {
         try require(try store.loadWatchLightMessage(messageId: "message-1")?.body == "Pull body", "extant projection must retain normal Direct/Pull enrichment")
         try require(try store.loadWatchLightMessage(messageId: "incoming-alias") == nil, "duplicate may not allocate a second message")
         try require(replay.deliveryRecord.serverAckState == .ackedDirect, "duplicate ACK metadata must still converge")
+#if WATCH_DELIVERY_LOOKUP_TESTS
+        try require(try store.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "delivery-1"), "persisted delivery lookup must find the exact source")
+        try require(try !store.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/other", deliveryId: "delivery-1"), "delivery lookup may not claim another Gateway's identity")
+        try require(try !store.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "missing"), "delivery lookup must not invent an absent fact")
+#endif
         print("PASS normal_duplicate_enrichment")
     }
 
@@ -62,6 +104,9 @@ private func runLifecycleTests() throws {
         let target = try store.loadWatchLightMessage(messageId: "deleted-message")!
         try require(try store.deleteWatchLightMessage(matching: target, config: nil, localConfig: nil), "confirmed delete must commit")
         try require(try store.loadWatchDeliveryRecords().count == 1, "deleting content may not delete the processed fact")
+#if WATCH_DELIVERY_LOOKUP_TESTS
+        try require(try store.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "deleted-delivery"), "the bounded lookup must retain the fact after content deletion")
+#endif
         let replay = try store.ingestWatchDelivery(delivery("deleted-delivery", messageID: "late-alias", ack: .ackedDirect))
         try require(replay.disposition == .duplicateDelivery, "deleted replay is ACK-safe duplicate, not a new delivery")
         try require(replay.deliveryRecord.messageId == "deleted-message", "deleted replay keeps its original durable identity")
@@ -74,6 +119,9 @@ private func runLifecycleTests() throws {
     // same database must retain the deletion result and the processed identity.
     do {
         let reopened = try WatchLocalSQLiteStore(appGroupIdentifier: "deleted-replay")
+#if WATCH_DELIVERY_LOOKUP_TESTS
+        try require(try reopened.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "deleted-delivery"), "the bounded lookup must recover persisted facts after reopen")
+#endif
         try require(try reopened.loadWatchLightMessages().isEmpty, "deleted projection must remain absent after reopen")
         let replay = try reopened.ingestWatchDelivery(delivery("deleted-delivery", messageID: "restart-alias", ack: .ackedDirect))
         try require(replay.disposition == .duplicateDelivery, "reopened delivery fact must still identify replay")
@@ -254,12 +302,15 @@ private enum WatchSQLiteLifecycleTests {
     static func main() {
         do {
             try runLifecycleTests()
+            var passed = 7
 #if WATCH_RESOURCE_TESTS
             try runResourceTests()
-            print("RESULT passed=13 failed=0 layer=host_production_watch_sqlite")
-#else
-            print("RESULT passed=7 failed=0 layer=host_production_watch_sqlite")
+            passed += 6
 #endif
+#if WATCH_FROZEN_PULL_METADATA_TESTS
+            passed += 1
+#endif
+            print("RESULT passed=\(passed) failed=0 layer=host_production_watch_sqlite")
         } catch {
             FileHandle.standardError.write(Data("FAIL \(error)\n".utf8))
             exit(1)

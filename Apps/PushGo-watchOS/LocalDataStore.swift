@@ -606,6 +606,10 @@ actor LocalDataStore {
         return try sqliteStore.loadWatchDeliveryRecords()
     }
 
+    func hasWatchDeliveryRecord(gatewayKey: String, deliveryId: String) async throws -> Bool {
+        try requireSQLiteStore().hasWatchDeliveryRecord(gatewayKey: gatewayKey, deliveryId: deliveryId)
+    }
+
     func imageResourceSnapshot(owner: ImageResourceOwner) async throws -> ImageResourceOwnerSnapshot? {
         try requireSQLiteStore().imageResourceSnapshot(owner: owner)
     }
@@ -1165,6 +1169,18 @@ private final class WatchLocalSQLiteStore {
         }
         DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
         return result
+    }
+
+    func hasWatchDeliveryRecord(gatewayKey: String, deliveryId: String) throws -> Bool {
+        let statement = try prepare("SELECT 1 FROM watch_delivery_records WHERE gateway_key = ? AND delivery_id = ? LIMIT 1;")
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: gatewayKey)
+        try bindText(statement, index: 2, value: deliveryId)
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW: return true
+        case SQLITE_DONE: return false
+        default: throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+        }
     }
 
     func loadWatchDeliveryRecords() throws -> [WatchDeliveryRecord] {

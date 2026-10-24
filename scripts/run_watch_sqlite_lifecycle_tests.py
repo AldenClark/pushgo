@@ -3,7 +3,7 @@
 
 No product storage code is copied or translated: marked declaration ranges are
 read from source and compiled verbatim with production models. Only the Watch
-sandbox path and Darwin posting are replaced.
+sandbox path, Darwin posting and normal inactive automation context are adapted.
 This is production-SQLite host evidence, not watchOS/APNs or GUI acceptance.
 """
 
@@ -50,6 +50,12 @@ def main() -> None:
         watch, "struct WatchProvisioningState:", "\nstruct EntityOpenTarget:"
     )
     models = read("Shared/Models/WatchLightModels.swift").split("\nstruct WatchControlContext:", 1)[0]
+    gateway_normalization = read("Shared/Services/ProviderDeliveryAckFailureStore.swift").split(
+        "\nactor ProviderDeliveryAckFailureStore", 1
+    )[0]
+    url_sanitizer = "enum URLSanitizer {" + between(
+        read("Shared/Utilities/AppConstants.swift"), "enum URLSanitizer {", "\nenum MessagePreviewExtractor"
+    )
     payload = "enum WatchLightPayload:" + between(
         read("Shared/Utilities/WatchLightQuantizer.swift"), "enum WatchLightPayload:", "\nprivate struct WatchLightProfile"
     )
@@ -62,8 +68,10 @@ def main() -> None:
     ) + "\n}\n"
     support = r'''
 import Foundation
+import Network
 import SQLite3
 private let watchSQLiteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+private enum PushGoAutomationContext { static let isActive = false }
 private enum AppConstants {
     static let appGroupIdentifier = "watch-host-lifecycle"
     static let databaseStoreFilename = "watch.sqlite"
@@ -84,7 +92,7 @@ private enum DarwinNotificationPoster { static func post(name: String) {} }
         read("Shared/Utilities/ImageResourceStore.swift").split("/// The HTTP index", 1)[0]
         if has_resources else ""
     )
-    compilation = "\n".join([support, resource_identity, read("Shared/Models/ServerConfig.swift"), models, payload, metadata, equality, freshness, store, fixture])
+    compilation = "\n".join([support, url_sanitizer, gateway_normalization, resource_identity, read("Shared/Models/ServerConfig.swift"), models, payload, metadata, equality, freshness, store, fixture])
     source = output / "watch_sqlite_lifecycle.swift"
     source.write_text(compilation)
     executable = output / "watch_sqlite_lifecycle"
@@ -93,6 +101,10 @@ private enum DarwinNotificationPoster { static func post(name: String) {} }
     command = ["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6", "-warnings-as-errors", str(source), "-o", str(executable)]
     if has_resources:
         command.extend(["-D", "WATCH_RESOURCE_TESTS"])
+    if "func hasWatchDeliveryRecord(gatewayKey:" in store:
+        command.extend(["-D", "WATCH_DELIVERY_LOOKUP_TESTS"])
+    if "static func pulled(" in models:
+        command.extend(["-D", "WATCH_FROZEN_PULL_METADATA_TESTS"])
     print("compile_command=" + " ".join(command), flush=True)
     subprocess.run(command, check=True, cwd=repo)
     with tempfile.TemporaryDirectory(prefix="pushgo-watch-sqlite-") as root:

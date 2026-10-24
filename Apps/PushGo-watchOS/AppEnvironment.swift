@@ -110,9 +110,10 @@ final class AppEnvironment {
                 if let sourceBaseURL = identity.sourceBaseURL,
                    let deliveryID = identity.deliveryId {
                     do {
-                        return try await self.dataStore.loadWatchDeliveryRecords().contains {
-                            $0.gatewayKey == sourceBaseURL && $0.deliveryId == deliveryID
-                        }
+                        return try await self.dataStore.hasWatchDeliveryRecord(
+                            gatewayKey: sourceBaseURL,
+                            deliveryId: deliveryID
+                        )
                     } catch {
                         self.recordAutomationRuntimeError(
                             error,
@@ -144,7 +145,7 @@ final class AppEnvironment {
                         fallbackRequestIdentifier: input.requestIdentifier,
                         fallbackTitle: "",
                         fallbackBody: "",
-                        ingressSource: .watchPull
+                        ingressSource: input.isPulled ? .watchPull : .watchAPNS
                     )
                     results.append(persisted ? .persisted : .failed)
                 }
@@ -1644,6 +1645,9 @@ final class AppEnvironment {
                     )
                 )
             } else {
+                // A Pull has an immutable Gateway/device context. Missing proof
+                // is a retryable failure, not permission for an unowned upsert.
+                guard ingressSource != .watchPull else { return false }
                 try await dataStore.upsertWatchLightPayload(lightPayload)
             }
             await refreshWatchLightCountsAndNotify()
@@ -1663,6 +1667,9 @@ final class AppEnvironment {
             ?? normalizedText(payload["provider_delivery_id"])
             ?? normalizedText(notificationRequestId)
         guard let deliveryId else { return nil }
+        if ingressSource == .watchPull {
+            return WatchDeliveryMetadata.pulled(deliveryId: deliveryId, payload: payload)
+        }
         let gatewayKey = normalizedText(payload["gateway_key"])
             ?? normalizedText(payload["gateway"])
             ?? serverConfig?.gatewayKey
@@ -1675,7 +1682,7 @@ final class AppEnvironment {
             watchDeviceKey: deviceKey?.isEmpty == false ? deviceKey : nil,
             ingressSource: ingressSource,
             contentDigest: normalizedText(payload["content_digest"]),
-            serverAckState: ingressSource == .watchPull ? .ackedDirect : .pending
+            serverAckState: .pending
         )
     }
 

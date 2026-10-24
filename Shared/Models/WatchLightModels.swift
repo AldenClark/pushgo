@@ -63,6 +63,20 @@ struct WatchDeliveryMetadata: Codable, Hashable, Sendable {
         self.serverAckState = serverAckState
         self.persistedAt = persistedAt
     }
+
+    /// A Pull response belongs to its frozen request context, never whichever
+    /// account/configuration happens to be current when the response arrives.
+    static func pulled(deliveryId: String, payload: [String: String], now: Date = Date()) -> WatchDeliveryMetadata? {
+        let deliveryId = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deliveryId.isEmpty,
+              let source = payload["base_url"], let sourceURL = URL(string: source),
+              let gateway = normalizedProviderGatewayURL(sourceURL),
+              let device = payload["provider_device_key"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !device.isEmpty else { return nil }
+        return WatchDeliveryMetadata(deliveryId: deliveryId, gatewayKey: gateway.absoluteString,
+            watchDeviceKey: device, ingressSource: .watchPull, contentDigest: payload["content_digest"],
+            serverAckState: .ackedDirect, persistedAt: now)
+    }
 }
 
 struct WatchDeliveryRecord: Codable, Hashable, Identifiable, Sendable {
