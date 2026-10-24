@@ -192,7 +192,7 @@ enum NotificationPersistenceCoordinator {
         }
         do {
             let outcomes = try await dataStore.persistNotificationMessagesIfNeeded(
-                prepared.map(\.message)
+                prepared.map(\.message), isolatingIdentityConflicts: true
             )
             guard outcomes.count == prepared.count else {
                 for item in prepared { results[item.index] = .failed }
@@ -312,6 +312,8 @@ enum NotificationPersistenceCoordinator {
             return .persistedPending(stored)
         case .duplicateRequest, .duplicateMessage, .duplicateProcessed:
             return .duplicate
+        case .identityConflict:
+            return .failed
         }
     }
 

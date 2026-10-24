@@ -194,6 +194,9 @@ enum NotificationStoreSaveOutcome: Sendable {
     // The accepted identity outlives its visible content. This is ACKable,
     // without fabricating a replacement message after confirmed deletion.
     case duplicateProcessed
+    // A pure identity preflight found an unprovable historical owner. It is
+    // neither a successful duplicate nor ACKable; no canonical write occurred.
+    case identityConflict
 }
 
 private enum CanonicalDerivedWorkKind: String, CaseIterable, Sendable {
@@ -2489,7 +2492,8 @@ actor LocalDataStore {
     /// Its generation advances once per changed batch, and the worker is kicked
     /// only after the whole transaction is visible to database observers.
     func persistNotificationMessagesIfNeeded(
-        _ messages: [PushMessage]
+        _ messages: [PushMessage],
+        isolatingIdentityConflicts: Bool = false
     ) async throws -> [NotificationStoreSaveOutcome] {
         guard !messages.isEmpty else { return [] }
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
@@ -2505,7 +2509,7 @@ actor LocalDataStore {
         }
         let pendingWrites = writes.map(\.1)
         let stored = try await performBackendWrite { backend in
-            try await backend.persistNotificationMessagesIfNeeded(pendingWrites)
+            try await backend.persistNotificationMessagesIfNeeded(pendingWrites, isolatingIdentityConflicts: isolatingIdentityConflicts)
         }
         for (write, outcome) in zip(writes, stored) {
             outcomes[write.0] = outcome
@@ -9109,23 +9113,34 @@ private actor GRDBStore {
     }
 
     func persistNotificationMessagesIfNeeded(
-        _ messages: [PushMessage]
+        _ messages: [PushMessage],
+        isolatingIdentityConflicts: Bool = false
     ) async throws -> [NotificationStoreSaveOutcome] {
         guard !messages.isEmpty else { return [] }
         return try writeCanonicalMessages(enqueueSystemSnapshot: true) { db in
-            try messages.map { try persistNotificationMessageIfNeeded($0, db: db) }
+            try messages.map {
+                try persistNotificationMessageIfNeeded($0, isolatingIdentityConflicts: isolatingIdentityConflicts, db: db)
+            }
         }
     }
 
     private func persistNotificationMessageIfNeeded(
         _ message: PushMessage,
+        isolatingIdentityConflicts: Bool = false,
         db: Database
     ) throws -> NotificationStoreSaveOutcome {
         let canonicalMessage = canonicalizedMessageForPersistence(message)
         let record = try buildMessageRecord(from: canonicalMessage)
         // Check before the missing-parent path as well: deletion of a parent
         // must not make an already-processed child wait for a new parent again.
-        if try isProcessedNotificationWithoutContent(canonicalMessage, db: db) { return .duplicateProcessed }
+        do {
+            if try isProcessedNotificationWithoutContent(canonicalMessage, db: db) { return .duplicateProcessed }
+        } catch let AppError.local(problem) where isolatingIdentityConflicts
+            && problem.code == "identity_conflict" && problem.category == .conflict {
+            // Only this read-only preflight is isolatable. SQL/read failures or
+            // any later write error still roll back the entire canonical batch.
+            return .identityConflict
+        }
         if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
            try !hasThingParentRecord(thingId: thingId, db: db)
         {

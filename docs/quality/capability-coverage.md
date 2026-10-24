@@ -663,7 +663,7 @@ Messages / Events / Things 重选由 UIKit 原生单/双击仲裁，核心断言
 
 ### 用户批准的历史边界最终落地
 
-- 已删旧 operation 既缺 Gateway/recipient 归属，又无可证明 journal/canonical 时，保留旧事实并返回明确 `identity_conflict`，不重建、不成功 ACK。仍存活的旧内容、新身份和可证明来源不被这项狭窄拒绝误伤。实际 mixed batch 会沿既有事务整体回滚/no ACK；之后独立健康 batch 可保存并 ACK。沿用原退避，不加重试器；同批 head-of-line 是明确限制。
+- 已删旧 operation 既缺 Gateway/recipient 归属，又无可证明 journal/canonical 时，保留旧事实并返回明确 `identity_conflict`，不重建、不成功 ACK。仍存活的旧内容、新身份和可证明来源不被这项狭窄拒绝误伤。2026-10-24 后续交付收口仅在 ingress 显式启用只读身份预检隔离：该精确冲突保留失败/no ACK，同批健康项与普通 duplicate 可以提交/ACK，健康 ACK 已推进队列时继续后页；纯失败页停止。默认 Store batch 仍整体回滚，真实数据库读写错误仍整批回滚/no ACK。沿用原 journal/退避，无新重试器或持久状态。V2 无 cursor；200 个不可 ACK 项占满队首时仍无法发现后面的未知消息，不伪 ACK 跨越。
 - 源明确要求规范化完整 Gateway 与非空原 recipient；Gateway-only 旧内容仍可显示，但不能成为新来源证明或过渡时间依据。仅当前确实删除且无可靠首次时间的旧纯 delivery，以该删除提交建立一次35天过渡；已有时间（含过期但仍引用的事实）不刷新，重放/重开/重复删除不续期。有真实 op 的事实及其 delivery 查找索引沿原 op 生命周期，纯 delivery 才适用35天。
 - v28 总计3个查找索引（纯 delivery 过期、pending message_id、ledger message_id/op），无新表、后台对象或协调所有者。物理清理最多删除64条并跳过仍被内容/等待区引用的过期事实；可能扫描过期的存活前缀，**不声称最多检查64条或性能已验收**。清理可继续处理其后的无引用候选，不让前64个存活引用永久挡住清理。
 - 最终相关 host production/Core：217个方法、11 suites，0 fail/skip；含独立 Gateway/recipient 参数、Event/Thing、确认删除/重开、generic 恢复、真实 ACK worker、历史冲突与批回滚、35天不续期/过期新窗口及v17→v28升级。最终日志 `../apple-historical-policy-final-v5.log`、完整输入/binary/source绑定见隔离证据；不等同原生平台、NSE、真实 Provider、性能或完整 PR/release。

@@ -192,18 +192,29 @@ struct DeletedNotificationReplayTests {
             #expect(!ProviderIngressPersistenceResult(result).allowsAck)
             let healthy = message("healthy-peer", delivery: "healthy-delivery", operation: "healthy-operation")
             let healthyPayload = healthy.rawPayload.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value.value }
+            // The general Store API keeps its original all-or-nothing contract.
+            // Only the ingress adapter opts into the read-only conflict isolation.
+            do {
+                _ = try await store.persistNotificationMessagesIfNeeded([healthy, incoming])
+                Issue.record("The default canonical batch must still roll back on identity conflict.")
+            } catch {
+                guard case let AppError.local(problem) = error else { throw error }
+                #expect(problem.code == "identity_conflict")
+            }
+            #expect(try await store.loadMessages().isEmpty)
             let batch = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([
                 .init(payload: healthyPayload, requestIdentifier: "healthy-delivery"),
                 .init(payload: payload, requestIdentifier: "new-origin-delivery"),
             ], dataStore: store)
             #expect(batch.count == 2)
-            #expect(batch.allSatisfy { !ProviderIngressPersistenceResult($0).allowsAck })
-            #expect(try await store.loadMessages().isEmpty)
+            #expect(ProviderIngressPersistenceResult(batch[0]).allowsAck)
+            #expect(!ProviderIngressPersistenceResult(batch[1]).allowsAck)
+            #expect(try await store.loadMessages().map(\.messageId) == [healthy.messageId])
             #expect(try await queue.read { try Double.fetchOne($0, sql: "SELECT applied_at FROM operation_ledger WHERE message_id = 'old-unknown-origin-message';") } == 123)
             let laterBatch = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([
                 .init(payload: healthyPayload, requestIdentifier: "healthy-delivery"),
             ], dataStore: store)
-            guard case .persistedMain = laterBatch.first else {
+            guard case .duplicate = laterBatch.first else {
                 Issue.record("Conflict must not globally stop a later valid message."); return
             }
             #expect(laterBatch.allSatisfy { ProviderIngressPersistenceResult($0).allowsAck })
@@ -346,7 +357,7 @@ struct DeletedNotificationReplayTests {
     private func isProcessedDuplicate(_ outcome: NotificationStoreSaveOutcome) -> Bool {
         // A body-bearing duplicate is also a valid outcome for a live canonical row.
         switch outcome {
-        case .persisted, .persistedPending: return false
+        case .persisted, .persistedPending, .identityConflict: return false
         default: return true
         }
     }

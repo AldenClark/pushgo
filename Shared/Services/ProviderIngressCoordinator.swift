@@ -158,6 +158,15 @@ final class ProviderIngressCoordinator {
     struct PersistenceInput: @unchecked Sendable {
         let payload: [AnyHashable: Any]
         let requestIdentifier: String?
+        // Ephemeral provenance from this coordinator's existing finalization
+        // state. A direct notification is not necessarily a Pull response.
+        let isPulled: Bool
+
+        init(payload: [AnyHashable: Any], requestIdentifier: String?, isPulled: Bool = false) {
+            self.payload = payload
+            self.requestIdentifier = requestIdentifier
+            self.isPulled = isPulled
+        }
     }
 
     private struct DurablePulledItem {
@@ -465,10 +474,16 @@ final class ProviderIngressCoordinator {
 
             if !resolvedItems.isEmpty {
                 let results = await persistPayloads(
-                    resolvedItems.map {
-                        PersistenceInput(
-                            payload: $0.payload,
-                            requestIdentifier: $0.requestIdentifier
+                    resolvedItems.map { item in
+                        let isPulled: Bool
+                        switch item.finalization {
+                        case .direct: isPulled = false
+                        case .pulled: isPulled = true
+                        }
+                        return PersistenceInput(
+                            payload: item.payload,
+                            requestIdentifier: item.requestIdentifier,
+                            isPulled: isPulled
                         )
                     }
                 )
@@ -668,7 +683,8 @@ final class ProviderIngressCoordinator {
                     durableItems.map {
                         PersistenceInput(
                             payload: $0.payload,
-                            requestIdentifier: $0.deliveryID
+                            requestIdentifier: $0.deliveryID,
+                            isPulled: true
                         )
                     }
                 )
@@ -777,7 +793,12 @@ final class ProviderIngressCoordinator {
                     }
                 }
 
-                mayContinue = pullResult.hasMore && !pageContainsFailedItem && ackSucceeded
+                // A failed item retains its journal/server responsibility. If
+                // healthy peers were ACKed, the non-destructive queue made real
+                // progress and a later page can still contain healthy work. A
+                // poison-only page stops here instead of spinning on itself.
+                mayContinue = pullResult.hasMore && ackSucceeded
+                    && (!pageContainsFailedItem || !deliveryIdsToAck.isEmpty)
             }
             if let wakeupPullLease {
                 if targetPersistenceFailed {

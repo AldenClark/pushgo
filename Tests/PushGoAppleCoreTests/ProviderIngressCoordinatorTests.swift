@@ -1,4 +1,6 @@
 import Foundation
+import GRDB
+import Darwin
 import os
 import Testing
 @testable import PushGoAppleCore
@@ -20,6 +22,7 @@ private actor ProviderIngressCapture {
     private(set) var deliveryIds: [String] = []
     private(set) var payloadDeliveryIds: [String?] = []
     private(set) var batchSizes: [Int] = []
+    private(set) var pulledInputs: [Bool] = []
     private(set) var errors: [String] = []
 
     init(results: [ProviderIngressPersistenceResult], pausesFirstBatch: Bool = false) {
@@ -40,6 +43,7 @@ private actor ProviderIngressCapture {
         return inputs.map { input in
             deliveryIds.append(input.requestIdentifier ?? "")
             payloadDeliveryIds.append(input.payload["delivery_id"] as? String)
+            pulledInputs.append(input.isPulled)
             return results.isEmpty ? .persisted : results.removeFirst()
         }
     }
@@ -345,6 +349,7 @@ struct ProviderIngressCoordinatorTests {
             #expect(outcome.appliedCount == 2)
             #expect(await capture.deliveryIds == ["outer-001", "outer-002", "outer-003"])
             #expect(await capture.payloadDeliveryIds == ["outer-001", "outer-002", "outer-003"])
+            #expect(await capture.pulledInputs == [true, true, true])
             #expect(httpState.recordedPaths().filter { $0.hasSuffix("/v2/messages/pull") }.count == 3)
             #expect(httpState.recordedPaths().filter { $0.hasSuffix("/v2/messages/ack") }.count == 2)
         }
@@ -990,6 +995,7 @@ struct ProviderIngressCoordinatorTests {
             #expect(await first.value == 265)
             #expect(await joining.value == 265)
             #expect(await capture.batchSizes == [64, 200, 1])
+            #expect(await capture.pulledInputs == Array(repeating: false, count: 265))
             #expect(progressCapture.events == [
                 .processing(completed: 0, total: 265),
                 .processing(completed: 64, total: 265),
@@ -1065,5 +1071,265 @@ private struct CoordinatorContext {
     func cleanup() {
         session.invalidateAndCancel()
         ChannelServiceURLProtocol.unregister(host: host)
+    }
+}
+
+
+// A synthetic non-destructive V2 queue: ACK removes only explicitly named targets.
+// Unlike a canned sequence, a poison first page remains poison until healthy peers commit.
+private final class MixedIngressHTTPState: Sendable {
+    private struct State: Sendable {
+        var items: [[String: String]]
+        var pageSize: Int
+        var paths: [String] = []
+        var acknowledged: [[String]] = []
+        var loseAckResponses: Int
+        var unavailable = false
+        var persistedAt: [String: Double] = [:]
+        var ackedAt: [String: Double] = [:]
+    }
+    private let state: OSAllocatedUnfairLock<State>
+    init(items: [[String: String]], pageSize: Int = 3, loseAckResponses: Int = 0) {
+        state = OSAllocatedUnfairLock(initialState: State(items: items, pageSize: pageSize, loseAckResponses: loseAckResponses))
+    }
+    func handle(_ request: URLRequest) throws -> (HTTPURLResponse, Data) {
+        try state.withLock { state in
+            let path = request.url!.path; state.paths.append(path)
+            if state.unavailable { throw URLError(.cannotConnectToHost) }
+            let body: [String: Any]
+            if path.hasSuffix("/v2/messages/pull") {
+                body = ["success": true, "data": ["items": state.items.prefix(state.pageSize).map { ["delivery_id": $0["delivery_id"]!, "payload": $0] as [String: Any] }, "has_more": state.items.count > state.pageSize]]
+            } else if path.hasSuffix("/v2/messages/ack") {
+                let data = ChannelServiceURLProtocol.bodyData(from: request) ?? Data()
+                let ids = ((try JSONSerialization.jsonObject(with: data)) as? [String: Any])?["delivery_ids"] as? [String] ?? []
+                state.acknowledged.append(ids)
+                let before = state.items.count
+                state.items.removeAll { ids.contains($0["delivery_id"]!) }
+                for id in ids { state.ackedAt[id] = ProcessInfo.processInfo.systemUptime }
+                if state.loseAckResponses > 0 { state.loseAckResponses -= 1; throw URLError(.networkConnectionLost) }
+                let removed = before - state.items.count
+                body = ["success": true, "data": ["removed": removed > 0, "requested_count": ids.count, "removed_count": removed]]
+            } else { throw URLError(.unsupportedURL) }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, try JSONSerialization.data(withJSONObject: body))
+        }
+    }
+    func append(_ items: [[String: String]]) { state.withLock { $0.items += items } }
+    func setUnavailable(_ value: Bool) { state.withLock { $0.unavailable = value } }
+    func recordPersisted(_ id: String) { state.withLock { $0.persistedAt[id] = ProcessInfo.processInfo.systemUptime } }
+    func remaining() -> [String] { state.withLock { $0.items.compactMap { $0["delivery_id"] } } }
+    func paths() -> [String] { state.withLock { $0.paths } }
+    func acknowledgements() -> [[String]] { state.withLock { $0.acknowledged } }
+    func times() -> (persisted: [String: Double], acked: [String: Double]) { state.withLock { ($0.persistedAt, $0.ackedAt) } }
+}
+
+private func mixedPayload(_ id: String, operation: String? = nil, entity: String? = nil) -> [String: String] {
+    ["entity_type": "message", "message_id": id, "entity_id": entity ?? id,
+     "delivery_id": id, "op_id": operation ?? ("op-" + id), "channel_id": "mixed",
+     "title": "Exact " + id, "body": "Persisted content " + id]
+}
+
+private func seedUnattributedMixedOperation(_ group: String) async throws -> DatabaseQueue {
+    let file = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group).appendingPathComponent(AppConstants.databaseStoreFilename)
+    let db = try DatabaseQueue(path: file.path)
+    try await db.write { db in
+        try db.execute(sql: """
+        INSERT INTO operation_ledger(scope_key,message_id,op_id,channel_id,entity_type,entity_id,delivery_id,applied_at)
+        VALUES('mixed|message|ambiguous-entity|ambiguous-op','gone-legacy-message','ambiguous-op','mixed','message','ambiguous-entity','gone-legacy-delivery',123);
+        """)
+    }
+    return db
+}
+
+@MainActor
+private func mixedContext(store: LocalDataStore, group: String, state: MixedIngressHTTPState, base: URL) -> CoordinatorContext {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    let host = base.host!
+    ChannelServiceURLProtocol.register(host: host) { request in try state.handle(request) }
+    let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: group)
+    return CoordinatorContext(coordinator: ProviderIngressCoordinator(platformSuffix: "test", dataStore: store,
+        channelSubscriptionService: ChannelSubscriptionService(session: session),
+        notificationIngressInbox: NotificationIngressInbox(appGroupIdentifier: group), ackMarkerStore: ackStore,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: group), ackMarkerMinimumAge: 0,
+        hooks: .init(isEnabled: { true }, serverConfig: { ServerConfig(baseURL: base, token: "synthetic-token") }, cachedDeviceKey: { "frozen-device" }, hasPersistedNotification: { _ in false },
+            persistPayloads: { inputs in
+                let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) }, dataStore: store)
+                for (input, result) in zip(inputs, outcomes) where ProviderIngressPersistenceResult(result).allowsAck { state.recordPersisted(input.requestIdentifier!) }
+                return outcomes.map(ProviderIngressPersistenceResult.init)
+            }, applyPersistenceResults: { _ in }, reportInboxProgress: { _ in }, recordProviderError: { _, _ in })), ackStore: ackStore, session: session, host: host)
+}
+
+extension ProviderIngressCoordinatorTests {
+    @Test
+    func mixedIdentityConflictDoesNotStarveHealthyAndLaterPage() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://mixed-\(UUID().uuidString.lowercased()).invalid/prefix")!
+            _ = try await seedUnattributedMixedOperation(group)
+            let duplicate = mixedPayload("duplicate")
+            var direct = duplicate.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value }
+            direct["base_url"] = base.absoluteString; direct["provider_device_key"] = "frozen-device"
+            let input = NotificationPersistenceCoordinator.RemotePayload(payload: direct, requestIdentifier: "duplicate")
+            _ = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded([input], dataStore: store)
+            let state = MixedIngressHTTPState(items: [duplicate, mixedPayload("poison", operation: "ambiguous-op", entity: "ambiguous-entity"), mixedPayload("healthy-1"), mixedPayload("healthy-later")])
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let outcome = await context.coordinator.syncProviderIngressOutcome(reason: "manual_mixed", skipInboxMerge: true)
+            #expect(outcome.appliedCount == 2)
+            #expect(Set(try await store.loadMessages().compactMap(\.messageId)) == ["duplicate", "healthy-1", "healthy-later"])
+            #expect(state.remaining() == ["poison"])
+            #expect(Set(state.acknowledgements().flatMap { $0 }) == ["duplicate", "healthy-1", "healthy-later"])
+            #expect(state.paths().filter { $0.hasSuffix("/pull") }.count == 2)
+            let inbox = NotificationIngressInbox(appGroupIdentifier: group)
+            #expect(await inbox.pendingEntries().map { $0.record.requestIdentifier } == ["poison"])
+            let repeated = await context.coordinator.syncProviderIngressOutcome(reason: "manual_repeated_poison", skipInboxMerge: true)
+            #expect(repeated.appliedCount == 0)
+            #expect(state.paths().filter { $0.hasSuffix("/pull") }.count == 3)
+            #expect(state.remaining() == ["poison"])
+            #expect(try await store.loadMessage(messageId: "poison") == nil)
+        }
+    }
+
+    @Test
+    func fullUnacknowledgeableServerHeadStopsWithoutBusyLoopOrFalseAck() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://full-poison-\(UUID().uuidString.lowercased()).invalid")!
+            _ = try await seedUnattributedMixedOperation(group)
+            let poisons = (0..<200).map { mixedPayload("poison-\($0)", operation: "ambiguous-op", entity: "ambiguous-entity") }
+            let state = MixedIngressHTTPState(items: poisons + [mixedPayload("healthy-behind-full-head")], pageSize: 200)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            let result = await context.coordinator.syncProviderIngressOutcome(reason: "manual_full_poison", skipInboxMerge: true)
+            #expect(result.appliedCount == 0)
+            #expect(state.paths().filter { $0.hasSuffix("/pull") }.count == 1)
+            #expect(state.acknowledgements().isEmpty)
+            #expect(state.remaining().count == 201)
+            #expect(try await store.loadMessages().isEmpty)
+            #expect(await NotificationIngressInbox(appGroupIdentifier: group).pendingEntries().count == 200)
+            // V2 has no cursor/exclusion request. Unknown work behind a full
+            // unacknowledgeable head is a protocol limitation, never fake ACK.
+        }
+    }
+
+    @Test
+    func sqliteWriteFailureRollsBackHealthyBatchAndNeverAcknowledgesIt() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://write-failure-\(UUID().uuidString.lowercased()).invalid")!
+            let file = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group).appendingPathComponent(AppConstants.databaseStoreFilename)
+            let db = try DatabaseQueue(path: file.path)
+            try await db.write { db in try db.execute(sql: "CREATE TRIGGER fail_canonical_write BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'synthetic database failure'); END;") }
+            let state = MixedIngressHTTPState(items: [mixedPayload("first"), mixedPayload("second")])
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_write_failed", skipInboxMerge: true)
+            #expect(try await store.loadMessages().isEmpty)
+            #expect(state.acknowledgements().isEmpty)
+            #expect(state.remaining() == ["first", "second"])
+            #expect(await NotificationIngressInbox(appGroupIdentifier: group).pendingEntries().count == 2)
+            try await db.write { db in try db.execute(sql: "DROP TRIGGER fail_canonical_write;") }
+            let recovered = await context.coordinator.syncProviderIngressOutcome(reason: "manual_recovered", skipInboxMerge: true)
+            #expect(recovered.appliedCount == 2)
+            #expect(state.remaining().isEmpty)
+            #expect(try await store.loadMessages().count == 2)
+        }
+    }
+
+    @Test
+    func lostAckResponseRecoveryDoesNotRestoreConfirmedDeletedContent() async throws {
+        try await withProviderIngressLocalDataStore { store, group in
+            let base = URL(string: "https://lost-ack-\(UUID().uuidString.lowercased()).invalid")!
+            let state = MixedIngressHTTPState(items: [mixedPayload("lost-response")], loseAckResponses: 1)
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_lost_ack", skipInboxMerge: true)
+            let saved = try #require(try await store.loadMessage(messageId: "lost-response"))
+            #expect(state.remaining().isEmpty)
+            #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0, now: Date().addingTimeInterval(61)).count == 1)
+            _ = try await store.deleteConfirmedLocalData(try await store.prepareLocalDeletion(intent: .messages(ids: [saved.id])))
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let resumed = mixedContext(store: reopened, group: group, state: state, base: base)
+            defer { resumed.cleanup() }
+            await resumed.coordinator.drainAckMarkers(source: "test_restart", now: Date().addingTimeInterval(61))
+            #expect(await resumed.ackStore.pendingMarkers(limit: 10, minimumAge: 0, now: Date().addingTimeInterval(120)).isEmpty)
+            #expect(try await reopened.loadMessages().isEmpty)
+            #expect(state.acknowledgements() == [["lost-response"], ["lost-response"]])
+        }
+    }
+}
+
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["PUSHGO_DELIVERY_LOAD_OUTPUT"] != nil))
+@MainActor
+struct AppleDeliveryLoadAcceptanceTests {
+    @Test func optimizedHealthyIngressFixedLoad() async throws {
+        guard let output = ProcessInfo.processInfo.environment["PUSHGO_DELIVERY_LOAD_OUTPUT"] else { return }
+        try await withProviderIngressLocalDataStore { store, group in
+            let state = MixedIngressHTTPState(items: [], pageSize: 32)
+            let base = URL(string: "https://load-\(UUID().uuidString.lowercased()).invalid/prefix")!
+            let context = mixedContext(store: store, group: group, state: state, base: base)
+            defer { context.cleanup() }
+            var offers: [String: Double] = [:]
+            var stages: [[String: Any]] = []
+            func resident() -> UInt64 {
+                var info = mach_task_basic_info(); var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+                let result = withUnsafeMutablePointer(to: &info) { pointer in pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count) } }
+                return result == KERN_SUCCESS ? UInt64(info.resident_size) : 0
+            }
+            func snapshot(_ name: String) {
+                var usage = rusage(); getrusage(RUSAGE_SELF, &usage)
+                stages.append(["stage": name, "time": ProcessInfo.processInfo.systemUptime, "rss_bytes": resident(), "cpu_seconds": Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000, "server_pending": state.remaining().count])
+            }
+            func offer(_ id: String) { offers[id] = ProcessInfo.processInfo.systemUptime; state.append([mixedPayload(id)]) }
+            snapshot("cold"); try await Task.sleep(for: .seconds(2)); snapshot("idle")
+            for index in 0..<8 { offer("low-\(index)"); _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_low", skipInboxMerge: true); try await Task.sleep(for: .milliseconds(250)) }
+            snapshot("low")
+            for index in 0..<128 { offer("burst-\(index)") }
+            snapshot("burst_offer"); _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_burst", skipInboxMerge: true); snapshot("burst_drained")
+            for index in 0..<64 { offer("steady-\(index)"); _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_steady", skipInboxMerge: true); try await Task.sleep(for: .milliseconds(16)) }
+            snapshot("steady")
+            state.setUnavailable(true)
+            for index in 0..<16 { offer("outage-\(index)") }
+            _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_outage", skipInboxMerge: true); snapshot("disconnected")
+            state.setUnavailable(false); _ = await context.coordinator.syncProviderIngressOutcome(reason: "manual_recover", skipInboxMerge: true); snapshot("recovered")
+            #expect(state.remaining().isEmpty)
+            #expect(try await store.loadMessages().count == 216)
+            #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            try await Task.sleep(for: .seconds(2)); snapshot("falloff")
+            let times = state.times()
+            func percentiles(_ map: [String: Double]) -> [String: Double] {
+                let ms = offers.compactMap { id, time in map[id].map { ($0 - time) * 1_000 } }.sorted()
+                return ["p50": ms[Int(Double(ms.count - 1) * 0.50)], "p95": ms[Int(Double(ms.count - 1) * 0.95)], "p99": ms[Int(Double(ms.count - 1) * 0.99)]]
+            }
+            #expect(times.persisted.count == 216 && times.acked.count == 216)
+            let report: [String: Any] = ["offered":216,"persisted":times.persisted.count,"acked":times.acked.count,"offer_to_persist_ms":percentiles(times.persisted),"offer_to_ack_ms":percentiles(times.acked),"stages":stages,"limits":"optimized production modules with URLProtocol synthetic V2 transport; fixture CPU included; short idle, not App UI/energy/steady idle or real external service"]
+            try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output), options: .atomic)
+        }
+    }
+}
+
+
+@Suite
+struct WatchFrozenPullMetadataTests {
+    @Test func frozenOriginAndDeviceCannotBeReplacedByCurrentAliases() throws {
+        let now = Date(timeIntervalSince1970: 1_234)
+        let metadata = try #require(WatchDeliveryMetadata.pulled(deliveryId: " delivery-old ", payload: [
+            "base_url": "https://OLD.example/Gateway/", "provider_device_key": " old-device ",
+            "gateway_key": "https://new.example", "gateway": "https://new.example", "content_digest": "digest"
+        ], now: now))
+        #expect(metadata.gatewayKey == "https://old.example/Gateway")
+        #expect(metadata.watchDeviceKey == "old-device")
+        #expect(metadata.deliveryId == "delivery-old")
+        #expect(metadata.persistedAt == now)
+        #expect(metadata.contentDigest == "digest")
+        #expect(metadata.ingressSource == .watchPull)
+        let foreign = try #require(WatchDeliveryMetadata.pulled(deliveryId: "delivery-old", payload: [
+            "base_url": "https://different.example/Gateway", "provider_device_key": "old-device"
+        ]))
+        #expect(metadata.gatewayKey != foreign.gatewayKey)
+    }
+    @Test func missingOrInvalidFrozenContextIsNotGuessed() {
+        #expect(WatchDeliveryMetadata.pulled(deliveryId: "d", payload: ["gateway_key": "https://current.example", "provider_device_key": "device"]) == nil)
+        #expect(WatchDeliveryMetadata.pulled(deliveryId: "d", payload: ["base_url": "https://old.example"]) == nil)
+        #expect(WatchDeliveryMetadata.pulled(deliveryId: "d", payload: ["base_url": "file:///tmp", "provider_device_key": "device"]) == nil)
+        #expect(WatchDeliveryMetadata.pulled(deliveryId: " ", payload: ["base_url": "https://old.example", "provider_device_key": "device"]) == nil)
     }
 }
