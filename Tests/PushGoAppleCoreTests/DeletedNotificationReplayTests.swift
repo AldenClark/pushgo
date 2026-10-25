@@ -6,6 +6,46 @@ import UserNotifications
 
 struct DeletedNotificationReplayTests {
     @Test
+    func reacceptedOperationWithNewMessageAndDeliveryDoesNotMatchDeletedIdentity() async throws {
+        try await withIsolatedAutomationStorage { root, group in
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            let original = message("old-ordinary", delivery: "old-ordinary-delivery", operation: "reaccepted-same-operation")
+            guard case .persisted = try await store.persistNotificationMessageIfNeeded(original) else {
+                Issue.record("The original delivery must be durably accepted."); return
+            }
+            _ = try await store.deleteConfirmedLocalData(
+                try await store.prepareLocalDeletion(intent: .messages(ids: [original.id])))
+            let queue = try databaseQueue(group: group)
+            let oldID = try #require(original.messageId)
+            let factsBefore = try await queue.read { db in
+                try String.fetchAll(db, sql: """
+                    SELECT quote(scope_key)||'/'||quote(message_id)||'/'||quote(applied_at)
+                    FROM operation_ledger WHERE message_id=? ORDER BY scope_key;
+                    """, arguments: [oldID])
+            }
+            try #require(!factsBefore.isEmpty)
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            // Gateway may accept the same ordinary op after its own identity
+            // lifetime, with new message/entity/delivery IDs. This is a
+            // synthetic client-contract input, not a simulated 31-day wait.
+            let reaccepted = message("new-ordinary", delivery: "new-ordinary-delivery", operation: "reaccepted-same-operation")
+            #expect(reaccepted.body == original.body)
+            guard case .persisted = try await reopened.persistNotificationMessageIfNeeded(reaccepted) else {
+                Issue.record("A new Gateway identity must not match the older operation's entity or delivery fact."); return
+            }
+            #expect(isProcessedDuplicate(try await reopened.persistNotificationMessageIfNeeded(original)))
+            #expect(try await reopened.loadMessages().map(\.messageId) == [reaccepted.messageId])
+            #expect(try await queue.read { db in
+                try String.fetchAll(db, sql: """
+                    SELECT quote(scope_key)||'/'||quote(message_id)||'/'||quote(applied_at)
+                    FROM operation_ledger WHERE message_id=? ORDER BY scope_key;
+                    """, arguments: [oldID])
+            } == factsBefore)
+        }
+    }
+
+    @Test
     func confirmedDeletionKeepsProcessedOperationAcrossReplayAndReopen() async throws {
         try await withIsolatedAutomationStorage { root, group in
             let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
