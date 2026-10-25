@@ -162,6 +162,11 @@ final class PushGo_macOSUITests: XCTestCase {
         repeat {
             let reporters = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
             if !reporters.isEmpty {
+                if ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1" {
+                    throw NSError(domain: "macos_problem_reporter_readonly_blocked", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey:
+                                    "QUALITY_PRECONDITION: Resource validation cannot terminate a system crash-dialog host."])
+                }
                 for reporter in reporters {
                     _ = reporter.terminate()
                 }
@@ -5954,9 +5959,23 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     private func dismissSystemPrivacyDialogsIfNeeded(in app: XCUIApplication) {
+        let forbidsPermissionActions = ProcessInfo.processInfo.environment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1"
+            || app.launchEnvironment["PUSHGO_RESOURCE_FORBID_PERMISSION_ACTIONS"] == "1"
+        if forbidsPermissionActions, app.alerts.firstMatch.exists {
+            let hierarchy = XCTAttachment(string: app.alerts.firstMatch.debugDescription)
+            hierarchy.name = "macos-forbidden-system-permission-alert"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            XCTFail("QUALITY_PRECONDITION: Resource validation cannot act on a macOS system permission alert.")
+            return
+        }
         for title in crossAppPromptDismissButtons {
             let appButton = app.buttons[title]
             if appButton.exists {
+                if forbidsPermissionActions {
+                    XCTFail("QUALITY_PRECONDITION: Resource validation cannot dismiss a macOS privacy prompt.")
+                    return
+                }
                 appButton.click()
                 RunLoop.current.run(until: Date().addingTimeInterval(0.4))
                 return
