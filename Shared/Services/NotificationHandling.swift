@@ -21,17 +21,21 @@ struct NormalizedRemoteNotification {
 // construction. The legacy dictionary type itself cannot express Sendable.
 enum ProviderWakeupResolution: @unchecked Sendable {
     case notWakeup
+    case failed(Error)
+    case processedDuplicate(payload: [AnyHashable: Any])
     case recoveredDurable(payload: [AnyHashable: Any], requestIdentifier: String)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
-    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
+    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?, error: Error? = nil)
 }
 
 enum NotificationIngressResolution: @unchecked Sendable {
+    case failed(Error)
     case direct(payload: [AnyHashable: Any], requestIdentifier: String?)
+    case processedDuplicate(payload: [AnyHashable: Any])
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
-    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
+    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?, error: Error? = nil)
 }
 
 struct ProviderPullContext: Sendable {
@@ -1031,7 +1035,10 @@ enum NotificationHandling {
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService,
-        notificationIngressInbox: NotificationIngressInbox = .shared
+        notificationIngressInbox: NotificationIngressInbox = .shared,
+        allowNetwork: Bool = true,
+        alreadyJournaled: Bool = false,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore = .shared
     ) async -> NotificationIngressResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         let resolution = await resolveProviderWakeup(
@@ -1039,14 +1046,20 @@ enum NotificationHandling {
             dataStore: dataStore,
             fallbackServerConfig: fallbackServerConfig,
             channelSubscriptionService: channelSubscriptionService,
-            notificationIngressInbox: notificationIngressInbox
+            notificationIngressInbox: notificationIngressInbox,
+            allowNetwork: allowNetwork,
+            alreadyJournaled: alreadyJournaled,
+            wakeupPullClaimStore: wakeupPullClaimStore
         )
         switch resolution {
+        case let .failed(error): return .failed(error)
         case .notWakeup:
-            return .direct(
+            return .unresolvedWakeup(
                 payload: sanitized,
                 requestIdentifier: providerIngressRequestIdentifier(from: sanitized)
             )
+        case let .processedDuplicate(payload):
+            return .processedDuplicate(payload: payload)
         case let .recoveredDurable(resolvedPayload, requestIdentifier):
             return .direct(payload: resolvedPayload, requestIdentifier: requestIdentifier)
         case let .pulled(resolvedPayload, requestIdentifier, context):
@@ -1060,10 +1073,11 @@ enum NotificationHandling {
                 payload: unresolvedPayload,
                 requestIdentifier: requestIdentifier
             )
-        case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
+        case let .unresolvedWakeup(unresolvedPayload, requestIdentifier, error):
             return .unresolvedWakeup(
                 payload: unresolvedPayload,
-                requestIdentifier: requestIdentifier
+                requestIdentifier: requestIdentifier,
+                error: error
             )
         }
     }
@@ -1094,7 +1108,7 @@ enum NotificationHandling {
             return providerIngressRequestIdentifier(from: payload)
         case .pulled:
             return nil
-        case .claimedByPeer:
+        case .failed, .processedDuplicate, .claimedByPeer:
             return nil
         case .unresolvedWakeup:
             return nil
@@ -1146,29 +1160,86 @@ enum NotificationHandling {
 
 #if !NSE_NO_DATABASE
     @MainActor
+    static func hasProcessedProviderHint(
+        _ payload: [AnyHashable: Any], dataStore: LocalDataStore,
+        notificationIngressInbox: NotificationIngressInbox
+    ) async throws -> Bool {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: sanitized) else { return false }
+        if try await notificationIngressInbox.hasProcessedDelivery(identity) { return true }
+#if os(watchOS)
+        return try await dataStore.hasProcessedWatchDelivery(gatewayKey: identity.baseURLString,
+            deviceKey: identity.deviceKey, deliveryId: identity.deliveryId)
+#else
+        let content = UNMutableNotificationContent()
+        content.userInfo = sanitized
+        let normalized = NotificationPayloadNormalizer.normalize(content: content, requestId: identity.deliveryId)
+        return try await dataStore.hasProcessedNotificationReplay(PushMessage(
+            messageId: normalized.messageId, title: normalized.title, body: normalized.body,
+            channel: normalized.channel, url: normalized.url, rawPayload: normalized.rawPayload))
+#endif
+    }
+
+    @MainActor
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService,
-        notificationIngressInbox: NotificationIngressInbox = .shared
+        notificationIngressInbox: NotificationIngressInbox = .shared,
+        allowNetwork: Bool = true,
+        alreadyJournaled: Bool = false,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore = .shared
     ) async -> ProviderWakeupResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
-        guard let deliveryId = providerWakeupPullDeliveryId(from: sanitized) else {
+        // Full provider payloads are advertisements too. Only an authenticated
+        // targeted V2 response (or its original durable receipt) may add content.
+        guard let deliveryId = providerIngressRequestIdentifier(from: sanitized) else {
             return .notWakeup
         }
-        let durableHint = sanitized.reduce(
+        if let advertised = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: sanitized) {
+            do {
+                let alreadyProcessed = try await hasProcessedProviderHint(sanitized,
+                    dataStore: dataStore, notificationIngressInbox: notificationIngressInbox)
+                if alreadyProcessed { return .processedDuplicate(payload: sanitized) }
+            } catch let error as AppError where error.code == "identity_conflict" {
+                // Ambiguous historical identities and database failures are not
+                // a license to acknowledge or recreate advertised content.
+                return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+            } catch {
+                return .failed(error)
+            }
+            if let pulledIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId, baseURL: advertised.baseURL, deviceKey: advertised.deviceKey, ackContract: .v2Batch),
+               let original = await notificationIngressInbox.durablePayload(identity: pulledIdentity) {
+                let claimStore = wakeupPullClaimStore
+                guard let lease = await claimStore.acquireLease(identity: pulledIdentity, owner: "app_wakeup_resolver", leaseDuration: 30) else {
+                    return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
+                }
+                let payload = original.reduce(into: [AnyHashable: Any]()) { $0[$1.key] = $1.value.value }
+                return .pulled(payload: payload, requestIdentifier: deliveryId,
+                    context: ProviderPullContext(baseURL: pulledIdentity.baseURL,
+                        token: ProviderGatewayTokenStore().load(baseURL: pulledIdentity.baseURL),
+                        deviceKey: pulledIdentity.deviceKey, claimLease: lease))
+            }
+        }
+        let durableHint = UserInfoSanitizer.providerRecoveryHint(sanitized).reduce(
             into: [String: AnyCodable]()
         ) { result, element in
             result[element.key] = AnyCodable(element.value)
         }
-        guard await notificationIngressInbox.enqueue(
-            codablePayload: durableHint,
-            requestIdentifier: deliveryId,
-            source: "provider.host.wakeup_hint",
-            ackIdentity: nil,
-            requiredEntryState: "durable"
-        ) else {
+        if !alreadyJournaled {
+            guard await notificationIngressInbox.enqueue(
+                codablePayload: durableHint,
+                requestIdentifier: deliveryId,
+                source: "provider.host.wakeup_hint",
+                ackIdentity: nil,
+                requiredEntryState: "durable"
+            ) else {
+                return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+            }
+        }
+        guard allowNetwork, !Task.isCancelled else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
         let candidates = await activeServerConfigsForWakeupIngress(
@@ -1182,29 +1253,17 @@ enum NotificationHandling {
         guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
-        // A legacy pull is destructive. If a prior process already journaled
-        // the returned bytes but crashed before canonical persistence, replay
-        // those exact bytes before making any new provider request.
-        for candidate in candidates {
-            guard let legacyIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                deliveryId: deliveryId,
-                baseURL: candidate.config.baseURL,
-                deviceKey: deviceKey,
-                ackContract: .legacySingle
-            ), let durable = await notificationIngressInbox.durablePayload(identity: legacyIdentity)
-            else { continue }
-            let recovered = durable.reduce(into: [AnyHashable: Any]()) { result, element in
-                result[element.key] = element.value.value
-            }
-            guard recovered[ProviderLegacyDestructivePullMetadata.markerKey] as? String
-                    == ProviderLegacyDestructivePullMetadata.markerValue
-            else { continue }
-            return .recoveredDurable(payload: recovered, requestIdentifier: deliveryId)
+        if let advertisedDevice = normalizedPayloadString(sanitized["provider_device_key"]), advertisedDevice != deviceKey {
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
+        // Old raw legacy markers do not prove HTTP origin. Retain those bytes
+        // as hints; never manufacture a trusted recovery from their literals.
         let owner = "app_wakeup_resolver"
         let leaseDuration: TimeInterval = 30
-        let claimStore = ProviderWakeupPullClaimStore.shared
+        let claimStore = wakeupPullClaimStore
+        var lastRequestError: Error?
         for candidate in candidates {
+            guard !Task.isCancelled else { return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId) }
             guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
                 deliveryId: deliveryId,
                 baseURL: candidate.config.baseURL,
@@ -1245,7 +1304,11 @@ enum NotificationHandling {
                     deviceKey: deviceKey,
                     deliveryId: deliveryId
                 )
-                guard !pullResult.items.isEmpty else {
+                guard !Task.isCancelled else {
+                    await claimStore.releaseLease(lease)
+                    return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+                }
+                guard pullResult.items.count == 1, pullResult.items.first?.deliveryId == deliveryId else {
                     await claimStore.releaseLease(lease)
                     continue
                 }
@@ -1290,7 +1353,6 @@ enum NotificationHandling {
                     durableResults.append((durablePayload, requestIdentifier))
                 }
                 let selected = durableResults.first { $0.requestIdentifier == deliveryId }
-                    ?? durableResults.first
                 guard allItemsDurable, let selected else {
                     await claimStore.releaseLease(lease)
                     continue
@@ -1307,10 +1369,11 @@ enum NotificationHandling {
                 )
             } catch {
                 await claimStore.releaseLease(lease)
+                lastRequestError = error
                 continue
             }
         }
-        return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+        return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId, error: lastRequestError)
     }
 #endif
 
@@ -1380,6 +1443,18 @@ enum NotificationHandling {
         var candidates: [WakeupServerCandidate] = []
         var dedupe = Set<String>()
         let tokenStore = ProviderGatewayTokenStore()
+        // Advertising an origin can constrain a locally authorized target;
+        // it cannot enroll a new origin or fall through to another Gateway
+        // that happens to reuse the same delivery identifier.
+        let advertisedOrigins = ["base_url", "gateway_url", "gateway", "server_url", "server"]
+            .compactMap { normalizedPayloadString(payload[$0]) }
+        var requiredOrigin: URL?
+        for raw in advertisedOrigins {
+            guard let url = URLSanitizer.validatedServerURL(from: raw),
+                  let normalized = normalizedProviderGatewayURL(url) else { return [] }
+            if let requiredOrigin, requiredOrigin != normalized { return [] }
+            requiredOrigin = normalized
+        }
         func appendCandidate(baseURL: URL, token: String?, source: String) {
             let normalizedConfig = ServerConfig(
                 baseURL: baseURL,
@@ -1404,10 +1479,14 @@ enum NotificationHandling {
             )
         }
 
-        if let gatewayURL = wakeupGatewayURL(from: payload) {
+        // An advertisement cannot enroll a new Gateway merely by supplying a
+        // URL. Use it only when this client already holds that Gateway's
+        // authorization; configured/subscribed public Gateways are added below.
+        if let gatewayURL = wakeupGatewayURL(from: payload),
+           let savedToken = tokenStore.load(baseURL: gatewayURL) {
             appendCandidate(
                 baseURL: gatewayURL,
-                token: tokenStore.load(baseURL: gatewayURL),
+                token: savedToken,
                 source: "payload.base_url"
             )
         }
@@ -1443,7 +1522,8 @@ enum NotificationHandling {
             )
         }
 
-        return candidates
+        guard let requiredOrigin else { return candidates }
+        return candidates.filter { normalizedProviderGatewayURL($0.config.baseURL) == requiredOrigin }
     }
 
     private static func activeProviderDeviceKeyForWakeupIngress(

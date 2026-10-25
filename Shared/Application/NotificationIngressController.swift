@@ -108,6 +108,10 @@ final class NotificationIngressController {
         scheduleProviderAckDrain(source: "provider.ingress_changed.\(platformSuffix)")
     }
 
+    func recordResolutionFailure(_ error: Error, source: String) {
+        recordProviderError(error, source)
+    }
+
     @discardableResult
     func drainProviderDeliveryAckFailures(
         source: String
@@ -247,11 +251,8 @@ final class NotificationIngressController {
         outcome: NotificationPersistenceOutcome,
         source: String
     ) async {
-        await providerIngressCoordinator.ackDirectDeliveryIfNeeded(
-            payload: payload,
-            result: ProviderIngressPersistenceResult(outcome),
-            source: source
-        )
+        guard case .duplicate = outcome else { return }
+        _ = await providerIngressCoordinator.ackProcessedDeliveryIfNeeded(payload: payload, source: source)
         scheduleProviderAckDrain(source: "\(source).ack")
     }
 
@@ -339,19 +340,25 @@ final class NotificationIngressController {
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
         let notificationPayload = UserInfoSanitizer.sanitize(notification.request.content.userInfo)
         let identity = providerIngressCoordinator.identity(from: notificationPayload)
-        if await hasPersistedNotification(identity: identity) {
-            return .duplicate
-        }
 
         let ingress = await NotificationHandling.resolveNotificationIngress(
             from: notificationPayload,
             dataStore: dataStore,
             fallbackServerConfig: serverConfigProvider(),
             channelSubscriptionService: channelSubscriptionService,
-            notificationIngressInbox: notificationIngressInbox
+            notificationIngressInbox: notificationIngressInbox,
+            allowNetwork: !shouldDeferStartupWakeupPulls()
         )
+        guard !Task.isCancelled else { return .failed }
         let outcome: NotificationPersistenceOutcome
         switch ingress {
+        case let .failed(error):
+            recordProviderError(error, "provider.notification.origin.\(platformSuffix)")
+            outcome = .failed
+        case let .processedDuplicate(payload):
+            _ = await providerIngressCoordinator.ackProcessedDeliveryIfNeeded(payload: payload, source: "provider.notification.known.\(platformSuffix)")
+            scheduleProviderAckDrain(source: "provider.notification.known.\(platformSuffix)")
+            outcome = .duplicate
         case let .pulled(payload, requestIdentifier, context):
             outcome = await persistPulledProviderIngress(
                 payload: payload,
@@ -361,44 +368,13 @@ final class NotificationIngressController {
             )
         case .claimedByPeer:
             outcome = await hasPersistedNotification(identity: identity) ? .duplicate : .rejected
-        case let .unresolvedWakeup(payload, requestIdentifier):
-            if shouldDeferStartupWakeupPulls() {
-                outcome = .rejected
-                break
-            }
-            let unresolvedDeliveryId = requestIdentifier
-                ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
-            if let unresolvedDeliveryId {
-                let pulled = await syncProviderIngress(
-                    deliveryId: unresolvedDeliveryId,
-                    reason: "delegate_unresolved_wakeup",
-                    skipInboxMerge: true
-                )
-                if pulled > 0 {
-                    let resolvedIdentity = ProviderIngressIdentity(
-                        messageId: identity.messageId,
-                        deliveryId: identity.deliveryId ?? unresolvedDeliveryId
-                    )
-                    outcome = await hasPersistedNotification(identity: resolvedIdentity) ? .duplicate : .rejected
-                } else {
-                    outcome = .rejected
-                }
-            } else {
-                outcome = .rejected
-            }
-        case let .direct(_, requestIdentifier):
-            outcome = await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
-                content: notification.request.content,
-                requestIdentifier: requestIdentifier,
-                fallbackRequestIdentifier: notification.request.identifier,
-                dataStore: dataStore,
-                beforeSave: beforePersistMessage
-            )
-            await ackDirectProviderIngressIfNeeded(
-                payload: notificationPayload,
-                outcome: outcome,
-                source: "provider.notification.direct.\(platformSuffix)"
-            )
+        case let .unresolvedWakeup(_, _, error):
+            if let error { recordProviderError(error, "provider.notification.targeted.\(platformSuffix)") }
+            // The resolver already owns this turn's targeted attempt. The
+            // durable hint and existing due owner retain failure recovery.
+            outcome = .rejected
+        case .direct:
+            outcome = .rejected
         }
 
         applyNotificationPersistenceOutcome(outcome)

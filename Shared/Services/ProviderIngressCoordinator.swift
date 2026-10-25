@@ -377,32 +377,44 @@ final class ProviderIngressCoordinator {
             guard !claimedEntries.isEmpty else { break }
             var resolvedItems: [ResolvedInboxItem] = []
             resolvedItems.reserveCapacity(claimedEntries.count)
-            var completedClaims: [NotificationIngressInbox.ClaimedEntry] = []
-            completedClaims.reserveCapacity(claimedEntries.count)
             for claimedEntry in claimedEntries {
                 guard !Task.isCancelled else { return applied }
                 visited += 1
                 let payload = claimedEntry.payload
-                let identity = identity(
-                    from: payload,
-                    fallbackRequestIdentifier: claimedEntry.record.requestIdentifier
-                )
-
-                if await hooks.hasPersistedNotification(identity) {
-                    completedClaims.append(claimedEntry)
-                    continue
-                }
 
                 let ingress = await NotificationHandling.resolveNotificationIngress(
                     from: payload,
                     dataStore: dataStore,
                     fallbackServerConfig: hooks.serverConfig(),
                     channelSubscriptionService: channelSubscriptionService,
-                    notificationIngressInbox: notificationIngressInbox
+                    notificationIngressInbox: notificationIngressInbox,
+                    allowNetwork: allowWakeupSync,
+                    alreadyJournaled: true,
+                    wakeupPullClaimStore: wakeupPullClaimStore
                 )
                 guard !Task.isCancelled else { return applied }
 
                 switch ingress {
+                case let .failed(error):
+                    _ = await notificationIngressInbox.markRetry(claimedEntry, reason: "origin_store_failed")
+                    hooks.recordProviderError(error, "provider.inbox.origin.\(platformSuffix)")
+                    return applied
+                case let .processedDuplicate(payload):
+                    let finishedReceipt: Bool
+                    do {
+                        finishedReceipt = try await notificationIngressInbox.finishKnownReceipt(claimedEntry)
+                    } catch {
+                        _ = await notificationIngressInbox.markRetry(claimedEntry, reason: "known_receipt_store_failed")
+                        hooks.recordProviderError(error, "provider.inbox.known_receipt.\(platformSuffix)")
+                        return applied
+                    }
+                    if await ackProcessedDeliveryIfNeeded(payload: payload, source: "provider.inbox.known.\(platformSuffix)") {
+                        hooks.applyPersistenceResults([.duplicate])
+                        let removedHint = await notificationIngressInbox.removeRedundantHint(claimedEntry)
+                        if finishedReceipt || removedHint { settled += 1 }
+                    } else {
+                        _ = await notificationIngressInbox.markRetry(claimedEntry, reason: "known_delivery_ack_not_durable")
+                    }
                 case let .pulled(resolvedPayload, requestIdentifier, context):
                     guard await journalPulledPayload(
                         resolvedPayload,
@@ -427,26 +439,14 @@ final class ProviderIngressCoordinator {
                             )
                         )
                     )
-                case let .direct(resolvedPayload, requestIdentifier):
-                    resolvedItems.append(
-                        ResolvedInboxItem(
-                            claimed: claimedEntry,
-                            payload: resolvedPayload,
-                            requestIdentifier: requestIdentifier
-                                ?? claimedEntry.record.requestIdentifier,
-                            finalization: .direct
-                        )
-                    )
+                case .direct:
+                    _ = await notificationIngressInbox.markRetry(claimedEntry, reason: "unproven_direct_origin")
                 case .claimedByPeer:
-                    if await hooks.hasPersistedNotification(identity) {
-                        completedClaims.append(claimedEntry)
-                    } else {
-                        _ = await notificationIngressInbox.markRetry(
-                            claimedEntry,
-                            reason: "canonical_claimed_by_peer"
-                        )
-                    }
-                case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
+                    // A peer lease is not a processed fact for advertised
+                    // origin fields. Keep the hint until that fact is durable.
+                    _ = await notificationIngressInbox.markRetry(claimedEntry, reason: "canonical_claimed_by_peer")
+                case let .unresolvedWakeup(unresolvedPayload, requestIdentifier, requestError):
+                    if let requestError { hooks.recordProviderError(requestError, "provider.inbox.targeted.\(platformSuffix)") }
                     guard allowWakeupSync else {
                         _ = await notificationIngressInbox.markRetry(
                             claimedEntry,
@@ -456,7 +456,6 @@ final class ProviderIngressCoordinator {
                     }
                     let unresolvedDeliveryId = requestIdentifier
                         ?? NotificationHandling.providerWakeupPullDeliveryId(from: unresolvedPayload)
-                        ?? claimedEntry.record.requestIdentifier
                     guard let unresolvedDeliveryId else {
                         _ = await notificationIngressInbox.markRetry(
                             claimedEntry,
@@ -471,14 +470,10 @@ final class ProviderIngressCoordinator {
                         reason: "handoff_to_provider_pull",
                         retryAfter: Date().addingTimeInterval(30)
                     )
-                    let pulled = await syncProviderIngress(
-                        deliveryId: unresolvedDeliveryId,
-                        reason: "inbox_unresolved_\(reason)",
-                        skipInboxMerge: true
-                    )
-                    if pulled > 0 {
-                        applied += pulled
-                    }
+                    // The resolver already attempted the bounded authenticated
+                    // targeted request. Do not immediately repeat it in this
+                    // same turn; the durable hint and existing due retry own it.
+                    _ = unresolvedDeliveryId
                 }
             }
 
@@ -504,16 +499,13 @@ final class ProviderIngressCoordinator {
                         payload: item.payload,
                         result: result
                     )
-                    if shouldRemove {
-                        completedClaims.append(item.claimed)
-                    } else {
+                    if !shouldRemove {
                         _ = await notificationIngressInbox.markRetry(
                             item.claimed,
                             reason: "canonical_or_resolution_retry"
                         )
                     }
                 }
-                settled += await notificationIngressInbox.markCompleted(completedClaims)
                 for (item, result) in zip(resolvedItems, results) {
                     switch item.finalization {
                     case .direct:
@@ -523,16 +515,18 @@ final class ProviderIngressCoordinator {
                             source: "provider.inbox.direct.\(platformSuffix)"
                         )
                     case let .pulled(requestIdentifier, context):
-                        await finalizePulledIngress(
+                        let terminal = await finalizePulledIngress(
                             deliveryId: requestIdentifier,
                             context: context,
                             result: result,
                             source: "provider.inbox.pulled.\(platformSuffix)"
                         )
+                        if terminal {
+                            _ = await notificationIngressInbox.removeRedundantHint(item.claimed)
+                            settled += 1
+                        }
                     }
                 }
-            } else {
-                settled += await notificationIngressInbox.markCompleted(completedClaims)
             }
             let currentCounts = await notificationIngressInbox.queueCounts(
                 importLegacyState: false
@@ -999,15 +993,28 @@ final class ProviderIngressCoordinator {
         )
     }
 
+    /// This is only called after an exact existing processed fact was read.
+    /// It never admits advertised bytes or extends the fact's retention time.
+    func ackProcessedDeliveryIfNeeded(payload: [AnyHashable: Any], source: String) async -> Bool {
+        guard let old = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: UserInfoSanitizer.sanitize(payload)),
+              let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(deliveryId: old.deliveryId,
+                baseURL: old.baseURL, deviceKey: old.deviceKey, ackContract: .v2Batch) else { return false }
+        if await ackMarkerStore.markInboxDurable(identity: identity, source: source, postNotification: false) { return true }
+        // A leased or completed ACK already owns this exact duty. Do not
+        // retain a duplicate raw hint forever or reopen the processed window.
+        return (try? await ackMarkerStore.hasAckResponsibility(identity: identity)) ?? false
+    }
+
+    @discardableResult
     func finalizePulledIngress(
         deliveryId: String,
         context: ProviderPullContext,
         result: ProviderIngressPersistenceResult,
         source: String
-    ) async {
+    ) async -> Bool {
         guard result.allowsPulledItemRemoval else {
             await wakeupPullClaimStore.releaseLease(context.claimLease)
-            return
+            return false
         }
 
         guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
@@ -1017,26 +1024,27 @@ final class ProviderIngressCoordinator {
             ackContract: .v2Batch
         ) else {
             await wakeupPullClaimStore.releaseLease(context.claimLease)
-            return
+            return false
         }
         switch result {
         case .persisted, .duplicate:
-            await notificationIngressInbox.markTerminal(
+            guard await notificationIngressInbox.markTerminal(
                 identity: identity,
                 discarded: false
-            )
+            ) else { return false }
         case .rejected:
-            await notificationIngressInbox.markTerminal(
+            guard await notificationIngressInbox.markTerminal(
                 identity: identity,
                 discarded: true,
                 reason: "canonical_validation_rejected"
-            )
+            ) else { return false }
         case .identityConflict, .failed:
             break
         }
         await wakeupPullClaimStore.markCompleted(context.claimLease)
         // ACK is owned by the durable worker. Canonical persistence and
         // notification presentation never wait for Gateway network I/O.
+        return true
     }
 
     @discardableResult
@@ -1117,6 +1125,29 @@ final class ProviderIngressCoordinator {
                     postNotification: false
                 )
                 return
+            }
+            if identity.ackContract == .legacySingle {
+                let hint: [AnyHashable: Any] = ["base_url": identity.baseURLString,
+                    "provider_device_key": identity.deviceKey, "delivery_id": identity.deliveryId]
+                let processed: Bool
+                do {
+                    processed = try await NotificationHandling.hasProcessedProviderHint(hint,
+                        dataStore: dataStore, notificationIngressInbox: notificationIngressInbox)
+                } catch let error as AppError where error.code == "identity_conflict" {
+                    await ackMarkerStore.markAckFailed(lease, source: "\(source).identity_conflict",
+                        retryAfter: Date().addingTimeInterval(60), postNotification: false)
+                    continue
+                } catch {
+                    await ackMarkerStore.markAckFailed(lease, source: "\(source).origin_store_failed",
+                        retryAfter: Date().addingTimeInterval(60), postNotification: false)
+                    hooks.recordProviderError(error, "\(source).origin_store_failed")
+                    return
+                }
+                guard processed else {
+                    await ackMarkerStore.markAckFailed(lease, source: "\(source).unproven_direct_origin",
+                        retryAfter: Date().addingTimeInterval(60), postNotification: false)
+                    continue
+                }
             }
             if lease.ackContract == .legacySingle {
                 do {

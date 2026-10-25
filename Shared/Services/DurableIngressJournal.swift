@@ -901,6 +901,42 @@ actor DurableIngressJournal {
         }
     }
 
+    /// The original processed fact already owns replay protection and the ACK
+    /// outbox is durable. Remove only this leased redundant hint, without
+    /// minting a new canonical-applied time or renewing the 35-day window.
+    func removeRedundantIngressHint(entryID: String, owner: String, generation: Int64) -> Bool {
+        (try? withDatabase(write: true) { db in
+            let statement = try prepare(db, "DELETE FROM ingress_entry WHERE entry_id = ? AND resolution_state = 'direct' AND apply_state = 'applying' AND lease_owner = ? AND lease_generation = ?;")
+            defer { sqlite3_finalize(statement) }
+            bindText(statement, 1, entryID)
+            bindText(statement, 2, owner)
+            sqlite3_bind_int64(statement, 3, generation)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw JournalError.sqlite(String(cString: sqlite3_errmsg(db))) }
+            return sqlite3_changes(db) == 1
+        }) ?? false
+    }
+
+    /// A read-only canonical/processed fact was already established by the
+    /// caller. Complete only a real acquired receipt, preserving its first
+    /// durable time; raw advertisements must never become processed facts.
+    func finishKnownIngressReceipt(entryID: String, owner: String, generation: Int64) throws -> Bool {
+        try withDatabase(write: true) { db in
+            let statement = try prepare(db, """
+                UPDATE ingress_entry SET apply_state = 'applied',
+                    canonical_applied_at_ms = COALESCE(canonical_applied_at_ms, created_at_ms),
+                    lease_owner = NULL, lease_until_ms = NULL
+                WHERE entry_id = ? AND resolution_state = 'pulled' AND payload_plist IS NOT NULL
+                  AND apply_state = 'applying' AND lease_owner = ? AND lease_generation = ?;
+                """)
+            defer { sqlite3_finalize(statement) }
+            bindText(statement, 1, entryID)
+            bindText(statement, 2, owner)
+            sqlite3_bind_int64(statement, 3, generation)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw JournalError.sqlite(String(cString: sqlite3_errmsg(db))) }
+            return sqlite3_changes(db) == 1
+        }
+    }
+
     func markIngressCompleted(entryID: String) {
         let now = Self.epochMilliseconds(Date())
         try? withDatabase(write: true) { db in
@@ -1031,11 +1067,12 @@ actor DurableIngressJournal {
         }) ?? false
     }
 
+    @discardableResult
     func markIngressTerminal(
         identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         discarded: Bool,
         reason: String? = nil
-    ) {
+    ) -> Bool {
         let now = Self.epochMilliseconds(Date())
         let terminalCommitted = (try? withDatabase(write: true) { db in
             let statement = try prepare(
@@ -1082,6 +1119,7 @@ actor DurableIngressJournal {
                 source: discarded ? "rollback.terminal_discard" : "rollback.terminal_applied"
             )
         }
+        return terminalCommitted
     }
 
 #if DEBUG
@@ -1169,6 +1207,13 @@ actor DurableIngressJournal {
 #endif
 
     @discardableResult
+    func hasAckResponsibility(identity: ProviderDeliveryAckFailureStore.DeliveryIdentity) throws -> Bool {
+        try withDatabase(write: false) { db in
+            guard let state = try ackState(db, ackID: identity.storageKey) else { return false }
+            return ["pending", "retry_wait", "leased", "blocked_auth", "completed"].contains(state)
+        }
+    }
+
     func markAck(
         identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         stage: ProviderDeliveryAckFailureStore.Stage,

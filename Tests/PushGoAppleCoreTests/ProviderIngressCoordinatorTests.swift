@@ -258,6 +258,7 @@ struct ProviderIngressCoordinatorTests {
                     recordProviderError: { error, _ in providerErrors.append(String(describing: error)) }
                 )
             )
+            #expect(ProviderGatewayTokenStore().save(token: "test-token", baseURL: baseURL))
             for kind in ["message", "event"] {
                 let messageID = "ingress-child-\(kind)"
                 var payload: [String: String] = [
@@ -273,8 +274,14 @@ struct ProviderIngressCoordinatorTests {
                     "provider_device_key": "original-device",
                 ]
                 if kind == "event" { payload["event_id"] = messageID }
+                let identity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                    deliveryId: "delivery-\(kind)", baseURL: baseURL,
+                    deviceKey: "original-device", ackContract: .v2Batch))
+                // Explicitly seed an already acquired V2 receipt. Raw APNs
+                // literals are not authorization for child persistence.
                 let enqueued = await inbox.enqueue(codablePayload: payload.mapValues(AnyCodable.init), requestIdentifier: "delivery-\(kind)",
-                    source: "test.thing-child.host-inbox")
+                    source: "test.synthetic_acquired_v2.thing-child", ackIdentity: identity,
+                    requiredEntryState: "terminal_local", postChangeNotification: false)
                 #expect(enqueued)
             }
             #expect(await coordinator.mergeInbox(reason: "test_pending_children", allowWakeupSync: false) == 2)
@@ -288,20 +295,27 @@ struct ProviderIngressCoordinatorTests {
             #expect(markers.allSatisfy {
                 $0.identity?.baseURLString == baseURL.absoluteString
                     && $0.identity?.deviceKey == "original-device"
-                    && $0.identity?.ackContract == .legacySingle
+                    && $0.identity?.ackContract == .v2Batch
             })
 
             gateway.baseURL = try #require(URL(string: "https://\(host)/NewGateway"))
             gateway.deviceKey = "new-device"
             await coordinator.drainAckMarkers(source: "test_pending_children_after_config_change")
-            #expect(httpState.recordedPaths() == ["/OriginalGateway/messages/ack", "/OriginalGateway/messages/ack"])
-            #expect(httpState.recordedDeviceKeys() == ["original-device", "original-device"])
+            #expect(httpState.recordedPaths() == ["/OriginalGateway/v2/messages/ack"])
+            #expect(httpState.recordedDeviceKeys() == ["original-device"])
             #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
 
-            #expect(await inbox.enqueue(payload: [
+            let parentIdentity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: "delivery-parent", baseURL: baseURL,
+                deviceKey: "original-device", ackContract: .v2Batch))
+            #expect(await inbox.enqueue(codablePayload: [
                 "entity_type": "thing", "entity_id": "ingress-parent", "thing_id": "ingress-parent",
                 "message_id": "ingress-parent-message", "title": "Exact ingress parent", "body": "Parent body",
-            ], requestIdentifier: "parent-request", source: "test.thing-child.parent"))
+                "delivery_id": "delivery-parent", "base_url": baseURL.absoluteString,
+                "provider_device_key": "original-device",
+            ].mapValues(AnyCodable.init), requestIdentifier: "delivery-parent",
+                source: "test.synthetic_acquired_v2.thing-parent", ackIdentity: parentIdentity,
+                requiredEntryState: "terminal_local", postChangeNotification: false))
             #expect(await coordinator.mergeInbox(reason: "test_parent_replay", allowWakeupSync: false) == 1)
             #expect(persistedKinds == ["pending", "pending", "main"])
             #expect(appliedCount == 3, "Parent replay must not emit additional child ingress results")
@@ -318,6 +332,9 @@ struct ProviderIngressCoordinatorTests {
                 #expect(child.deliveryId == "delivery-\(kind)")
             }
             #expect(await store.drainDerivedWorkForBackgroundRefresh())
+            await coordinator.drainAckMarkers(source: "test_parent_replay_after_config_change")
+            #expect(httpState.recordedPaths() == ["/OriginalGateway/v2/messages/ack", "/OriginalGateway/v2/messages/ack"])
+            #expect(httpState.recordedDeviceKeys() == ["original-device", "original-device"])
             #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(providerErrors.isEmpty)
         }
@@ -477,12 +494,12 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
-    func alreadyDestructivelyFetchedLegacyPayloadDrainsAcrossFailureAndReopenWithoutNetworkOrAck() async throws {
+    func unprovenLegacyRawMarkerStaysPendingAcrossReopenWithoutCanonicalContentOrAck() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "old-pull-drain-\(UUID().uuidString.lowercased()).example"
             let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
             let httpState = ProviderIngressHTTPState(pullPayloads: [], v2RouteNotFound: true)
-            let capture = ProviderIngressCapture(results: [.failed, .persisted])
+            let capture = ProviderIngressCapture(results: [.persisted])
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
             #expect(await inbox.enqueue(
                 payload: [
@@ -507,10 +524,17 @@ struct ProviderIngressCoordinatorTests {
             let resumed = makeCoordinatorContext(host: host, baseURL: baseURL, store: reopened,
                 appGroupIdentifier: appGroupIdentifier, httpState: httpState, capture: capture, persistToStore: true)
             defer { resumed.cleanup() }
-            #expect(await resumed.coordinator.mergeInbox(reason: "legacy_drain_resume", allowWakeupSync: false) == 1)
-            #expect(try await reopened.loadMessage(messageId: "legacy-recovered-message")?.title == "Already fetched content")
-            #expect(try await reopened.loadMessage(messageId: "legacy-recovered-message")?.body == "Preserve destructive fetch across upgrade")
+            #expect(await resumed.coordinator.mergeInbox(reason: "legacy_drain_resume", allowWakeupSync: false) == 0)
+            #expect(try await reopened.loadMessage(messageId: "legacy-recovered-message") == nil)
             #expect(await inbox.pendingEntries().isEmpty)
+            #expect((await inbox.queueCounts(importLegacyState: false)).outstanding == 1)
+            let rawIdentity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: "legacy-recovery-001", baseURL: baseURL,
+                deviceKey: "old-device", ackContract: .legacySingle))
+            let retainedRaw = try #require(await inbox.durablePayload(identity: rawIdentity))
+            #expect(retainedRaw["title"]?.value as? String == "Already fetched content")
+            #expect(retainedRaw["body"]?.value as? String == "Preserve destructive fetch across upgrade")
+            #expect(await capture.deliveryIds.isEmpty)
             #expect(await resumed.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(httpState.recordedPaths().isEmpty)
         }
@@ -538,6 +562,16 @@ struct ProviderIngressCoordinatorTests {
                 deviceKey: "device-key",
                 ackContract: .legacySingle
             ))
+            // This tests recovery of an existing legacy ACK duty, not admission
+            // of a new APNs advertisement. Commit its exact historical content.
+            let accepted = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                ["message_id": "accepted-legacy-direct-001", "delivery_id": identity.deliveryId,
+                 "entity_type": "message", "entity_id": "accepted-legacy-direct-001",
+                 "title": "Accepted legacy content", "body": "Already committed before the ACK worker",
+                 "base_url": baseURL.absoluteString, "provider_device_key": "device-key"],
+                requestIdentifier: identity.deliveryId, dataStore: store)
+            guard case .persistedMain = accepted else { Issue.record("Legacy ACK fixture must really commit its processed fact"); return }
+            #expect(ProviderGatewayTokenStore().save(token: "token", baseURL: baseURL))
             #expect(await context.ackStore.markInboxDurable(
                 identity: identity,
                 source: "test.legacy.direct",
@@ -578,6 +612,19 @@ struct ProviderIngressCoordinatorTests {
             }
             #expect(ProviderGatewayTokenStore().save(token: "token-a", baseURL: baseURLA))
             #expect(ProviderGatewayTokenStore().save(token: "token", baseURL: baseURLB))
+
+            // Both duties predate the configuration switch and already own
+            // canonical facts. A caller's .persisted literal is not that proof.
+            for (origin, device, messageID) in [(baseURLA, "device-a", "accepted-direct-a"),
+                                               (baseURLB, "device-b", "accepted-direct-b")] {
+                let accepted = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                    ["message_id": messageID, "delivery_id": "same-direct-id",
+                     "entity_type": "message", "entity_id": messageID,
+                     "title": "Accepted \(device)", "body": "Original accepted \(device) content",
+                     "base_url": origin.absoluteString, "provider_device_key": device],
+                    requestIdentifier: "same-direct-id", dataStore: store)
+                guard case .persistedMain = accepted else { Issue.record("Each legacy scope must own a real accepted fact"); return }
+            }
 
             await context.coordinator.ackDirectDeliveryIfNeeded(
                 payload: [
@@ -929,6 +976,7 @@ struct ProviderIngressCoordinatorTests {
                     "provider_mode": "wakeup",
                     "delivery_id": "must-not-destructively-pull",
                     "base_url": baseURL.absoluteString,
+                    "provider_device_key": "device-key",
                     "title": "Recovery hint",
                 ],
                 requestIdentifier: "must-not-destructively-pull",
@@ -940,10 +988,15 @@ struct ProviderIngressCoordinatorTests {
                 allowWakeupSync: false
             ) == 0)
             let paths = httpState.recordedPaths()
-            #expect(!paths.isEmpty)
-            #expect(paths.allSatisfy { $0 == "/GatewayA/v2/messages/pull" })
+            #expect(paths.isEmpty)
             #expect(!paths.contains("/GatewayA/messages/pull"))
             #expect(await capture.deliveryIds.isEmpty)
+            #expect((await inbox.queueCounts(importLegacyState: false)).outstanding == 1)
+            let retainedIdentity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: "must-not-destructively-pull", baseURL: baseURL,
+                deviceKey: "device-key", ackContract: .legacySingle))
+            let retainedHint = try #require(await inbox.durablePayload(identity: retainedIdentity))
+            #expect(retainedHint["delivery_id"]?.value as? String == "must-not-destructively-pull")
         }
     }
 
@@ -962,21 +1015,33 @@ struct ProviderIngressCoordinatorTests {
                 appGroupIdentifier: appGroupIdentifier,
                 httpState: httpState,
                 capture: capture,
-                progressCapture: progressCapture
+                progressCapture: progressCapture,
+                persistToStore: true
             )
             defer { context.cleanup() }
 
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
             for index in 0..<265 {
+                let receiptIdentity = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                    deliveryId: "batch-drain-\(index)", baseURL: baseURL,
+                    deviceKey: "device-key", ackContract: .v2Batch))
                 #expect(await inbox.enqueue(
                     codablePayload: [
                         "message_id": AnyCodable("batch-drain-\(index)"),
                         "delivery_id": AnyCodable("batch-drain-\(index)"),
+                        "entity_type": AnyCodable("message"),
+                        "entity_id": AnyCodable("batch-drain-\(index)"),
+                        "base_url": AnyCodable(baseURL.absoluteString),
+                        "provider_device_key": AnyCodable("device-key"),
                         "title": AnyCodable("Batch \(index)"),
                         "body": AnyCodable("Body \(index)"),
                     ],
                     requestIdentifier: "batch-drain-\(index)",
-                    source: "test.progressive_batch"
+                    // An explicit acquired-receipt fixture; capture below is
+                    // only a concurrency gate, while the real Store commits.
+                    source: "test.synthetic_acquired_v2.progressive_batch",
+                    ackIdentity: receiptIdentity, requiredEntryState: "terminal_local",
+                    postChangeNotification: false
                 ))
             }
 
@@ -999,7 +1064,7 @@ struct ProviderIngressCoordinatorTests {
             #expect(await first.value == 265)
             #expect(await joining.value == 265)
             #expect(await capture.batchSizes == [64, 200, 1])
-            #expect(await capture.pulledInputs == Array(repeating: false, count: 265))
+            #expect(await capture.pulledInputs == Array(repeating: true, count: 265))
             #expect(progressCapture.events == [
                 .processing(completed: 0, total: 265),
                 .processing(completed: 64, total: 265),
@@ -1008,6 +1073,8 @@ struct ProviderIngressCoordinatorTests {
                 .completed(processed: 265),
             ])
             #expect(await inbox.pendingEntries().isEmpty)
+            #expect(try await store.loadMessages().count == 265)
+            #expect(httpState.recordedPaths().isEmpty)
         }
     }
 

@@ -24,7 +24,7 @@ final class NotificationServiceProcessor {
             from: sanitizedPayload
         ) {
             let durableHint = await notificationIngressInbox.enqueueWithResult(
-                codablePayload: codablePayloadDictionary(from: sanitizedPayload),
+                codablePayload: codablePayloadDictionary(from: UserInfoSanitizer.providerRecoveryHint(sanitizedPayload)),
                 requestIdentifier: deliveryID,
                 source: "nse.wakeup_hint"
             )
@@ -112,16 +112,17 @@ final class NotificationServiceProcessor {
         ingress: NotificationIngressResolution,
         preparedContent: UNMutableNotificationContent
     ) async -> NotificationIngressInbox.EnqueueResult {
-        let codablePayload = codablePayloadDictionary(from: preparedContent.userInfo)
+        let codablePayload: [String: AnyCodable]
+        if case .pulled = ingress {
+            codablePayload = codablePayloadDictionary(from: preparedContent.userInfo)
+        } else {
+            codablePayload = codablePayloadDictionary(from: UserInfoSanitizer.providerRecoveryHint(preparedContent.userInfo))
+        }
         let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
         let requiredEntryState: String
         switch ingress {
-        case let .direct(payload, _):
-            ackIdentity = NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil
-                ? ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(
-                    from: UserInfoSanitizer.sanitize(payload)
-                )
-                : nil
+        case .direct, .processedDuplicate:
+            ackIdentity = nil
             requiredEntryState = "durable"
         case let .pulled(_, deliveryID, context):
             ackIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
@@ -131,7 +132,7 @@ final class NotificationServiceProcessor {
                 ackContract: .v2Batch
             )
             requiredEntryState = "terminal_local"
-        case .claimedByPeer, .unresolvedWakeup:
+        case .failed, .claimedByPeer, .unresolvedWakeup:
             ackIdentity = nil
             requiredEntryState = "durable"
         }
@@ -151,13 +152,16 @@ final class NotificationServiceProcessor {
     ) -> String {
         let requestIdentifier: String?
         switch ingress {
+        case .failed: requestIdentifier = nil
+        case let .processedDuplicate(payload):
+            requestIdentifier = NotificationHandling.providerIngressRequestIdentifier(from: payload)
         case let .direct(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
         case let .pulled(_, ingressRequestIdentifier, _):
             requestIdentifier = ingressRequestIdentifier
         case let .claimedByPeer(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
-        case let .unresolvedWakeup(_, ingressRequestIdentifier):
+        case let .unresolvedWakeup(_, ingressRequestIdentifier, _):
             requestIdentifier = ingressRequestIdentifier
         }
         return requestIdentifier ?? request.identifier
@@ -177,6 +181,7 @@ final class NotificationServiceProcessor {
         to content: UNMutableNotificationContent
     ) {
         switch ingress {
+        case .failed: break
         case let .pulled(payload, _, _):
             NotificationHandling.applyResolvedPayload(payload, to: content)
         case let .claimedByPeer(payload, _):
@@ -186,14 +191,14 @@ final class NotificationServiceProcessor {
                 content.userInfo = UserInfoSanitizer.sanitize(payload)
                 applyUnresolvedWakeupNotice(to: content)
             }
-        case let .unresolvedWakeup(payload, _):
+        case let .unresolvedWakeup(payload, _, _):
             if let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload) {
                 NotificationHandling.applyResolvedPayload(fallbackPayload, to: content)
             } else {
                 content.userInfo = UserInfoSanitizer.sanitize(payload)
                 applyUnresolvedWakeupNotice(to: content)
             }
-        case let .direct(payload, _):
+        case let .direct(payload, _), let .processedDuplicate(payload):
             NotificationHandling.applyResolvedPayload(payload, to: content)
         }
     }

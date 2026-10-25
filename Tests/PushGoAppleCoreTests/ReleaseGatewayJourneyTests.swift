@@ -142,17 +142,16 @@ struct ReleaseGatewayJourneyTests {
                 let result = await resumed.syncProviderIngressOutcome(reason: "manual_real_deep_reopen")
                 #expect(result.completedRequest && result.appliedCount == 10)
                 // Exercise the normal default recovery entry, including its
-                // existing due inbox batches, rather than bypassing that work.
-                // Losing the frontier would add a second 200-item network head
-                // on top of these 200 retained inbox retries and fail this oracle.
-                try #require(pages.count >= 3)
-                let retryPages = Array(pages.dropFirst().dropLast())
-                let retriedIDs = retryPages.flatMap { $0 }
-                #expect(retryPages.allSatisfy { !$0.isEmpty && $0.count <= 200 })
-                #expect(retriedIDs.count == 200 && Set(retriedIDs) == headIDs)
+                // due inbox batches. The processed-fact precheck now detects
+                // the same typed conflict before attempting canonical writes.
+                // Their exact durable payloads/backoff are checked below.
+                // Losing the frontier would still add another 200-item network
+                // head and fail this exact two-page oracle.
+                try #require(pages.count == 2)
+                #expect(Set(pages[0]) == headIDs)
                 let lastPage = try #require(pages.last)
                 #expect(Set(lastPage) == tailIDs)
-                #expect(conflictCount == 400)
+                #expect(conflictCount == 200)
                 let savedCompleted = try gate.readFrontier()
                 let completed = try #require(savedCompleted)
                 #expect(completed.pageToken == nil)
@@ -196,7 +195,7 @@ struct ReleaseGatewayJourneyTests {
                 let newArrival = await resumed.syncProviderIngressOutcome(reason: "manual_real_deep_new_arrival")
                 #expect(newArrival.completedRequest && newArrival.appliedCount == 1)
                 #expect(pages.suffix(2).map(\.count) == [200, 1])
-                #expect(conflictCount == 600)
+                #expect(conflictCount == 400)
                 let allRows = try await reopened.loadMessages()
                 let largeRow = try #require(allRows.first { $0.operationId?.lowercased() == largeOperation.lowercased() })
                 #expect(largeRow.body == large.body)
@@ -212,7 +211,8 @@ struct ReleaseGatewayJourneyTests {
                         "historical_ledger_fixture": "200 explicitly injected unattributed/deleted local facts; no server-row injection",
                         "unacknowledged_head_delivery_ids": headIDs.sorted(), "acknowledged_tail_delivery_ids": tailIDs.sorted(),
                         "event_ids": eventIDs, "first_persistence_count": pages[0].count,
-                        "resumed_inbox_retry_page_counts": retryPages.map(\.count), "resumed_network_tail_count": 10,
+                        "resumed_inbox_canonical_retry_page_counts": [Int](), "resumed_network_tail_count": 10,
+                        "retained_conflicts_rejected_before_canonical_write": true,
                         "retained_failed_payload_count": retainedCounts.outstanding, "retained_failed_due_count": retainedCounts.due,
                         "retained_failed_payload_identity_and_fields_verified": 200,
                         "identity_conflicts": conflictCount, "ordinary_tail_count": 5, "event_tail_count": 5,

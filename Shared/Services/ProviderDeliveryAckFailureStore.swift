@@ -198,6 +198,10 @@ actor ProviderDeliveryAckFailureStore {
         await journal.nextAckAttemptDate(now: now)
     }
 
+    func hasAckResponsibility(identity: DeliveryIdentity) async throws -> Bool {
+        try await journal.hasAckResponsibility(identity: identity)
+    }
+
     func acquireAckLease(
         _ marker: PendingMarker,
         owner: String,

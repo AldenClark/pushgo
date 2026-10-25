@@ -103,33 +103,22 @@ final class WatchNotificationServiceProcessor {
             ingressRequestIdentifier = requestIdentifier
         }
         let codablePayload = codablePayloadDictionary(from: content.userInfo)
-        let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
-        let requiredEntryState: String
-        switch ingress {
-        case let .direct(payload, _):
-            ackIdentity = providerWakeupDeliveryId(from: UserInfoSanitizer.sanitize(payload)) == nil
-                ? ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(
-                    from: UserInfoSanitizer.sanitize(payload)
-                )
-                : nil
-            requiredEntryState = "durable"
-        case .unresolvedWakeup:
-            ackIdentity = nil
-            requiredEntryState = "durable"
-        }
+        // APNs content is a durable hint, not proof that authenticated content
+        // was acquired. Only the host's successful targeted V2 Pull may create
+        // a canonical delivery and its ACK responsibility.
         return await notificationIngressInbox.enqueue(
             codablePayload: codablePayload,
             requestIdentifier: ingressRequestIdentifier ?? request.identifier,
             source: "watch_nse",
-            ackIdentity: ackIdentity,
-            requiredEntryState: requiredEntryState
+            ackIdentity: nil,
+            requiredEntryState: "durable"
         )
     }
 
     private func codablePayloadDictionary(
         from payload: [AnyHashable: Any]
     ) -> [String: AnyCodable] {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let sanitized = UserInfoSanitizer.providerRecoveryHint(payload)
         return sanitized.reduce(into: [String: AnyCodable]()) { result, item in
             result[item.key] = AnyCodable(item.value)
         }

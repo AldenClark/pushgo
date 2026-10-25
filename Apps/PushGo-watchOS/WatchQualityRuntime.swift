@@ -393,25 +393,46 @@ enum WatchQualityRuntime {
             }
         }
         try await environment.loadQualityServerConfigFromStore()
+        let originalSentAt = Int64(Date().addingTimeInterval(-2 * 60 * 60).timeIntervalSince1970 * 1_000)
+        // The existing Watch light quantizer stores receivedAt at whole-second
+        // precision. Keep millisecond input on the wire, and assert that exact
+        // supported representation rather than inventing a new time policy.
+        let expectedStoredSentAt = (originalSentAt / 1_000) * 1_000
         let probe = QualityWatchV2WakeupProbe()
         environment.installQualityGatewayTransport { request in
-            try await probe.respond(request, store: store, messageID: messageID, deliveryID: deliveryID, deviceKey: deviceKey, unsupported: unsupported)
+            try await probe.respond(request, store: store, messageID: messageID, deliveryID: deliveryID,
+                                    deviceKey: deviceKey, expectedToken: config.token,
+                                    sentAtMilliseconds: originalSentAt, unsupported: unsupported)
         }
         let wakeupID = unsupported ? "\(deliveryID)-unsupported" : deliveryID
+        let advertisedBody = "Unverified APNs advertisement must not become saved content."
         let hint: [String: AnyCodable] = [
-            "provider_wakeup": AnyCodable("1"), "provider_mode": AnyCodable("wakeup"),
+            "provider_mode": AnyCodable("direct"),
             "delivery_id": AnyCodable(wakeupID), "base_url": AnyCodable(config.baseURL.absoluteString),
             "provider_device_key": AnyCodable(deviceKey),
-            "aps": AnyCodable(["content-available": 1]),
+            "message_id": AnyCodable(messageID), "watch_light_kind": AnyCodable("message"),
+            "title": AnyCodable("Unverified APNs preview"), "body": AnyCodable(advertisedBody),
+            "aps": AnyCodable(["alert": ["title": "Unverified APNs preview", "body": advertisedBody]]),
         ]
         await environment.qualityReceiveDurableWakeup(hint)
+        let factsBeforeDuplicate = try await store.loadWatchDeliveryRecords()
         if !unsupported { await environment.qualityReceiveDurableWakeup(hint) }
         let requests = await probe.recordedPaths()
+        let authorizationChecks = await probe.recordedAuthorizationChecks()
+        let targetedIDs = await probe.recordedTargetedDeliveryIDs()
+        guard authorizationChecks.count == requests.count, authorizationChecks.allSatisfy({ $0 }),
+              targetedIDs == [wakeupID]
+        else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Full APNs hint lost authenticated targeted V2 request context") }
         let messages = try await store.loadWatchLightMessages()
         guard messages.count == 1, let message = messages.first,
               message.messageId == messageID, message.title == "Silent V2 delivery",
               message.body == "Pulled content survives duplicate wakeups and reopen."
         else { throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 wakeup lost or duplicated accurate content") }
+        let storedSentAt = Int64((message.receivedAt.timeIntervalSince1970 * 1_000).rounded())
+        guard (unsupported || storedSentAt == expectedStoredSentAt),
+              !WatchNotificationFreshness.shouldPresent(
+                payload: ["sent_at": String(storedSentAt)], configuredMinutes: 30)
+        else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Delayed V2 content must retain its original time without renewing Watch reminder freshness") }
         if unsupported {
             try writeGatewayRouteResult(
                 status: "DIAGNOSTIC", scenario: "watch.v2-wakeup-unsupported", sessionID: sessionID, detail: nil,
@@ -420,7 +441,7 @@ enum WatchQualityRuntime {
                            "toast_actual": environment.toastMessage?.text ?? "<missing>"],
                 filename: "quality-v2-wakeup-diagnostic.json"
             )
-            guard message.isRead, requests == [ChannelSubscriptionService.pullV2Path, ChannelSubscriptionService.pullV2Path],
+            guard message.isRead, requests == [ChannelSubscriptionService.pullV2Path],
                   environment.toastMessage?.text == environment.localizationManager.localized("gateway_v2_pull_required")
             else {
                 throw WatchQualityRuntimeError.gatewayRouteInvariant(
@@ -428,11 +449,20 @@ enum WatchQualityRuntime {
                 )
             }
         } else {
+            let deliveryFacts = try await store.loadWatchDeliveryRecords().filter { $0.deliveryId == deliveryID }
             guard requests == [ChannelSubscriptionService.pullV2Path, ChannelSubscriptionService.batchAckV2Path],
-                  try await store.loadWatchDeliveryRecords().filter({ $0.deliveryId == deliveryID }).count == 1
+                  deliveryFacts.count == 1,
+                  let before = factsBeforeDuplicate.first(where: { $0.deliveryId == deliveryID }),
+                  let after = deliveryFacts.first, after.persistedAt == before.persistedAt
             else { throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 wakeup must Pull once and ACK once after durable Store, including duplicate hint") }
         }
-        return ["http_paths": requests, "message_id": message.messageId, "body": message.body, "message_count": messages.count, "read_after_reopen": message.isRead, "unsupported": unsupported]
+        return ["http_paths": requests, "authorization_matches_expected": authorizationChecks,
+                "targeted_delivery_ids": targetedIDs, "input": "full_apns_direct_hint",
+                "message_id": message.messageId, "body": message.body, "message_count": messages.count,
+                "configured_fixture_sent_at_ms": originalSentAt,
+                "stored_original_sent_at_ms": storedSentAt, "stored_time_precision": "seconds",
+                "watch_reminder_fresh_at_30_minutes": false,
+                "read_after_reopen": message.isRead, "unsupported": unsupported]
     }
 
     private static func prepareStandardImage() async throws {
@@ -838,12 +868,16 @@ private enum WatchQualityRuntimeError: LocalizedError {
 /// A bounded transport probe for the production Watch wakeup/Store/ACK path.
 private actor QualityWatchV2WakeupProbe {
     private var paths: [String] = []
+    private var authorizationChecks: [Bool] = []
+    private var targetedDeliveryIDs: [String] = []
 
     func recordedPaths() -> [String] { paths }
+    func recordedAuthorizationChecks() -> [Bool] { authorizationChecks }
+    func recordedTargetedDeliveryIDs() -> [String] { targetedDeliveryIDs }
 
     func respond(
         _ request: URLRequest, store: LocalDataStore, messageID: String,
-        deliveryID: String, deviceKey: String, unsupported: Bool
+        deliveryID: String, deviceKey: String, expectedToken: String?, sentAtMilliseconds: Int64, unsupported: Bool
     ) async throws -> (Data, URLResponse) {
         guard let url = request.url, url.host == "quality-watch-v2.pushgo.dev",
               request.httpMethod == "POST",
@@ -852,11 +886,20 @@ private actor QualityWatchV2WakeupProbe {
               body["device_key"] as? String == deviceKey
         else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Unexpected V2 wakeup request identity") }
         paths.append(url.path)
+        let authorizationMatches = expectedToken.map { request.value(forHTTPHeaderField: "Authorization") == "Bearer \($0)" } ?? false
+        authorizationChecks.append(authorizationMatches)
+        guard authorizationMatches else {
+            throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 request did not use the configured authentication context")
+        }
         let data: [String: Any]
         let status: Int
         if url.path == ChannelSubscriptionService.pullV2Path {
             guard body["delivery_id"] as? String == (unsupported ? "\(deliveryID)-unsupported" : deliveryID) else {
                 throw WatchQualityRuntimeError.gatewayRouteInvariant("Silent wakeup lost targeted delivery ID")
+            }
+            targetedDeliveryIDs.append(unsupported ? "\(deliveryID)-unsupported" : deliveryID)
+            if !unsupported, try await store.loadWatchLightMessage(messageId: messageID) != nil {
+                throw WatchQualityRuntimeError.gatewayRouteInvariant("Raw APNs content was saved before authenticated V2 content arrived")
             }
             status = unsupported ? 404 : 200
             data = unsupported
@@ -865,12 +908,13 @@ private actor QualityWatchV2WakeupProbe {
                     "delivery_id": deliveryID,
                     "payload": ["message_id": messageID, "watch_light_kind": "message",
                                 "title": "Silent V2 delivery", "body": "Pulled content survives duplicate wakeups and reopen.",
-                                "sent_at": "1800000000000", "severity": "normal"],
+                                "sent_at": String(sentAtMilliseconds), "severity": "normal"],
                 ]]]]
         } else if url.path == ChannelSubscriptionService.batchAckV2Path {
             guard !unsupported, body["delivery_ids"] as? [String] == [deliveryID],
                   let stored = try await store.loadWatchLightMessage(messageId: messageID),
                   stored.body == "Pulled content survives duplicate wakeups and reopen.",
+                  Int64((stored.receivedAt.timeIntervalSince1970 * 1_000).rounded()) == (sentAtMilliseconds / 1_000) * 1_000,
                   try await store.loadWatchDeliveryRecords().contains(where: { $0.deliveryId == deliveryID })
             else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Gateway ACK preceded accurate durable Watch content") }
             status = 200

@@ -250,21 +250,16 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
             channelSubscriptionService: channelSubscriptionService
         )
         switch ingress {
+        case let .failed(error):
+            AppEnvironment.shared.notificationIngressController.recordResolutionFailure(error, source: "provider.remote_notification.origin.macos")
+        case let .processedDuplicate(knownPayload):
+            await AppEnvironment.shared.ackDirectProviderIngressIfNeeded(payload: knownPayload, outcome: .duplicate,
+                source: "provider.remote_notification.known.macos")
         case .claimedByPeer:
             return
-        case let .unresolvedWakeup(resolvedPayload, requestIdentifier):
-            guard !AppEnvironment.shared.shouldDeferStartupWakeupPulls else {
-                return
-            }
-            let unresolvedDeliveryId = requestIdentifier
-                ?? NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload)
-            if let unresolvedDeliveryId {
-                _ = await AppEnvironment.shared.syncProviderIngress(
-                    deliveryId: unresolvedDeliveryId,
-                    reason: "did_receive_remote_notification_unresolved",
-                    skipInboxMerge: true
-                )
-            }
+        case let .unresolvedWakeup(_, _, error):
+            if let error { AppEnvironment.shared.notificationIngressController.recordResolutionFailure(error, source: "provider.remote_notification.targeted.macos") }
+            break
         case let .pulled(resolvedPayload, requestIdentifier, context):
             _ = await AppEnvironment.shared.persistPulledProviderIngress(
                 payload: resolvedPayload,
@@ -272,16 +267,8 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
                 context: context,
                 source: "provider.remote_notification.pulled.macos"
             )
-        case let .direct(resolvedPayload, requestIdentifier):
-            let outcome = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
-                resolvedPayload,
-                requestIdentifier: requestIdentifier
-            )
-            await AppEnvironment.shared.ackDirectProviderIngressIfNeeded(
-                payload: resolvedPayload,
-                outcome: outcome,
-                source: "provider.remote_notification.direct.macos"
-            )
+        case .direct:
+            break
         }
     }
 

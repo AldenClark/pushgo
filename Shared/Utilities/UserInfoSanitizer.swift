@@ -1,6 +1,15 @@
 import Foundation
 
 struct UserInfoSanitizer {
+    /// Provider bytes are only a recovery hint until an authenticated Pull.
+    /// OS presentation keeps the original content; the journal needs identity
+    /// and candidate-routing fields, not another copy of the advertised body.
+    static func providerRecoveryHint(_ payload: [AnyHashable: Any]) -> [String: Any] {
+        let keys: Set<String> = ["delivery_id", "message_id", "op_id", "entity_type", "entity_id",
+            "event_id", "thing_id", "channel_id", "base_url", "gateway", "gateway_url", "server", "server_url",
+            "provider_device_key", "provider_wakeup", "provider_mode", "sent_at"]
+        return sanitize(payload).filter { keys.contains($0.key) }
+    }
     static func sanitize(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
         userInfo.reduce(into: [String: Any]()) { result, element in
             guard let key = element.key as? String else { return }

@@ -162,6 +162,21 @@ actor NotificationIngressInbox {
         await journal.durableIngressPayload(identity: identity)
     }
 
+    func hasProcessedDelivery(_ identity: ProviderDeliveryAckFailureStore.DeliveryIdentity) async throws -> Bool {
+        try await journal.hasProcessedDelivery(baseURL: identity.baseURLString,
+            deviceKey: identity.deviceKey, deliveryID: identity.deliveryId)
+    }
+
+    func removeRedundantHint(_ claimed: ClaimedEntry) async -> Bool {
+        await journal.removeRedundantIngressHint(entryID: claimed.record.entryId,
+            owner: claimed.owner, generation: claimed.leaseGeneration)
+    }
+
+    func finishKnownReceipt(_ claimed: ClaimedEntry) async throws -> Bool {
+        try await journal.finishKnownIngressReceipt(entryID: claimed.record.entryId,
+            owner: claimed.owner, generation: claimed.leaseGeneration)
+    }
+
     func markCompleted(_ entry: PendingEntry) async {
         await journal.markIngressCompleted(entryID: entry.record.entryId)
     }
@@ -211,11 +226,12 @@ actor NotificationIngressInbox {
         )
     }
 
+    @discardableResult
     func markTerminal(
         identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         discarded: Bool,
         reason: String? = nil
-    ) async {
+    ) async -> Bool {
         await journal.markIngressTerminal(
             identity: identity,
             discarded: discarded,

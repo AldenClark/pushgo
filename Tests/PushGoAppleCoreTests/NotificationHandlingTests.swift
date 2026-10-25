@@ -261,7 +261,7 @@ struct NotificationHandlingTests {
                 channelSubscriptionService: ChannelSubscriptionService()
             )
 
-            guard case let .unresolvedWakeup(unresolvedPayload, requestIdentifier) = resolution else {
+            guard case let .unresolvedWakeup(unresolvedPayload, requestIdentifier, _) = resolution else {
                 Issue.record("Expected wakeup ingress without server candidates to remain unresolved.")
                 return
             }

@@ -2521,6 +2521,18 @@ actor LocalDataStore {
         }
     }
 
+    /// A provider hint may replay an already accepted exact identity, but must
+    /// never use its advertised content to enrich or recreate a canonical row.
+    func hasProcessedNotificationReplay(_ message: PushMessage) async throws -> Bool {
+        guard let source = message.providerSourceBaseURL, let url = URL(string: source),
+              let base = normalizedProviderGatewayURL(url),
+              let device = normalizeOperationField(message.rawPayload["provider_device_key"]?.value as? String),
+              let delivery = normalizeOperationField(message.deliveryId) else { return false }
+        let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)
+        if try await journal.hasProcessedDelivery(baseURL: base.absoluteString, deviceKey: device, deliveryID: delivery) { return true }
+        return try await requireBackend().hasProcessedNotificationReplay(message)
+    }
+
     private func hasRetainedProcessedDeliveryWithoutContent(
         _ message: PushMessage,
         journal: DurableIngressJournal
@@ -8216,6 +8228,44 @@ private actor GRDBStore {
             try upsertOperationLedger(identity: identity,
                 messageId: message.messageId ?? message.id.uuidString,
                 appliedAt: identity.opId.isEmpty ? firstDeliveryProcessedAt! : Date(), db: db)
+        }
+    }
+
+    func hasProcessedNotificationReplay(_ message: PushMessage) throws -> Bool {
+        guard let origin = notificationProvenOriginScope(message),
+              let delivery = normalizeOperationField(message.deliveryId) else { return false }
+        return try read { db in
+            // Preserve the established historical ambiguity rejection.
+            _ = try isProcessedNotificationWithoutContent(message, db: db)
+            // A retained ACK duty stores only its proven recipient and
+            // delivery, not the body/entity type. Read all three existing
+            // exact-delivery facts, including a deleted Event/Thing. This
+            // permits only a content-free ACK, never reconstruction or a
+            // new ownership claim from the advertised entity fields.
+            for prefix in ["delivery", "processed-event-delivery", "processed-thing-delivery"] {
+                let key = "\(prefix):\(origin)|\(delivery.utf8.count):\(delivery)"
+                guard let fact = try fetchOperationLedger(scopeKey: key, db: db),
+                      fact.deliveryId == delivery else { continue }
+                if fact.opId.isEmpty && fact.appliedAt <= Date().addingTimeInterval(-DurableIngressJournal.processedDeliveryRetentionInterval) { continue }
+                return true
+            }
+            for identity in [notificationProcessedOperationIdentity(message), notificationDeliveryScopeIdentity(message)].compactMap({ $0 }) {
+                guard let fact = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
+                      fact.deliveryId == delivery else { continue }
+                if fact.opId.isEmpty && fact.appliedAt <= Date().addingTimeInterval(-DurableIngressJournal.processedDeliveryRetentionInterval) { continue }
+                return true
+            }
+            // Old visible canonical rows may predate retained facts. Stream
+            // exact-delivery candidates instead of loading their full bodies
+            // into a second unbounded array across Gateway ID reuse.
+            let cursor = try Row.fetchCursor(db, sql: "SELECT * FROM messages WHERE delivery_id = ? ORDER BY received_at DESC;", arguments: [delivery])
+            while let row = try cursor.next() {
+                let canonical = GRDBMessageRecord(row: row).toPushMessage(decoder: decoder)
+                if notificationProvenOriginScope(canonical) == notificationProvenOriginScope(message)
+                    && (message.messageId == nil || message.messageId == canonical.messageId)
+                    && (message.operationId == nil || message.operationId == canonical.operationId) { return true }
+            }
+            return false
         }
     }
 

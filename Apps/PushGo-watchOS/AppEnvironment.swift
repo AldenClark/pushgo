@@ -139,13 +139,14 @@ final class AppEnvironment {
                 var results: [ProviderIngressPersistenceResult] = []
                 results.reserveCapacity(inputs.count)
                 for input in inputs {
+                    guard input.isPulled else { results.append(.failed); continue }
                     let persisted = await self.persistStandaloneResolvedPayload(
                         input.payload,
                         requestIdentifier: input.requestIdentifier,
                         fallbackRequestIdentifier: input.requestIdentifier,
                         fallbackTitle: "",
                         fallbackBody: "",
-                        ingressSource: input.isPulled ? .watchPull : .watchAPNS
+                        ingressSource: .watchPull
                     )
                     results.append(persisted ? .persisted : .failed)
                 }
@@ -160,17 +161,20 @@ final class AppEnvironment {
             },
             reportInboxProgress: { _ in },
             recordProviderError: { [weak self] error, source in
-                self?.recordAutomationRuntimeError(error, source: source, category: "provider")
-                if let appError = error as? AppError,
-                   appError.code == "provider_pull_v2_required" {
-                    self?.updateStandaloneReadiness(false, failureReason: "provider_pull_v2_required")
-                    self?.showErrorToast(appError, duration: 8)
-                }
+                self?.recordProviderResolutionFailure(error, source: source)
             }
             )
         )
         providerIngressCoordinatorStorage = coordinator
         return coordinator
+    }
+
+    private func recordProviderResolutionFailure(_ error: Error, source: String) {
+        recordAutomationRuntimeError(error, source: source, category: "provider")
+        if let appError = error as? AppError, appError.code == "provider_pull_v2_required" {
+            updateStandaloneReadiness(false, failureReason: "provider_pull_v2_required")
+            showErrorToast(appError, duration: 8)
+        }
     }
 
     private init(
@@ -1615,6 +1619,7 @@ final class AppEnvironment {
         ingressSource: WatchIngressSource,
         ignoreSkipPersistence: Bool = false
     ) async -> Bool {
+        guard ingressSource == .watchPull else { return false }
         let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, pair in
             result[pair.key] = pair.value
         }
@@ -1667,23 +1672,8 @@ final class AppEnvironment {
             ?? normalizedText(payload["provider_delivery_id"])
             ?? normalizedText(notificationRequestId)
         guard let deliveryId else { return nil }
-        if ingressSource == .watchPull {
-            return WatchDeliveryMetadata.pulled(deliveryId: deliveryId, payload: payload)
-        }
-        let gatewayKey = normalizedText(payload["gateway_key"])
-            ?? normalizedText(payload["gateway"])
-            ?? serverConfig?.gatewayKey
-            ?? "default"
-        let deviceKey = await dataStore.cachedDeviceKey(for: platformIdentifier())?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return WatchDeliveryMetadata(
-            deliveryId: deliveryId,
-            gatewayKey: gatewayKey,
-            watchDeviceKey: deviceKey?.isEmpty == false ? deviceKey : nil,
-            ingressSource: ingressSource,
-            contentDigest: normalizedText(payload["content_digest"]),
-            serverAckState: .pending
-        )
+        guard ingressSource == .watchPull else { return nil }
+        return WatchDeliveryMetadata.pulled(deliveryId: deliveryId, payload: payload)
     }
 
     private func normalizedText(_ value: String?) -> String? {
@@ -2136,6 +2126,11 @@ final class AppEnvironment {
     ) async {
         let payload: [AnyHashable: Any]
         switch ingress {
+        case .failed: return
+        case let .processedDuplicate(payload):
+            _ = await providerIngressCoordinator.ackProcessedDeliveryIfNeeded(payload: payload, source: source)
+            scheduleProviderAckDrain(source: "\(source).worker")
+            return
         case let .direct(resolvedPayload, _):
             payload = resolvedPayload
             if NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil {
@@ -2314,10 +2309,18 @@ final class AppEnvironment {
             fallbackServerConfig: serverConfig,
             channelSubscriptionService: channelSubscriptionService
         )
+        guard !Task.isCancelled else { return false }
         let title = notification.request.content.title
         let body = notification.request.content.body
         let fallbackRequestIdentifier = notification.request.identifier
         switch ingress {
+        case let .failed(error):
+            recordAutomationRuntimeError(error, source: "provider.notification.origin.watchos", category: "storage")
+            return false
+        case let .processedDuplicate(payload):
+            _ = await providerIngressCoordinator.ackProcessedDeliveryIfNeeded(payload: payload, source: "provider.known.watchos")
+            scheduleProviderAckDrain(source: "provider.known.watchos")
+            return true
         case let .pulled(payload, requestIdentifier, context):
             guard await providerIngressCoordinator.journalPulledPayload(
                 payload,
@@ -2349,33 +2352,13 @@ final class AppEnvironment {
             )
             scheduleProviderAckDrain(source: "provider.notification.pulled.watchos.ack")
             return persisted
-        case let .direct(payload, requestIdentifier):
-            let persisted = await persistStandaloneResolvedPayload(
-                payload,
-                requestIdentifier: requestIdentifier,
-                fallbackRequestIdentifier: fallbackRequestIdentifier,
-                fallbackTitle: title,
-                fallbackBody: body,
-                ingressSource: .watchAPNS
-            )
-            if persisted {
-                await ackStandaloneProviderIngressIfNeeded(
-                    ingress: ingress,
-                    source: "provider.direct.ack.watchos"
-                )
-            }
-            return persisted
+        case .direct:
+            return false
         case .claimedByPeer:
             return true
-        case let .unresolvedWakeup(payload, requestIdentifier):
-            let unresolvedDeliveryId = requestIdentifier
-                ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
-            guard let unresolvedDeliveryId else { return true }
-            let pulled = await syncStandaloneProviderIngress(
-                deliveryId: unresolvedDeliveryId,
-                reason: "delegate_unresolved_wakeup"
-            )
-            return pulled > 0
+        case let .unresolvedWakeup(_, _, error):
+            if let error { recordProviderResolutionFailure(error, source: "provider.notification.targeted.watchos") }
+            return false
         }
     }
 
