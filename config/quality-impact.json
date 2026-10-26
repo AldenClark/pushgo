@@ -382,7 +382,7 @@
     },
     {
       "id": "update-distribution-contract",
-      "paths": ["release/appcast.xml", "release/appstore.json", "release/update-notes/*.json", "scripts/release_appcast.sh", "scripts/publish_update_artifacts.sh", "scripts/verify_update_distribution.py", "scripts/run_macos_update_install_test.sh", "scripts/macos_ui_driver.swift", "scripts/tests/test_update_distribution.py"],
+      "paths": ["release/appcast.xml", "release/appstore.json", "release/update-notes/*.json", "scripts/release_appcast.sh", "scripts/publish_update_artifacts.sh", "scripts/verify_update_distribution.py", "scripts/run_macos_update_install_test.sh", "scripts/run_macos_sparkle_path_test.py", "scripts/fixtures/SparklePathTestHost.m", "scripts/macos_ui_driver.swift", "scripts/tests/test_update_distribution.py"],
       "capabilities": ["update-distribution"],
       "minimum_evidence": ["Sparkle/App Store metadata semantic contract", "Release-only real macOS signed update install and relaunch journey"],
       "required_checks": ["apple-update-distribution-contract"],

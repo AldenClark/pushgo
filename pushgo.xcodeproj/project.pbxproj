@@ -3804,7 +3804,7 @@
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
 				kind = exactVersion;
-				version = 2.9.3;
+				version = 2.10.1;
 			};
 		};
 		A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {

@@ -94,7 +94,10 @@ private func wait(
     throw DriverError.timeout("timed out after \(timeout) seconds")
 }
 
-private func press(_ element: AXUIElement) -> Bool {
+private func press(_ element: AXUIElement, accessibilityOnly: Bool = false) -> Bool {
+    if accessibilityOnly {
+        return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+    }
     if
         let positionValue = valueAttribute(kAXPositionAttribute as CFString, of: element),
         let sizeValue = valueAttribute(kAXSizeAttribute as CFString, of: element)
@@ -218,7 +221,7 @@ private func run() throws {
             return press(target)
         }
 
-    case "click-title":
+    case "click-title", "press-title":
         guard CommandLine.arguments.count >= 5 else {
             throw DriverError.usage("click-title <bundle-id> <timeout> <title> [title ...]")
         }
@@ -229,9 +232,10 @@ private func run() throws {
         try wait(timeout: timeout) {
             guard let target = element(bundleIdentifier: bundleID, matching: {
                 stringAttribute(kAXRoleAttribute as CFString, of: $0) == (kAXButtonRole as String)
+                    && (attribute(kAXEnabledAttribute as CFString, of: $0) as? Bool) == true
                     && valueMatches($0, candidates: titles)
             }) else { return false }
-            guard press(target) else { return false }
+            guard press(target, accessibilityOnly: command == "press-title") else { return false }
             pressedTitle = [
                 stringAttribute(kAXTitleAttribute as CFString, of: target),
                 stringAttribute(kAXDescriptionAttribute as CFString, of: target),
@@ -247,20 +251,21 @@ private func run() throws {
             "wait-installed-relaunch <bundle-id> <app-path> <expected-version> <old-pid> <timeout>"
         )
         let bundleID = CommandLine.arguments[2]
-        let appPath = URL(fileURLWithPath: CommandLine.arguments[3]).standardizedFileURL
+        let appPath = URL(fileURLWithPath: CommandLine.arguments[3]).resolvingSymlinksInPath()
         let expectedVersion = CommandLine.arguments[4]
         let oldPID = pid_t(CommandLine.arguments[5]) ?? 0
         let timeout = TimeInterval(CommandLine.arguments[6]) ?? 0
         var newPID: pid_t = 0
+        var requestedRelaunch = false
         try wait(timeout: timeout, poll: 0.2) {
-            if let relaunch = element(bundleIdentifier: bundleID, matching: {
+            if !requestedRelaunch, let relaunch = element(bundleIdentifier: bundleID, matching: {
                 stringAttribute(kAXRoleAttribute as CFString, of: $0) == (kAXButtonRole as String)
                     && valueMatches(
                         $0,
                         candidates: ["Install and Relaunch", "安装并重新启动", "安裝並重新啟動"]
                     )
             }) {
-                _ = press(relaunch)
+                requestedRelaunch = press(relaunch)
             }
             let infoURL = appPath.appendingPathComponent("Contents/Info.plist")
             guard
@@ -268,12 +273,34 @@ private func run() throws {
                 info["CFBundleShortVersionString"] as? String == expectedVersion
             else { return false }
             guard let app = applications(bundleIdentifier: bundleID).first(where: {
-                $0.processIdentifier != oldPID && $0.bundleURL?.standardizedFileURL == appPath
+                $0.processIdentifier != oldPID && $0.bundleURL?.resolvingSymlinksInPath() == appPath
             }) else { return false }
             newPID = app.processIdentifier
             return true
         }
         print(newPID)
+
+    case "identity":
+        try requireArguments(4, "identity <bundle-id> <expected-app-path>")
+        let expected = URL(fileURLWithPath: CommandLine.arguments[3])
+        guard let app = applications(bundleIdentifier: CommandLine.arguments[2]).first,
+              let actual = app.bundleURL else {
+            throw DriverError.accessibility("requested application is not running")
+        }
+        let resolvedExpected = expected.resolvingSymlinksInPath()
+        let resolvedActual = actual.resolvingSymlinksInPath()
+        guard resolvedActual == resolvedExpected else {
+            throw DriverError.accessibility("running application path differs from requested test bundle")
+        }
+        let result: [String: Any] = [
+            "pid": app.processIdentifier,
+            "requested_path": expected.path,
+            "running_path": actual.path,
+            "resolved_requested_path": resolvedExpected.path,
+            "resolved_running_path": resolvedActual.path,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+        print(String(decoding: data, as: UTF8.self))
 
     case "dump":
         try requireArguments(3, "dump <bundle-id>")

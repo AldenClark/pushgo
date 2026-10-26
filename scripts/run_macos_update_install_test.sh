@@ -2,6 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Explicit test-only path: actual official updater and helpers in an isolated
+# ad-hoc host, without production PushGo entitlements, profiles, or signing keys.
+if [[ -n "${MACOS_UPDATE_SPARKLE_PATH_PACKAGE:-}" ]]; then
+  exec python3 "$repo_root/scripts/run_macos_sparkle_path_test.py" \
+    --package-root "$MACOS_UPDATE_SPARKLE_PATH_PACKAGE" \
+    --results-root "${MACOS_UPDATE_SPARKLE_PATH_RESULTS:?a new task-owned results directory is required}"
+fi
+
 quality_results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"
 results_root="$quality_results_root/macos-update-install"
 timestamp="$(date +%Y%m%d-%H%M%S)"
