@@ -578,7 +578,19 @@ struct ProviderIngressCoordinatorTests {
                 postNotification: false
             ))
 
+            let recoveredPayload: [AnyHashable: Any] = ["delivery_id": identity.deliveryId,
+                "base_url": baseURL.absoluteString, "provider_device_key": "device-key"]
+            await context.coordinator.ackDirectDeliveryIfNeeded(payload: recoveredPayload,
+                result: .persisted, source: "test.legacy.direct.completion")
+            #expect(await context.coordinator.ackProcessedDeliveryIfNeeded(
+                payload: recoveredPayload, source: "test.legacy.processed.duplicate"))
+            let restarted = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let recoveredDuties = await restarted.pendingMarkers(limit: 10, minimumAge: 0)
+            #expect(recoveredDuties.count == 1)
+            #expect(recoveredDuties.first?.identity == identity)
             await context.coordinator.drainAckMarkers(source: "test_legacy_direct_drain")
+            await context.coordinator.drainAckMarkers(source: "test_legacy_repeated_drain")
+            #expect(await restarted.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
 
             #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(httpState.recordedPaths() == ["/GatewayA/messages/ack"])
@@ -644,10 +656,17 @@ struct ProviderIngressCoordinatorTests {
                 result: .persisted,
                 source: "test.direct.b"
             )
+            // A new journal connection recovers the persisted duties unchanged.
+            let restartedAckStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let duties = await restartedAckStore.pendingMarkers(limit: 10, minimumAge: 0)
+            #expect(duties.count == 2)
+            #expect(duties.allSatisfy { $0.identity?.ackContract == .v2Batch })
             await context.coordinator.drainAckMarkers(source: "test.direct.drain")
+            await context.coordinator.drainAckMarkers(source: "test.direct.repeated-recovery")
+            #expect(await restartedAckStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
 
-            #expect(stateA.recordedPaths() == ["/GatewayA/messages/ack"])
-            #expect(stateB.recordedPaths() == ["/GatewayB/messages/ack"])
+            #expect(stateA.recordedPaths() == ["/GatewayA/v2/messages/ack"])
+            #expect(stateB.recordedPaths() == ["/GatewayB/v2/messages/ack"])
             #expect(stateA.recordedDeviceKeys() == ["device-a"])
             #expect(stateB.recordedDeviceKeys() == ["device-b"])
             #expect(stateA.recordedAuthorizationHeaders() == ["Bearer token-a"])
@@ -692,7 +711,7 @@ struct ProviderIngressCoordinatorTests {
             await context.coordinator.ackDirectDeliveryIfNeeded(payload: payload,
                 result: ProviderIngressPersistenceResult(replay), source: "test.deleted.direct")
             await context.coordinator.drainAckMarkers(source: "test.deleted.direct.drain")
-            #expect(httpState.recordedPaths() == ["/OriginalGateway/messages/ack"])
+            #expect(httpState.recordedPaths() == ["/OriginalGateway/v2/messages/ack"])
             #expect(httpState.recordedDeviceKeys() == ["original-device"])
             #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
             #expect(try await store.loadMessage(messageId: "deleted-direct-message") == nil)
@@ -740,6 +759,20 @@ struct ProviderIngressCoordinatorTests {
                 source: "test.direct.missing-delivery-id"
             )
 
+            // A complete advertisement plus a caller's .persisted literal is
+            // still no acceptance proof and must create neither ACK contract.
+            await context.coordinator.ackDirectDeliveryIfNeeded(
+                payload: ["delivery_id": "unproven", "base_url": baseURL.absoluteString,
+                          "provider_device_key": "payload-device"],
+                result: .persisted, source: "test.direct.unproven")
+            await context.coordinator.drainAckMarkers(source: "test.direct.unproven.drain")
+            for contract in [ProviderDeliveryAckFailureStore.AckContract.legacySingle, .v2Batch] {
+                let unproven = try #require(ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                    deliveryId: "unproven", baseURL: baseURL, deviceKey: "payload-device", ackContract: contract))
+                // pendingMarkers excludes future retries, so it alone cannot
+                // establish that no durable responsibility was created.
+                #expect(try await !context.ackStore.hasAckResponsibility(identity: unproven))
+            }
             #expect(httpState.recordedPaths().isEmpty)
             #expect(await context.ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
         }

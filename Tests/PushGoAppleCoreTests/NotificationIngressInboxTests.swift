@@ -149,6 +149,25 @@ private func nMinusOneDecodeFiles<T: Decodable>(
 
 struct NotificationIngressInboxTests {
     @Test
+    func ackResponsibilityDistinguishesMissingJournalFromUnreadableExistingJournal() async throws {
+        try await withIsolatedAutomationStorage { _, group in
+            let journal = DurableIngressJournal(appGroupIdentifier: group)
+            let identity = testDeliveryIdentity(deliveryId: "accepted-before-journal")
+            let databaseURL = try #require(await journal.databaseURL)
+            #expect(try await !journal.hasAckResponsibility(identity: identity))
+            #expect(!FileManager.default.fileExists(atPath: databaseURL.path))
+            try FileManager.default.createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let unreadable = Data("not a SQLite journal".utf8)
+            try unreadable.write(to: databaseURL)
+            do {
+                _ = try await journal.hasAckResponsibility(identity: identity)
+                Issue.record("An unreadable existing journal must not authorize a new ACK duty")
+            } catch {
+                #expect(try Data(contentsOf: databaseURL) == unreadable)
+            }
+        }
+    }
+    @Test
     func pullFrontierResumesOneMetadataRowWithoutRewritingSameScope() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let journal = DurableIngressJournal(appGroupIdentifier: appGroupIdentifier)

@@ -985,12 +985,15 @@ final class ProviderIngressCoordinator {
         guard sanitized[ProviderLegacyDestructivePullMetadata.markerKey] as? String
             != ProviderLegacyDestructivePullMetadata.markerValue
         else { return }
-        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: sanitized) else { return }
-        _ = await ackMarkerStore.markInboxDurable(
-            identity: identity,
-            source: "\(source).pending",
-            postNotification: false
-        )
+        // New duties use V2, including recovery of a previously accepted direct
+        // delivery. A caller's result alone cannot prove the immutable origin.
+        do {
+            guard try await NotificationHandling.hasProcessedProviderHint(payload,
+                dataStore: dataStore, notificationIngressInbox: notificationIngressInbox) else { return }
+            _ = await ackProcessedDeliveryIfNeeded(payload: payload, source: "\(source).pending")
+        } catch {
+            hooks.recordProviderError(error, "\(source).origin_store_failed")
+        }
     }
 
     /// This is only called after an exact existing processed fact was read.
@@ -999,6 +1002,15 @@ final class ProviderIngressCoordinator {
         guard let old = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: UserInfoSanitizer.sanitize(payload)),
               let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(deliveryId: old.deliveryId,
                 baseURL: old.baseURL, deviceKey: old.deviceKey, ackContract: .v2Batch) else { return false }
+        // Recovery must not replace a persisted old contract merely because a
+        // processed duplicate was observed by the new release. Only new duties
+        // use V2; an existing single-item duty keeps its original owner/route.
+        do {
+            if try await ackMarkerStore.hasAckResponsibility(identity: old) { return true }
+        } catch {
+            hooks.recordProviderError(error, "\(source).ack_responsibility_store_failed")
+            return false
+        }
         if await ackMarkerStore.markInboxDurable(identity: identity, source: source, postNotification: false) { return true }
         // A leased or completed ACK already owns this exact duty. Do not
         // retain a duplicate raw hint forever or reopen the processed window.

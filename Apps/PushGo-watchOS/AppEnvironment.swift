@@ -2120,37 +2120,6 @@ final class AppEnvironment {
         )
     }
 
-    private func ackStandaloneProviderIngressIfNeeded(
-        ingress: NotificationIngressResolution,
-        source: String
-    ) async {
-        let payload: [AnyHashable: Any]
-        switch ingress {
-        case .failed: return
-        case let .processedDuplicate(payload):
-            _ = await providerIngressCoordinator.ackProcessedDeliveryIfNeeded(payload: payload, source: source)
-            scheduleProviderAckDrain(source: "\(source).worker")
-            return
-        case let .direct(resolvedPayload, _):
-            payload = resolvedPayload
-            if NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil {
-                return
-            }
-        case .pulled:
-            return
-        case .claimedByPeer:
-            return
-        case .unresolvedWakeup:
-            return
-        }
-        await providerIngressCoordinator.ackDirectDeliveryIfNeeded(
-            payload: payload,
-            result: .persisted,
-            source: source
-        )
-        scheduleProviderAckDrain(source: "\(source).worker")
-    }
-
     private func drainProviderDeliveryAckFailures(source: String) async {
         await providerIngressCoordinator.drainAckMarkers(source: source)
         await scheduleNextProviderAckRetry(source: source)

@@ -23,7 +23,6 @@ enum ProviderWakeupResolution: @unchecked Sendable {
     case notWakeup
     case failed(Error)
     case processedDuplicate(payload: [AnyHashable: Any])
-    case recoveredDurable(payload: [AnyHashable: Any], requestIdentifier: String)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?, error: Error? = nil)
@@ -1060,8 +1059,6 @@ enum NotificationHandling {
             )
         case let .processedDuplicate(payload):
             return .processedDuplicate(payload: payload)
-        case let .recoveredDurable(resolvedPayload, requestIdentifier):
-            return .direct(payload: resolvedPayload, requestIdentifier: requestIdentifier)
         case let .pulled(resolvedPayload, requestIdentifier, context):
             return .pulled(
                 payload: resolvedPayload,

@@ -1208,7 +1208,11 @@ actor DurableIngressJournal {
 
     @discardableResult
     func hasAckResponsibility(identity: ProviderDeliveryAckFailureStore.DeliveryIdentity) throws -> Bool {
-        try withDatabase(write: false) { db in
+        guard let databaseURL else { throw JournalError.unavailable }
+        // A canonical fact may predate the journal. No file means no old ACK
+        // duty; an existing but unreadable database must still fail closed.
+        guard fileManager.fileExists(atPath: databaseURL.path) else { return false }
+        return try withDatabase(write: false) { db in
             guard let state = try ackState(db, ackID: identity.storageKey) else { return false }
             return ["pending", "retry_wait", "leased", "blocked_auth", "completed"].contains(state)
         }
