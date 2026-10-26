@@ -156,24 +156,23 @@ struct PendingLocalDeletionControllerTests {
     }
 
     @Test
-    func oldAcceptedQueueDrainsImmediatelyAndBecomesDormant() async throws {
-        try await withIsolatedLocalDataStore { (store, _) async throws -> Void in
+    func oldAcceptedQueueRequiresReviewAndPreservesContent() async throws {
+        try await withIsolatedLocalDataStore { @MainActor store, _ in
             let first = Self.makeMessage(title: "old undoable")
             let second = Self.makeMessage(title: "old queued")
-            try await store.saveMessage(first)
-            try await store.saveMessage(second)
+            try await store.saveMessagesBatch([first, second])
             for message in [first, second] {
                 _ = try await store.seedLegacyPendingLocalDeletion(summary: message.title, undoLabel: "Undo",
                     intent: .messages(ids: [message.id]), timeout: 3600, now: Date())
             }
-            let worker = await PendingLocalDeletionController(dataStore: store)
+            let worker = PendingLocalDeletionController(dataStore: store)
             await worker.restoreAndReconcile()
-            #expect(try await store.loadMessage(id: first.id) == nil)
-            #expect(try await store.loadMessage(id: second.id) == nil)
-            #expect(try await store.loadPendingLocalDeletions(now: Date()).isEmpty)
-            #expect(await worker.isDormant)
             await worker.sceneBecameActive()
-            #expect(await worker.isDormant)
+            #expect(try await store.loadMessage(id: first.id) != nil)
+            #expect(try await store.loadMessage(id: second.id) != nil)
+            #expect(worker.legacyRequests.count == 2)
+            #expect(worker.retryableRecoveryCount == 0)
+            #expect(!worker.isDormant)
         }
     }
 
@@ -210,127 +209,51 @@ struct PendingLocalDeletionControllerTests {
         try await withIsolatedLocalDataStore { (store, _) async throws -> Void in
             let message = Self.makeMessage(title: "cleanup-recovery")
             try await store.saveMessage(message)
-            let now = Date()
-            _ = try await store.seedLegacyPendingLocalDeletion(
-                summary: message.title,
-                undoLabel: "Undo",
-                intent: .messages(ids: [message.id]),
-                timeout: 0,
-                now: now
-            )
-            let claimed = try #require(try await store.claimNextPendingLocalDeletion(
-                owner: "lost-executor",
-                leaseDuration: 30,
-                now: now
-            ))
-            _ = try await store.commitClaimedPendingLocalDeletion(
-                id: claimed.id,
-                owner: "lost-executor",
-                now: now
-            )
-            #expect(try await store.nextPendingLocalDeletionCleanup() != nil)
-
+            let confirmed = try await store.prepareLocalDeletion(intent: .messages(ids: [message.id]))
+            _ = try await store.deleteConfirmedLocalData(confirmed)
+            #expect(try await store.nextPendingLocalDeletionCleanup()?.authority == .committed)
             let restored = await PendingLocalDeletionController(dataStore: store)
             await restored.restoreAndReconcile()
-
             #expect(try await store.loadMessage(id: message.id) == nil)
-            #expect(try await store.loadPendingLocalDeletions(now: Date()).isEmpty)
+            #expect(try await store.pendingLocalDeletionRecord(id: confirmed.id) == nil)
         }
     }
 
     @Test
-    func expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent() async throws {
-        try await withIsolatedLocalDataStore { (store, _) async throws -> Void in
+    func legacyLocalLeaseDoesNotAuthorizeDeletion() async throws {
+        try await withIsolatedLocalDataStore { store, group in
             let message = Self.makeMessage(title: "lease-recovery")
             try await store.saveMessage(message)
             let startedAt = Date()
-            let pending = try await store.seedLegacyPendingLocalDeletion(
-                summary: message.title,
-                undoLabel: "Undo",
-                intent: .messages(ids: [message.id]),
-                timeout: 0,
-                now: startedAt
-            )
-
-            let firstClaim = try #require(try await store.claimNextPendingLocalDeletion(
-                owner: "first-executor",
-                leaseDuration: 1,
-                now: startedAt
-            ))
-            #expect(firstClaim.id == pending.id)
-            #expect(firstClaim.state == .executing)
-            #expect(firstClaim.attemptCount == 1)
-
-            let recoveredAt = startedAt.addingTimeInterval(2)
-            let secondClaim = try #require(try await store.claimNextPendingLocalDeletion(
-                owner: "second-executor",
-                leaseDuration: 30,
-                now: recoveredAt
-            ))
-            #expect(secondClaim.id == pending.id)
-            #expect(secondClaim.state == .executing)
-            #expect(secondClaim.attemptCount == 2)
-            #expect(secondClaim.leaseOwner == "second-executor")
-            #expect(secondClaim.lastErrorCode == "execution_lease_expired")
-
+            let pending = try await store.seedLegacyPendingLocalDeletion(summary: message.title, undoLabel: "Undo",
+                intent: .messages(ids: [message.id]), timeout: 0, now: startedAt)
+            let directory = try AppConstants.appLocalDatabaseDirectory(appGroupIdentifier: group)
+            let queue = try DatabaseQueue(path: directory.appendingPathComponent(AppConstants.databaseStoreFilename).path)
+            try await queue.write { db in
+                try db.execute(sql: "UPDATE pending_local_deletions SET state = 'executing', attempt_count = 1, lease_owner = 'old-executor', lease_until_epoch_ms = 0 WHERE id = ?;", arguments: [pending.id.uuidString])
+            }
+            #expect(try await store.claimNextPendingLocalDeletion(owner: "replacement", leaseDuration: 30, now: startedAt.addingTimeInterval(2)) == nil)
             await #expect(throws: (any Error).self) {
-                _ = try await store.commitClaimedPendingLocalDeletion(
-                    id: secondClaim.id,
-                    owner: "first-executor",
-                    now: recoveredAt
-                )
+                _ = try await store.commitClaimedPendingLocalDeletion(id: pending.id, owner: "old-executor", now: Date())
             }
             #expect(try await store.loadMessage(id: message.id) != nil)
-
-            _ = try await store.commitClaimedPendingLocalDeletion(
-                id: secondClaim.id,
-                owner: "second-executor",
-                now: recoveredAt
-            )
-            try await store.completePendingLocalDeletionCleanup(id: secondClaim.id)
-
-            #expect(try await store.loadMessage(id: message.id) == nil)
-            #expect(try await store.loadPendingLocalDeletions(now: recoveredAt).isEmpty)
+            #expect(try await store.legacyLocalDeletionsRequiringReview(now: Date()).map(\.id) == [pending.id])
         }
     }
 
     @Test
-    func failedChannelCommitRollsBackPrimaryDeletionAndKeepsDurableLease() async throws {
-        try await withIsolatedLocalDataStore { (store, _) async throws -> Void in
+    func legacyChannelCannotBypassFreshConfirmationThroughCommitAPI() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
             let message = Self.makeMessage(title: "channel-rollback", channel: "channel-a")
             try await store.saveMessage(message)
-            let now = Date()
-            let pending = try await store.seedLegacyPendingLocalDeletion(
-                summary: "channel-a",
-                undoLabel: "Undo",
-                intent: .channelHistory(
-                    channelID: "channel-a",
-                    expectedGateway: "gateway-a",
-                    expectedUpdatedAt: now
-                ),
-                timeout: 0,
-                now: now
-            )
-            _ = try #require(try await store.claimNextPendingLocalDeletion(
-                owner: "channel-owner",
-                leaseDuration: 30,
-                now: now
-            ))
-
+            let pending = try await store.seedLegacyPendingLocalDeletion(summary: "channel-a", undoLabel: "Undo",
+                intent: .channelHistory(channelID: "channel-a", expectedGateway: "gateway-a", expectedUpdatedAt: Date()), timeout: 0, now: Date())
+            #expect(try await store.claimNextPendingLocalDeletion(owner: "channel-owner", leaseDuration: 30, now: Date()) == nil)
             await #expect(throws: (any Error).self) {
-                _ = try await store.commitClaimedPendingLocalDeletion(
-                    id: pending.id,
-                    owner: "channel-owner",
-                    now: now
-                )
+                _ = try await store.commitClaimedPendingLocalDeletion(id: pending.id, owner: "channel-owner", now: Date())
             }
-
             #expect(try await store.loadMessage(id: message.id) != nil)
-            let retained = try #require(
-                try await store.loadPendingLocalDeletions(now: now).first { $0.id == pending.id }
-            )
-            #expect(retained.state == .executing)
-            #expect(retained.leaseOwner == "channel-owner")
+            #expect(try await store.legacyLocalDeletionsRequiringReview(now: Date()).first?.id == pending.id)
         }
     }
 
@@ -366,7 +289,7 @@ struct PendingLocalDeletionControllerTests {
                 now: Date()
             )
             let restored = try #require(
-                try await store.loadPendingLocalDeletions(now: Date()).first { $0.id == inserted.id }
+                try await store.legacyLocalDeletionsRequiringReview(now: Date()).first { $0.id == inserted.id }
             )
             guard case let .channelHistory(_, _, actual) = restored.intent else {
                 Issue.record("Expected a restored channel deletion intent.")
@@ -377,7 +300,7 @@ struct PendingLocalDeletionControllerTests {
     }
 
     @Test
-    func malformedPersistedIntentIsQuarantinedAndDoesNotBlockQueuedDeletion() async throws {
+    func malformedPersistedIntentIsQuarantinedAndDoesNotBlockValidReview() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(
                 appGroupIdentifier: appGroupIdentifier,
@@ -411,17 +334,17 @@ struct PendingLocalDeletionControllerTests {
                 )
             }
 
-            let active = try await store.loadPendingLocalDeletions(now: now)
+            let active = try await store.legacyLocalDeletionsRequiringReview(now: now)
 
             #expect(active.count == 1)
             #expect(active.first?.intent == .events(ids: ["event-valid"]))
-            #expect(active.first?.state == .queued)
+            #expect(active.first?.state == .reconciliationRequired)
             #expect(active.first?.deadline == nil)
-            #expect(try await store.pendingLocalDeletionRecoveryCount() == 1)
+            #expect(try await store.pendingLocalDeletionRecoveryCount() == 2)
             let worker = await PendingLocalDeletionController(dataStore: store)
             await worker.restoreAndReconcile()
-            #expect(await worker.recoveryRequiredCount == 1)
-            #expect(await worker.recoveryErrorCodes == ["invalid_persisted_payload"])
+            #expect(await worker.recoveryRequiredCount == 2)
+            #expect(Set(await worker.recoveryErrorCodes) == Set(["invalid_persisted_payload", "legacy_deletion_reconfirmation_required"]))
             #expect(await worker.isDormant == false)
             #expect(try await store.loadPendingLocalDeletions(now: now).isEmpty)
             let payload = try await queue.read { db in

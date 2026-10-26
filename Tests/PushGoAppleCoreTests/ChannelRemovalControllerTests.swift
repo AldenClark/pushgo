@@ -294,25 +294,38 @@ struct ChannelRemovalControllerTests {
     }
 
     @Test(arguments: [false, true])
-    func legacyAcceptedChannelIntentUsesOriginalGatewayOrRetainsRecovery(originalGatewayUnavailable: Bool) async throws {
+    func legacyChannelRequiresFreshConfirmationOfOriginalGateway(originalGatewayUnavailable: Bool) async throws {
         try await withIsolatedLocalDataStore { @MainActor store, _ in
-            // This reference-epoch value changes by one Date ULP through the
-            // receipt's millisecond codec, reproducing the first PR failure.
             let fixture = try await Fixture.make(store: store,
                 configUpdatedAt: Date(timeIntervalSinceReferenceDate: 813_638_686.46743))
-            _ = try await store.seedLegacyPendingLocalDeletion(summary: "legacy", undoLabel: "Undo",
+            let old = try await store.seedLegacyPendingLocalDeletion(summary: "legacy", undoLabel: "Undo",
                 intent: .channelHistory(channelID: fixture.subscription.channelId, expectedGateway: fixture.original.gatewayKey,
                     expectedUpdatedAt: fixture.subscription.updatedAt), timeout: 0, now: Date())
             if originalGatewayUnavailable { fixture.current.config = ServerConfig(baseURL: URL(string: "https://replacement.example")!) }
-            let worker = PendingLocalDeletionController(dataStore: store, channelCommitHandler: { record, owner in
-                try await fixture.controller.commitPendingChannelRemoval(record: record, leaseOwner: owner)
-            })
+            let worker = PendingLocalDeletionController(dataStore: store,
+                configuration: { fixture.current.config },
+                legacyChannelPreparationHandler: { try await fixture.controller.prepareLegacyChannelRemoval($0) },
+                channelCommitHandler: { record, owner in
+                    try await fixture.controller.commitPendingChannelRemoval(record: record, leaseOwner: owner)
+                })
             await worker.restoreAndReconcile()
-            #expect(worker.recoveryRequiredCount == (originalGatewayUnavailable ? 1 : 0))
-            #expect(worker.isDormant == !originalGatewayUnavailable)
-            #expect(fixture.remote.calls == (originalGatewayUnavailable ? [] : [.unsubscribe(fixture.original.baseURL, fixture.original.token, fixture.subscription.channelId)]))
-            #expect(try await store.pendingLocalDeletionRecoveryCount() == (originalGatewayUnavailable ? 1 : 0))
-            #expect(try await store.loadChannelSubscriptions(gateway: fixture.original.gatewayKey, includeDeleted: false).count == (originalGatewayUnavailable ? 1 : 0))
+            #expect(fixture.remote.calls.isEmpty)
+            #expect(worker.legacyRequests.count == 1)
+            await worker.reviewLegacyRequest(id: old.id)
+            if originalGatewayUnavailable {
+                #expect(worker.legacyConfirmation == nil)
+                #expect(fixture.remote.calls.isEmpty)
+                await worker.cancelLegacyRequest(id: old.id)
+                #expect(try await store.loadChannelSubscriptions(gateway: fixture.original.gatewayKey, includeDeleted: false).count == 1)
+            } else {
+                let draft = try #require(worker.legacyConfirmation)
+                #expect(fixture.remote.calls.isEmpty)
+                await worker.confirmLegacyRequest(id: draft.id)
+                await worker.confirmLegacyRequest(id: draft.id)
+                #expect(fixture.remote.calls == [.unsubscribe(fixture.original.baseURL, fixture.original.token, fixture.subscription.channelId)])
+                #expect(try await store.loadChannelSubscriptions(gateway: fixture.original.gatewayKey, includeDeleted: false).isEmpty)
+            }
+            #expect(try await store.pendingLocalDeletionRecord(id: old.id) == nil)
         }
     }
 

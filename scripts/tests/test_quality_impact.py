@@ -481,7 +481,7 @@ final class PushGo_iOSUITests: XCTestCase {
                     "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
                     "testWatchReminderWindowUsesRealPickerAndPersistsAtLargeText",
                 ),
-                39,
+                40,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",

@@ -142,6 +142,9 @@ struct SettingsView: View {
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
             if environment.pendingLocalDeletionController.recoveryRequiredCount > 0 {
+                LegacyDeletionRecoverySection(controller: environment.pendingLocalDeletionController)
+            }
+            if environment.pendingLocalDeletionController.retryableRecoveryCount > 0 {
                 Button {
                     Task { await environment.pendingLocalDeletionController.retryRecovery() }
                 } label: {

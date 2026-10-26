@@ -550,3 +550,80 @@ private struct MessageHistoryCleanupActions: View {
     }
 
 }
+
+
+/// The finite set of paused legacy requests. This adds no new delayed-deletion producer.
+struct LegacyDeletionRecoverySection: View {
+    let controller: PendingLocalDeletionController
+    @Environment(LocalizationManager.self) private var localizationManager
+    @State private var presentedConfirmationID: UUID?
+    @State private var isPreparingReview = false
+    @State private var reviewTask: Task<Void, Never>?
+
+    private var unverifiedCount: Int {
+        max(0, controller.recoveryRequiredCount - controller.legacyRequests.count - controller.retryableRecoveryCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !controller.legacyRequests.isEmpty {
+                Text(localizationManager.localized("legacy_deletion_review_title")).font(.headline)
+                Text(localizationManager.localized("legacy_deletion_review_detail"))
+                    .foregroundStyle(.secondary)
+                ForEach(controller.legacyRequests) { record in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(record.summary.isEmpty ? localizationManager.localized("legacy_deletion_request") : record.summary)
+                            .lineLimit(3)
+                        HStack {
+                            Button(localizationManager.localized("legacy_deletion_review_action")) {
+                                guard !isPreparingReview else { return }
+                                isPreparingReview = true
+                                let presentationID = UUID()
+                                presentedConfirmationID = presentationID
+                                reviewTask = Task {
+                                    await controller.reviewLegacyRequest(id: record.id, presentationID: presentationID)
+                                    if presentedConfirmationID == presentationID { isPreparingReview = false }
+                                }
+                            }
+                            .accessibilityIdentifier("action.settings.review_legacy_deletion.\(record.id.uuidString)")
+                            Button(localizationManager.localized("legacy_deletion_cancel_request")) {
+                                Task { await controller.cancelLegacyRequest(id: record.id) }
+                            }
+                            .accessibilityIdentifier("action.settings.cancel_legacy_deletion.\(record.id.uuidString)")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(controller.isReviewingLegacyRequest || isPreparingReview)
+                    }
+                }
+            }
+            if controller.isReviewingLegacyRequest {
+                ProgressView().accessibilityLabel(localizationManager.localized("loading"))
+            }
+            if unverifiedCount > 0 {
+                Text(localizationManager.localized("legacy_deletion_unverified_detail"))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("state.settings.legacy_deletion_unverified")
+            }
+        }
+        .alert(localizationManager.localized("delete"), isPresented: Binding(
+            get: { presentedConfirmationID != nil && controller.legacyConfirmation?.id == presentedConfirmationID },
+            set: { _ in }
+        ), presenting: controller.legacyConfirmation) { confirmation in
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                Task { await controller.confirmLegacyRequest(id: confirmation.id) }
+            }
+            .accessibilityIdentifier("action.settings.confirm_legacy_deletion")
+            Button(localizationManager.localized("cancel"), role: .cancel) {
+                controller.dismissLegacyConfirmation(id: confirmation.id)
+            }
+            .accessibilityIdentifier("action.settings.dismiss_legacy_deletion")
+        } message: { confirmation in
+            Text(localizationManager.localized("local_deletion_confirmation_message", confirmation.summary))
+        }
+        .onDisappear {
+            reviewTask?.cancel()
+            isPreparingReview = false
+            if let presentedConfirmationID { controller.dismissLegacyConfirmation(id: presentedConfirmationID) }
+        }
+    }
+}

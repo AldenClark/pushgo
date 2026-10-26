@@ -100,6 +100,14 @@
         "toggle.settings.page.things": {
           "disposition": "DYNAMIC_PRODUCT_CONTRACT",
           "reason": "The shared page-visibility control constructs toggle.settings.page.<page>; the test verifies the Things entry disappears and returns across relaunch."
+        },
+        "action.settings.review_legacy_deletion.00000000-0000-0000-0000-000000000029": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "LegacyDeletionRecoverySection constructs this prefix with the durable request UUID. The App-owned synthetic v29 fixture owns exactly request 00000000-0000-0000-0000-000000000029. The representative native journey uses its real Settings buttons and checks exact content and relaunch; runtime execution status is reported separately."
+        },
+        "action.settings.cancel_legacy_deletion.00000000-0000-0000-0000-000000000029": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "LegacyDeletionRecoverySection constructs this prefix with the durable request UUID. The App-owned synthetic v29 fixture owns exactly request 00000000-0000-0000-0000-000000000029. The representative native journey uses its real Settings buttons and checks exact content and relaunch; runtime execution status is reported separately."
         }
       }
     },

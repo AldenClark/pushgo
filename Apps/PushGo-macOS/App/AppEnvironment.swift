@@ -244,6 +244,11 @@ final class AppEnvironment {
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
+        configuration: { [weak self] in self?.serverConfig },
+        legacyChannelPreparationHandler: { [weak self] record in
+            guard let self else { throw CancellationError() }
+            return try await self.channelSubscriptionController.prepareLegacyChannelRemoval(record)
+        },
         channelCommitHandler: { [weak self] record, owner in
             guard let self else { throw CancellationError() }
             return try await self.channelSubscriptionController.commitPendingChannelRemoval(

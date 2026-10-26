@@ -108,6 +108,7 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
 
 enum PushGoQualityLegacyStore: String, Codable, Sendable {
     case messagesV17 = "messages.v17"
+    case pendingDeletionV29 = "pending-deletion.v29"
 }
 
 enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {

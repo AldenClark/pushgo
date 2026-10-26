@@ -117,6 +117,11 @@ struct SettingsView: View {
             VStack(spacing: 16) {
                 if environment.pendingLocalDeletionController.recoveryRequiredCount > 0 {
                     cardContainer {
+                        LegacyDeletionRecoverySection(controller: environment.pendingLocalDeletionController)
+                    }
+                }
+                if environment.pendingLocalDeletionController.retryableRecoveryCount > 0 {
+                    cardContainer {
                         Button {
                             Task { await environment.pendingLocalDeletionController.retryRecovery() }
                         } label: {

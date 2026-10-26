@@ -375,6 +375,61 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(recovered.app.buttons["Rebuild database and exit"].exists)
     }
 
+    func testLegacyDeletionSettingsReviewCancelAndConfirmPreserveAccurateContentAcrossRelaunch() {
+        // Two owned sessions exercise cancellation and approval of the same synthetic v29 shape.
+        for confirm in [false, true] {
+            let sessionID = "ios-legacy-deletion-\(UUID().uuidString.lowercased())"
+            let context = configuredLaunchContext()
+            let session = qualitySessionPayload(sessionID: sessionID, fixture: "messages.standard", legacyStore: "pending-deletion.v29")
+            context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+            context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            launch(context.app)
+            assertQualityRuntimeReady(in: context.app, timeout: 15)
+            let original = context.app.staticTexts["Legacy Upgrade Message"]
+            XCTAssertTrue(original.waitForExistence(timeout: 8))
+            original.tap()
+            assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+            XCTAssertTrue(context.app.staticTexts["Preserved through the production database migration."].exists)
+            tapWhenHittable(element(in: context.app, identifier: "action.message.close"), timeout: 5, message: "Close exact legacy content")
+            openSettingsFromChannels(in: context.app)
+            XCTContext.runActivity(named: "Native Settings AX before legacy request action") { activity in
+                let snapshot = XCTAttachment(string: context.app.debugDescription)
+                snapshot.lifetime = .keepAlways
+                activity.add(snapshot)
+            }
+            let review = scrollToHittableElement(identifier: "action.settings.review_legacy_deletion.00000000-0000-0000-0000-000000000029", in: context.app)
+            tapWhenHittable(review, timeout: 8, message: "Review the finite old request through Settings")
+            XCTAssertTrue(context.app.alerts.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(context.app.alerts.firstMatch.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Legacy Upgrade Message")).firstMatch.exists)
+            if confirm {
+                tapWhenHittable(element(in: context.app, identifier: "action.settings.confirm_legacy_deletion"), timeout: 5, message: "Freshly confirm the exact old target")
+            } else {
+                tapWhenHittable(element(in: context.app, identifier: "action.settings.dismiss_legacy_deletion"), timeout: 5, message: "Dismissal preserves the old request and content")
+                XCTAssertTrue(review.waitForExistence(timeout: 5))
+                tapWhenHittable(element(in: context.app, identifier: "action.settings.cancel_legacy_deletion.00000000-0000-0000-0000-000000000029"), timeout: 5, message: "Cancel only the old deletion request")
+            }
+            XCTAssertTrue(review.waitForNonExistence(timeout: 8))
+            context.app.terminate()
+            let reopened = configuredLaunchContext()
+            reopened.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = session
+            launch(reopened.app)
+            assertQualityRuntimeReady(in: reopened.app, timeout: 15)
+            assertElementExists("screen.messages.list", in: reopened.app, timeout: 8)
+            if confirm { XCTAssertFalse(reopened.app.staticTexts["Legacy Upgrade Message"].exists) }
+            else {
+                let retained = reopened.app.staticTexts["Legacy Upgrade Message"]
+                XCTAssertTrue(retained.waitForExistence(timeout: 8))
+                retained.tap()
+                assertElementExists("sheet.message.detail", in: reopened.app, timeout: 8)
+                XCTAssertTrue(reopened.app.staticTexts["Preserved through the production database migration."].exists)
+                tapWhenHittable(element(in: reopened.app, identifier: "action.message.close"), timeout: 5, message: "Cancelled content retains its exact body after restart")
+            }
+            // A distinct fixture row must survive either decision, ruling out an empty-store false positive.
+            assertElementExists("message.row.00000000-0000-0000-0000-000000000001", in: reopened.app, timeout: 8)
+            reopened.app.terminate()
+        }
+    }
+
     func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
         let sessionID = "ios-standard-\(UUID().uuidString.lowercased())"
         let seeded = configuredLaunchContext()

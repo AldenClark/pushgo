@@ -160,6 +160,35 @@ final class ChannelSubscriptionController {
         )
     }
 
+    func prepareLegacyChannelRemoval(_ record: PendingLocalDeletionRecord) async throws -> PendingChannelRemovalTarget {
+        guard record.authority == .legacy, record.cleanup == nil,
+              record.lastErrorCode == "legacy_deletion_reconfirmation_required",
+              let config = serverConfigProvider()?.normalized() else { throw channelRemovalError("channel_removal_reconciliation_required") }
+        let channel: String
+        let gateway: String
+        let updatedAt: Date
+        let keepHistory: Bool
+        switch record.intent {
+        case let .channelHistory(id, originalGateway, originalUpdatedAt):
+            channel = id; gateway = originalGateway; updatedAt = originalUpdatedAt; keepHistory = false
+        case let .channelRemoval(original):
+            var comparable = config
+            comparable.notificationKeyMaterial = nil
+            guard comparable == original.originalConfig.normalized() else { throw channelRemovalError("gateway_changed_during_channel_removal") }
+            if let originalKey = original.originalDeviceKey {
+                guard await dataStore.cachedDeviceKey(for: platform, backfillWakeupDefaults: false) == originalKey else {
+                    throw channelRemovalError("channel_removal_reconciliation_required")
+                }
+            }
+            channel = original.channelID; gateway = original.originalConfig.gatewayKey
+            updatedAt = original.expectedUpdatedAt; keepHistory = original.keepHistory
+        default: throw channelRemovalError("channel_removal_reconciliation_required")
+        }
+        guard normalizedGateway(config.gatewayKey) == normalizedGateway(gateway) else { throw channelRemovalError("gateway_changed_during_channel_removal") }
+        let subscription = try await currentRemovalSubscription(gateway: gateway, channelID: channel, expectedUpdatedAt: updatedAt)
+        return try await prepareChannelRemoval(subscription: subscription, originalConfig: config, keepHistory: keepHistory)
+    }
+
     func commitPendingChannelRemoval(
         record: PendingLocalDeletionRecord,
         leaseOwner: String

@@ -39,11 +39,13 @@ class StoreMigrationRegistryContractTest(unittest.TestCase):
             test_text,
         )
         self.assertIn(
-            "loadPendingLocalDeletions(now: now)",
+            "legacyLocalDeletionsRequiringReview(now: now)",
             test_text,
         )
-        self.assertIn("afterMigration.first == pending", test_text)
-        self.assertIn("afterReopen.first == pending", test_text)
+        self.assertIn("afterMigration.first?.id == pending.id", test_text)
+        self.assertIn("afterMigration.first?.authority == .legacy", test_text)
+        self.assertIn("afterReopen.first?.id == pending.id", test_text)
+        self.assertIn("afterReopen.first?.deadline == pending.deadline", test_text)
 
 
 if __name__ == "__main__":

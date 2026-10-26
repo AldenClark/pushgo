@@ -47,6 +47,13 @@ struct LocalDeletionConfirmation: Sendable {
     let snapshot: [String]
     let summary: String
     let persistedConfiguration: ServerConfig?
+    var legacyRequestID: UUID? = nil
+}
+
+enum PendingLocalDeletionAuthority: String, Codable, Sendable {
+    case legacy
+    case confirmed
+    case committed
 }
 
 enum PendingLocalDeletionState: String, Codable, Equatable, Sendable {
@@ -84,6 +91,7 @@ struct PendingLocalDeletionRecord: Codable, Equatable, Identifiable, Sendable {
     let leaseUntil: Date?
     let cleanup: PendingLocalDeletionCleanup?
     let lastErrorCode: String?
+    let authority: PendingLocalDeletionAuthority
 }
 
 @MainActor
@@ -95,6 +103,19 @@ final class PendingLocalDeletionController {
     ) async throws -> PendingLocalDeletionCleanup
     typealias CleanupHandler = @Sendable (PendingLocalDeletionCleanup) async -> Void
     typealias FailureHandler = @MainActor (Error) -> Void
+    typealias LegacyChannelPreparationHandler = @MainActor @Sendable (PendingLocalDeletionRecord) async throws -> PendingChannelRemovalTarget
+
+    struct LegacyConfirmation: Identifiable {
+        enum Target {
+            case local(LocalDeletionConfirmation)
+            case channel(PendingChannelRemovalTarget, persistedConfiguration: ServerConfig?)
+        }
+        let id: UUID
+        let requestID: UUID
+        let summary: String
+        let configuration: ServerConfig?
+        let target: Target
+    }
 
     private let dataStore: LocalDataStore
     private let leaseDuration: TimeInterval
@@ -102,6 +123,8 @@ final class PendingLocalDeletionController {
     private let cleanupHandler: CleanupHandler?
     private let failureHandler: FailureHandler?
     private let dateProvider: @Sendable () -> Date
+    private let configuration: @MainActor () -> ServerConfig?
+    private let legacyChannelPreparationHandler: LegacyChannelPreparationHandler?
     private let leaseOwner = UUID().uuidString
 
     @ObservationIgnored private var wakeTask: Task<Void, Never>?
@@ -111,11 +134,17 @@ final class PendingLocalDeletionController {
     private(set) var isDormant = false
     private(set) var recoveryRequiredCount = 0
     private(set) var recoveryErrorCodes: [String] = []
+    private(set) var retryableRecoveryCount = 0
+    private(set) var legacyRequests: [PendingLocalDeletionRecord] = []
+    private(set) var legacyConfirmation: LegacyConfirmation?
+    private(set) var isReviewingLegacyRequest = false
 
     init(
         dataStore: LocalDataStore,
         leaseDuration: TimeInterval = 30,
         dateProvider: @escaping @Sendable () -> Date = { Date() },
+        configuration: @escaping @MainActor () -> ServerConfig? = { nil },
+        legacyChannelPreparationHandler: LegacyChannelPreparationHandler? = nil,
         channelCommitHandler: ChannelCommitHandler? = nil,
         cleanupHandler: CleanupHandler? = nil,
         failureHandler: FailureHandler? = nil
@@ -123,6 +152,8 @@ final class PendingLocalDeletionController {
         self.dataStore = dataStore
         self.leaseDuration = max(1, leaseDuration)
         self.dateProvider = dateProvider
+        self.configuration = configuration
+        self.legacyChannelPreparationHandler = legacyChannelPreparationHandler
         self.channelCommitHandler = channelCommitHandler
         self.cleanupHandler = cleanupHandler
         self.failureHandler = failureHandler
@@ -138,11 +169,11 @@ final class PendingLocalDeletionController {
         await processDueDeletions()
     }
 
-    /// Legacy entry point only: old accepted intents become due immediately.
+    /// Classify old requests without promoting persisted intent into confirmation.
     func restorePendingState() async {
         guard !isDormant else { return }
         do {
-            try await dataStore.forcePendingLocalDeletionsDue(now: dateProvider())
+            try await dataStore.classifyLegacyPendingLocalDeletions(now: dateProvider())
             await reloadAndArmWakeTask()
         } catch { failureHandler?(error) }
     }
@@ -169,6 +200,68 @@ final class PendingLocalDeletionController {
             isDormant = false
             await restoreAndReconcile()
         } catch { failureHandler?(error) }
+    }
+
+    func reviewLegacyRequest(id: UUID, presentationID: UUID = UUID()) async {
+        guard !isReviewingLegacyRequest, legacyConfirmation == nil else { return }
+        isReviewingLegacyRequest = true
+        defer { isReviewingLegacyRequest = false }
+        let captured = configuration()?.normalized()
+        do {
+            let candidates = try await dataStore.legacyLocalDeletionsRequiringReview(now: dateProvider())
+            guard let record = candidates.first(where: { $0.id == id }) else { return }
+            let target: LegacyConfirmation.Target
+            let summary: String
+            switch record.intent {
+            case .messages, .events, .things:
+                let confirmation = try await dataStore.prepareLegacyLocalDeletion(id: id)
+                target = .local(confirmation)
+                summary = confirmation.summary
+            case .channelHistory, .channelRemoval:
+                guard let legacyChannelPreparationHandler else { throw AppError.localStore("The original channel is unavailable for review.") }
+                let prepared = try await legacyChannelPreparationHandler(record)
+                let persisted = try await dataStore.legacyDeletionConfigurationSnapshot()
+                target = .channel(prepared, persistedConfiguration: persisted)
+                summary = prepared.channelID + " @ " + prepared.originalConfig.baseURL.absoluteString
+            }
+            guard !Task.isCancelled else { return }
+            guard captured == configuration()?.normalized() else { throw AppError.localStore("The configuration changed. Review the request again.") }
+            legacyConfirmation = LegacyConfirmation(id: presentationID, requestID: id, summary: summary, configuration: captured, target: target)
+        } catch { failureHandler?(error) }
+    }
+
+    func dismissLegacyConfirmation(id: UUID) {
+        guard legacyConfirmation?.id == id else { return }
+        legacyConfirmation = nil
+    }
+
+    func confirmLegacyRequest(id: UUID) async {
+        guard !isReviewingLegacyRequest, let confirmation = legacyConfirmation, confirmation.id == id else { return }
+        legacyConfirmation = nil // Consume before suspension; stale/duplicate buttons cannot execute twice.
+        isReviewingLegacyRequest = true
+        defer { isReviewingLegacyRequest = false }
+        do {
+            guard confirmation.configuration == configuration()?.normalized() else { throw AppError.localStore("The configuration changed. Review the request again.") }
+            switch confirmation.target {
+            case let .local(local): _ = try await dataStore.deleteConfirmedLocalData(local)
+            case let .channel(target, persistedConfiguration):
+                try await dataStore.confirmLegacyChannelRemoval(id: confirmation.requestID, target: target, configuration: persistedConfiguration)
+            }
+            isDormant = false
+            await processDueDeletions()
+        } catch { failureHandler?(error) }
+        await reloadAndArmWakeTask()
+    }
+
+    func cancelLegacyRequest(id: UUID) async {
+        guard !isReviewingLegacyRequest else { return }
+        isReviewingLegacyRequest = true
+        defer { isReviewingLegacyRequest = false }
+        do {
+            _ = try await dataStore.cancelLegacyLocalDeletion(id: id)
+            if legacyConfirmation?.requestID == id { legacyConfirmation = nil }
+        } catch { failureHandler?(error) }
+        await reloadAndArmWakeTask()
     }
 
     func cancelExecution() {
@@ -286,10 +379,13 @@ final class PendingLocalDeletionController {
             records = try await dataStore.loadPendingLocalDeletions(now: dateProvider())
             recoveryRequiredCount = try await dataStore.pendingLocalDeletionRecoveryCount()
             recoveryErrorCodes = try await dataStore.pendingLocalDeletionRecoveryErrorCodes()
+            retryableRecoveryCount = try await dataStore.retryablePendingLocalDeletionRecoveryCount()
+            legacyRequests = try await dataStore.legacyLocalDeletionsRequiringReview(now: dateProvider())
             isDormant = records.isEmpty && recoveryRequiredCount == 0
             if recoveryRequiredCount > 0 {
-                let key = recoveryErrorCodes.contains("channel_history_changed_during_removal")
-                    ? "channel_removal_reconfirmation_required" : "local_deletion_recovery_required"
+                let key = !legacyRequests.isEmpty ? "legacy_deletion_review_required"
+                    : recoveryErrorCodes.contains("channel_history_changed_during_removal")
+                        ? "channel_removal_reconfirmation_required" : "local_deletion_recovery_required"
                 failureHandler?(AppError.typedLocal(code: "pending_deletion_recovery_required", category: .local,
                     message: LocalizationManager.shared.localized(key)))
             }
@@ -308,7 +404,7 @@ final class PendingLocalDeletionController {
         let now = dateProvider()
         let dates = records.compactMap { record -> Date? in
             switch record.state {
-            case .undoable, .queued: return now
+            case .undoable, .queued: return nil
             case .retryWaiting: return record.retryAfter
             case .executing: return record.leaseUntil
             case .cleanupPending: return now.addingTimeInterval(2)

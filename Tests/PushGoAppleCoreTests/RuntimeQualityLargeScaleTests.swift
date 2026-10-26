@@ -281,6 +281,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v27_watch_standalone_alert_window"))
             #expect(applied.contains("v28_delivery_only_processed_retention"))
             #expect(applied.contains("v29_immutable_image_content_references"))
+            #expect(applied.contains("v30_legacy_deletion_confirmation_authority"))
 
             let migratedTables = try await dbQueue.read { db in
                 try Set(
@@ -330,13 +331,13 @@ struct RuntimeQualityLargeScaleTests {
                 appGroupIdentifier: appGroupIdentifier,
                 spotlightIndexer: nil
             )
-            let afterMigration = try await migratedStore.loadPendingLocalDeletions(now: now)
+            let afterMigration = try await migratedStore.legacyLocalDeletionsRequiringReview(now: now)
             #expect(afterMigration.count == 1)
-            #expect(afterMigration.first == pending)
+            #expect(afterMigration.first?.authority == .legacy)
             #expect(afterMigration.first?.id == pending.id)
             #expect(afterMigration.first?.summary == "Delete migrated event")
             #expect(afterMigration.first?.intent == .events(ids: ["migration-event-v24"]))
-            #expect(afterMigration.first?.state == .undoable)
+            #expect(afterMigration.first?.state == .reconciliationRequired)
             #expect(afterMigration.first?.deadline == pending.deadline)
 
             let migrationFacts = try await DatabaseQueue(path: databaseURL.path).read { db in
@@ -358,14 +359,14 @@ struct RuntimeQualityLargeScaleTests {
                 appGroupIdentifier: appGroupIdentifier,
                 spotlightIndexer: nil
             )
-            let afterReopen = try await reopenedStore.loadPendingLocalDeletions(now: now)
+            let afterReopen = try await reopenedStore.legacyLocalDeletionsRequiringReview(now: now)
             #expect(afterReopen.count == 1)
-            #expect(afterReopen.first == pending)
+            #expect(afterReopen.first?.authority == .legacy)
             #expect(afterReopen.first?.id == pending.id)
             #expect(afterReopen.first?.summary == "Delete migrated event")
             #expect(afterReopen.first?.undoLabel == "Undo")
             #expect(afterReopen.first?.intent == .events(ids: ["migration-event-v24"]))
-            #expect(afterReopen.first?.state == .undoable)
+            #expect(afterReopen.first?.state == .reconciliationRequired)
             #expect(afterReopen.first?.deadline == pending.deadline)
         }
     }
@@ -1108,7 +1109,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v26_output_system_snapshot_work',
                     'v27_watch_standalone_alert_window',
                     'v28_delivery_only_processed_retention',
-                    'v29_immutable_image_content_references'
+                    'v29_immutable_image_content_references',
+                    'v30_legacy_deletion_confirmation_authority'
                 );
                 """)
         }
