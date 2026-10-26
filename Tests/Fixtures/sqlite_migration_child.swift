@@ -68,6 +68,14 @@ private enum MigrationChild {
     static func main() async {
         let arguments = CommandLine.arguments
         guard arguments.count >= 3 else { Darwin._exit(31) }
+        if arguments[1] == "defaults-probe" {
+            let defaults = AppConstants.sharedUserDefaults(suiteName: arguments[2])
+            let value = arguments.count > 3
+                ? defaults.string(forKey: arguments[3]) ?? "missing"
+                : (defaults === UserDefaults.standard ? "standard" : "isolated")
+            FileHandle.standardOutput.write(Data((value + "\n").utf8))
+            Darwin._exit(0)
+        }
         if arguments[1] == "snapshot-crash-before-publish" || arguments[1] == "snapshot-pause-before-publish" {
             let manager: FileManager
             if arguments[1] == "snapshot-pause-before-publish" {

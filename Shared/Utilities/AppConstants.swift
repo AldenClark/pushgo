@@ -1,4 +1,5 @@
 import CoreFoundation
+import CryptoKit
 import Darwin
 import Foundation
 import ImageIO
@@ -1605,12 +1606,25 @@ enum AppConstants {
         return result
     }
 
+    static func automationUserDefaultsSuiteName(suiteName: String) -> String? {
+        guard let root = PushGoAutomationContext.storageRootURL else { return nil }
+        let material = root.standardizedFileURL.path + "\u{0}" + suiteName
+        let digest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "io.ethan.pushgo.quality.defaults." + digest
+    }
+
     static func sharedUserDefaults(
         suiteName: String = appGroupIdentifier
     ) -> UserDefaults {
         #if os(macOS) || os(iOS)
         if PushGoAutomationContext.blocksCrossAppDataAccess {
-            return .standard
+            guard let isolatedSuite = automationUserDefaultsSuiteName(suiteName: suiteName) else {
+                preconditionFailure("Automation storage root is required for isolated defaults.")
+            }
+            guard let defaults = UserDefaults(suiteName: isolatedSuite) else {
+                preconditionFailure("Isolated automation defaults are unavailable.")
+            }
+            return defaults
         }
         #endif
         return UserDefaults(suiteName: suiteName) ?? .standard

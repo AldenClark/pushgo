@@ -4,6 +4,75 @@ import Testing
 
 @Suite("Quality runtime profile")
 struct QualityRuntimeProfileTests {
+    @Test
+    func appOwnedDefaultsStayIsolatedByRootAndSuiteAndSurviveAnotherProcess() async throws {
+        try await withIsolatedAutomationStorage { root, _ in
+            let suite = "quality-defaults-test"
+            let otherRoot = root.appendingPathComponent("other-session", isDirectory: true)
+            let key = "owned-" + UUID().uuidString
+            let firstName = try #require(AppConstants.automationUserDefaultsSuiteName(suiteName: suite))
+            let secondName = try PushGoAutomationContext.$storageRootOverrideURL.withValue(otherRoot) {
+                try #require(AppConstants.automationUserDefaultsSuiteName(suiteName: suite))
+            }
+            let otherSuiteName = try #require(AppConstants.automationUserDefaultsSuiteName(suiteName: suite + ".other"))
+            let first = AppConstants.sharedUserDefaults(suiteName: suite)
+            #expect(first !== UserDefaults.standard)
+            defer {
+                for name in [firstName, secondName, otherSuiteName] { first.removePersistentDomain(forName: name) }
+            }
+            first.set("root-one", forKey: key)
+            #expect(first.synchronize())
+            PushGoAutomationContext.$storageRootOverrideURL.withValue(otherRoot) {
+                let second = AppConstants.sharedUserDefaults(suiteName: suite)
+                #expect(second !== UserDefaults.standard)
+                #expect(second.string(forKey: key) == nil)
+                second.set("root-two", forKey: key)
+                #expect(second.synchronize())
+            }
+            #expect(AppConstants.sharedUserDefaults(suiteName: suite + ".other").string(forKey: key) == nil)
+            #expect(AppConstants.sharedUserDefaults(suiteName: suite).string(forKey: key) == "root-one")
+            let child = Process()
+            child.executableURL = try qualityDefaultsChildExecutable()
+            child.arguments = ["defaults-probe", suite, key]
+            var childEnvironment = ProcessInfo.processInfo.environment
+            childEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = root.path
+            // An invalid explicit descriptor prevents unrelated cold-launch
+            // lease discovery; the valid explicit storage root still owns this probe.
+            childEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = "invalid-owned-defaults-probe"
+            child.environment = childEnvironment
+            let output = Pipe()
+            child.standardOutput = output
+            child.standardError = Pipe()
+            try child.run()
+            child.waitUntilExit()
+            #expect(child.terminationStatus == 0)
+            #expect(String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) == "root-one")
+        }
+    }
+
+    @Test
+    func activeAutomationWithoutStorageRootFailsBeforeOpeningStandardDefaults() throws {
+        let child = Process()
+        child.executableURL = try qualityDefaultsChildExecutable()
+        child.arguments = ["defaults-probe", "rootless-quality-probe"]
+        var environment = ProcessInfo.processInfo.environment
+        environment.removeValue(forKey: "PUSHGO_AUTOMATION_STORAGE_ROOT")
+        environment["PUSHGO_QUALITY_SESSION_BASE64"] = "invalid-rootless-defaults-probe"
+        environment.removeValue(forKey: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS")
+        environment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "synthetic-rootless-probe"
+        environment["SWIFT_BACKTRACE"] = "enable=no"
+        child.environment = environment
+        let output = Pipe()
+        let errors = Pipe()
+        child.standardOutput = output
+        child.standardError = errors
+        try child.run()
+        child.waitUntilExit()
+        #expect(child.terminationStatus != 0)
+        #expect(output.fileHandleForReading.readDataToEndOfFile().isEmpty)
+        #expect(String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.contains("Automation storage root is required for isolated defaults.") == true)
+    }
+
     @Test("Local App-owned preparation requires an explicit Gateway for automatic provider startup")
     func automaticProviderBootstrapRequiresExplicitGatewayForAppOwnedFixtures() {
         let session = PushGoQualitySessionDescriptor(sessionID: "provider-bootstrap-local", fixture: .messagesStandard)
@@ -570,4 +639,13 @@ struct QualityRuntimeProfileTests {
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             .base64EncodedString()
     }
+}
+
+
+private final class QualityDefaultsChildBundleAnchor: NSObject {}
+
+private func qualityDefaultsChildExecutable() throws -> URL {
+    let products = Bundle(for: QualityDefaultsChildBundleAnchor.self).bundleURL.deletingLastPathComponent()
+    let executable = products.appendingPathComponent("PushGoSQLiteMigrationChild")
+    return try #require(FileManager.default.isExecutableFile(atPath: executable.path) ? executable : nil)
 }
