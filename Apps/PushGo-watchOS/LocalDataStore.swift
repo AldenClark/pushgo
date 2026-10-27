@@ -601,9 +601,13 @@ actor LocalDataStore {
         return try sqliteStore.ingestWatchDelivery(record)
     }
 
-    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
+    func loadWatchDeliveryRecords(after: WatchDeliveryRecordCursor? = nil, limit: Int) async throws -> [WatchDeliveryRecord] {
         let sqliteStore = try requireSQLiteStore()
-        return try sqliteStore.loadWatchDeliveryRecords()
+        return try sqliteStore.loadWatchDeliveryRecords(after: after, limit: limit)
+    }
+
+    func loadWatchDeliveryRecord(gatewayKey: String, deliveryId: String) async throws -> WatchDeliveryRecord? {
+        try requireSQLiteStore().loadWatchDeliveryRecord(gatewayKey: gatewayKey, deliveryId: deliveryId)
     }
 
     func hasWatchDeliveryRecord(gatewayKey: String, deliveryId: String) async throws -> Bool {
@@ -1200,14 +1204,29 @@ private final class WatchLocalSQLiteStore {
         }
     }
 
-    func loadWatchDeliveryRecords() throws -> [WatchDeliveryRecord] {
-        let statement = try prepare("SELECT gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id, ingress_source, content_digest, persisted_at, server_ack_state FROM watch_delivery_records ORDER BY persisted_at DESC, gateway_key ASC, delivery_id ASC;")
+    func loadWatchDeliveryRecords(after: WatchDeliveryRecordCursor? = nil, limit: Int) throws -> [WatchDeliveryRecord] {
+        guard limit > 0 else { return [] }
+        let predicate = after == nil ? "" : "WHERE (gateway_key, delivery_id) > (?, ?)"
+        let statement = try prepare("SELECT gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id, ingress_source, content_digest, persisted_at, server_ack_state FROM watch_delivery_records \(predicate) ORDER BY gateway_key ASC, delivery_id ASC LIMIT ?;")
         defer { sqlite3_finalize(statement) }
-        var records: [WatchDeliveryRecord] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            records.append(Self.decodeWatchDeliveryRecord(statement))
+        var parameter: Int32 = 1
+        if let after {
+            try bindText(statement, index: parameter, value: after.gatewayKey)
+            parameter += 1
+            try bindText(statement, index: parameter, value: after.deliveryId)
+            parameter += 1
         }
-        return records
+        guard sqlite3_bind_int(statement, parameter, Int32(min(limit, 128))) == SQLITE_OK else {
+            throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+        }
+        var records: [WatchDeliveryRecord] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW: records.append(Self.decodeWatchDeliveryRecord(statement))
+            case SQLITE_DONE: return records
+            default: throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+            }
+        }
     }
 
     func imageResourceSnapshot(owner: ImageResourceOwner) throws -> ImageResourceOwnerSnapshot? {
@@ -1411,7 +1430,7 @@ private final class WatchLocalSQLiteStore {
         }
     }
 
-    private func loadWatchDeliveryRecord(
+    func loadWatchDeliveryRecord(
         gatewayKey: String,
         deliveryId: String
     ) throws -> WatchDeliveryRecord? {
@@ -1419,7 +1438,11 @@ private final class WatchLocalSQLiteStore {
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, value: gatewayKey)
         try bindText(statement, index: 2, value: deliveryId)
-        return sqlite3_step(statement) == SQLITE_ROW ? Self.decodeWatchDeliveryRecord(statement) : nil
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW: return Self.decodeWatchDeliveryRecord(statement)
+        case SQLITE_DONE: return nil
+        default: throw StoreError.sqliteStepFailed(lastSQLiteMessage())
+        }
     }
 
     private func upsertWatchDeliveryRecord(_ record: WatchDeliveryRecord) throws {

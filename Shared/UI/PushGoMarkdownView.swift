@@ -113,60 +113,6 @@ private func recordMarkdownDisplayModeEvaluationMetric() {
     #endif
 }
 
-enum MarkdownImageURLExtractor {
-    static func extractURLs(from markdown: String) -> [URL] {
-        guard !markdown.isEmpty else { return [] }
-        let nsRange = NSRange(markdown.startIndex..<markdown.endIndex, in: markdown)
-        var candidates: [String] = []
-
-        let patterns = [
-            "!\\[[^\\]]*\\]\\(([^)]+)\\)",
-            "<img[^>]+src\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"][^>]*>",
-            "\\[[^\\]]+\\]:\\s*(https?://\\S+)",
-        ]
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-                continue
-            }
-            for match in regex.matches(in: markdown, options: [], range: nsRange) {
-                guard match.numberOfRanges >= 2 else { continue }
-                guard let swiftRange = Range(match.range(at: 1), in: markdown) else { continue }
-                candidates.append(String(markdown[swiftRange]))
-            }
-        }
-
-        if let bareURLRegex = try? NSRegularExpression(
-            pattern: "(https?://\\S+\\.(?:png|jpe?g|gif|webp|avif|heic|heif|bmp)(?:\\?\\S*)?)",
-            options: [.caseInsensitive]
-        ) {
-            for match in bareURLRegex.matches(in: markdown, options: [], range: nsRange) {
-                guard let range = Range(match.range(at: 1), in: markdown) else { continue }
-                candidates.append(String(markdown[range]))
-            }
-        }
-
-        var seen = Set<String>()
-        var urls: [URL] = []
-        urls.reserveCapacity(candidates.count)
-        for raw in candidates {
-            let cleaned = cleanURLToken(raw)
-            guard let url = URLSanitizer.resolveHTTPSURL(from: cleaned) else { continue }
-            if seen.insert(url.absoluteString).inserted {
-                urls.append(url)
-            }
-        }
-        return urls
-    }
-
-    private static func cleanURLToken(_ raw: String) -> String {
-        var token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        token = token
-            .trimmingCharacters(in: CharacterSet(charactersIn: "<>\"'"))
-            .trimmingCharacters(in: CharacterSet(charactersIn: ")]}.,;"))
-        return token
-    }
-}
-
 private struct MarkdownImagePreviewItem: Identifiable {
     let id = UUID()
     let url: URL

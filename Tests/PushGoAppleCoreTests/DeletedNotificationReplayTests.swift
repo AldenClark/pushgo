@@ -297,7 +297,7 @@ struct DeletedNotificationReplayTests {
     }
 
     @Test
-    func retainedJournalTerminalProtectsPreChangeDeletedDirectAndPreservesLiveEnrichment() async throws {
+    func retainedJournalTerminalProtectsDeletedDirectWithoutAllowingLiveReplayOverwrite() async throws {
         try await withIsolatedLocalDataStore { store, group in
             let original = message("journal-history", delivery: "journal-delivery", operation: "journal-operation")
             try await store.saveMessage(original)
@@ -306,14 +306,17 @@ struct DeletedNotificationReplayTests {
                 requestIdentifier: original.deliveryId, source: "test.prechange.direct"))
             let pending = try #require(await inbox.pendingEntries().first)
             await inbox.markCompleted(pending)
-            // A retained terminal must not prevent enrichment while the same
-            // canonical content is still visible.
+            // A journal terminal proves processed identity, not permission for
+            // a remote replay to replace the surviving canonical content.
             var updated = original
             updated.title = "Enriched visible title"
-            guard case .duplicateRequest = try await store.persistNotificationMessageIfNeeded(updated) else {
-                Issue.record("Live content enrichment must not be gated by a terminal journal.")
-                return
+            await #expect(throws: (any Error).self) {
+                _ = try await store.persistNotificationMessageIfNeeded(updated)
             }
+            #expect(try await store.loadMessage(messageId: original.messageId!)?.title == original.title)
+            // The separate, existing local recovery path remains legal.
+            updated.receivedAt = updated.receivedAt.addingTimeInterval(1)
+            try await store.saveMessage(updated)
             #expect(try await store.loadMessage(messageId: original.messageId!)?.title == updated.title)
             // This fixture represents an offline old-version state. Finish the
             // real post-commit worker before the explicit historical mutation.

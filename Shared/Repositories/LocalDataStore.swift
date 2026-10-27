@@ -2028,9 +2028,13 @@ actor LocalDataStore {
         return try await backend.ingestWatchDelivery(record)
     }
 
-    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
+    func loadWatchDeliveryRecords(after: WatchDeliveryRecordCursor? = nil, limit: Int) async throws -> [WatchDeliveryRecord] {
         let backend = try requireBackend()
-        return try await backend.loadWatchDeliveryRecords()
+        return try await backend.loadWatchDeliveryRecords(after: after, limit: limit)
+    }
+
+    func loadWatchDeliveryRecord(gatewayKey: String, deliveryId: String) async throws -> WatchDeliveryRecord? {
+        try await requireBackend().loadWatchDeliveryRecord(gatewayKey: gatewayKey, deliveryId: deliveryId)
     }
 
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
@@ -7566,6 +7570,14 @@ private actor GRDBStore {
 	        maintainDerivedData: Bool = true,
             maintainEntityProjectionHeads: Bool = true
 	    ) throws {
+        // Generic local recovery/import is a legal update path (not remote
+        // replay). Capture only an already acquired owner before the write so
+        // changing its image inputs retires the old bindings in THIS transaction.
+        // No new owner is allocated for messages that never acquired resources.
+        let acquiredBeforeUpdate: GRDBMessageRecord? = updateOnConflict ? try Row.fetchOne(db, sql: """
+            SELECT m.* FROM messages m JOIN image_resource_owners o ON o.message_id=m.id
+            WHERE m.message_id=? LIMIT 1;
+            """, arguments: [record.messageId]).map(GRDBMessageRecord.init(row:)) : nil
         let baseInsertSQL = """
             INSERT INTO messages (
                 id, message_id, title, body, channel, url, is_read, received_at,
@@ -7639,6 +7651,24 @@ private actor GRDBStore {
                     sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;"
                 ).execute(arguments: arguments)
 	        }
+        if let previous = acquiredBeforeUpdate,
+           let current = try loadMessageRecordByMessageId(record.messageId, db: db) {
+            let beforeKeys = imageResourceRequestKeys(previous)
+            let currentKeys = imageResourceRequestKeys(current)
+            if beforeKeys != currentKeys {
+                let generation = UUID().uuidString
+                let keysJSON = String(decoding: try encoder.encode(currentKeys.sorted()), as: UTF8.self)
+                // Retain acquired versions for image URLs still used by the
+                // updated message. Retire only removed URLs, and fence every
+                // old in-flight publication with the new generation atomically.
+                try db.execute(sql: """
+                    DELETE FROM image_content_references WHERE message_id=?
+                      AND request_key NOT IN (SELECT value FROM json_each(?));
+                    """, arguments: [previous.id.uuidString, keysJSON])
+                try db.execute(sql: "UPDATE image_content_references SET owner_stamp=? WHERE message_id=?", arguments: [generation, previous.id.uuidString])
+                try db.execute(sql: "UPDATE image_resource_owners SET generation=? WHERE message_id=?", arguments: [generation, previous.id.uuidString])
+            }
+        }
             if maintainEntityProjectionHeads {
 	            try Self.upsertEntityProjectionHeadIfNeeded(record, db: db)
             }
@@ -7660,6 +7690,13 @@ private actor GRDBStore {
 	            }
 	        }
 	    }
+
+    private func imageResourceRequestKeys(_ record: GRDBMessageRecord) -> Set<String> {
+        let message = record.toPushMessage(decoder: decoder)
+        return Set(resolvedDetailImageAssetURLs(bodyText: message.resolvedBody.rawText, directImageURLs: message.imageURLs).map {
+            imageContentHash(Data(ImageResourceStore.identity($0).utf8))
+        })
+    }
 
 	    private static func upsertEntityProjectionHeadIfNeeded(
 	        _ record: GRDBMessageRecord,
@@ -9136,17 +9173,26 @@ private actor GRDBStore {
         }
     }
 
-    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
-        try read { db in
+    func loadWatchDeliveryRecords(after: WatchDeliveryRecordCursor? = nil, limit: Int) async throws -> [WatchDeliveryRecord] {
+        guard limit > 0 else { return [] }
+        return try read { db in
+            let predicate = after == nil ? "" : "WHERE (gateway_key, delivery_id) > (?, ?)"
+            var arguments: StatementArguments = [min(limit, 128)]
+            if let after { arguments = [after.gatewayKey, after.deliveryId, min(limit, 128)] }
             let rows = try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT * FROM watch_delivery_records
-                    ORDER BY persisted_at DESC, gateway_key ASC, delivery_id ASC;
-                    """
+                    SELECT * FROM watch_delivery_records \(predicate)
+                    ORDER BY gateway_key ASC, delivery_id ASC LIMIT ?;
+                    """,
+                arguments: arguments
             )
             return rows.map(Self.watchDeliveryRecord)
         }
+    }
+
+    func loadWatchDeliveryRecord(gatewayKey: String, deliveryId: String) async throws -> WatchDeliveryRecord? {
+        try read { db in try loadWatchDeliveryRecord(gatewayKey: gatewayKey, deliveryId: deliveryId, db: db) }
     }
 
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
@@ -9374,13 +9420,6 @@ private actor GRDBStore {
             // any later write error still roll back the entire canonical batch.
             return .identityConflict
         }
-        if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
-           try !hasThingParentRecord(thingId: thingId, db: db)
-        {
-            try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
-            return .persistedPending(canonicalMessage)
-        }
-
         if let notificationRequestId = record.notificationRequestId,
            let existing = try fetchMessageRecords(
                db: db,
@@ -9395,43 +9434,49 @@ private actor GRDBStore {
                    == notificationOriginScope(canonicalMessage)
            })
         {
-            let updatedRecord = GRDBMessageRecord(
-                id: existing.id,
-                messageId: existing.messageId,
-                title: record.title,
-                body: record.body,
-                channel: record.channel,
-                url: record.url,
-                // A delivery replay may refresh canonical content, but it must
-                // not undo an explicit local read transition.
-                isRead: existing.isRead || record.isRead,
-                receivedAt: record.receivedAt,
-                rawPayloadJSON: record.rawPayloadJSON,
-                status: record.status,
-                decryptionState: record.decryptionState,
-                notificationRequestId: existing.notificationRequestId,
-                deliveryId: record.deliveryId,
-                operationId: record.operationId,
-                entityType: record.entityType,
-                entityId: record.entityId,
-                eventId: record.eventId,
-                thingId: record.thingId,
-                projectionDestination: record.projectionDestination,
-                eventState: record.eventState,
-                eventTimeEpoch: record.eventTimeEpoch,
-                observedTimeEpoch: record.observedTimeEpoch,
-                occurredAtEpoch: record.occurredAtEpoch,
-                topLevelMessage: record.topLevelMessage
-            )
-            try insertOrUpdateMessage(
-                updatedRecord,
-                db: db,
-                updateOnConflict: true,
-                projectionMessage: canonicalMessage
-            )
-            try retainProcessedNotificationIdentity(updatedRecord.toPushMessage(decoder: decoder), db: db)
-            try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
-            return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
+            let canonical = existing.toPushMessage(decoder: decoder)
+            let matchesContent = Self.sameNotificationContent(canonical, canonicalMessage)
+            if !matchesContent,
+               Self.sameEncryptedNotificationEnvelope(canonical, canonicalMessage) {
+                if canonicalMessage.decryptionState == .decryptOk {
+                    // Existing local decryption recovery may enrich the SAME
+                    // authenticated envelope. Keep physical identity/read/time;
+                    // the normal local-update transaction also rotates only
+                    // changed image inputs, retaining unchanged acquired URLs.
+                    var decoded = canonicalMessage
+                    decoded.id = existing.id
+                    decoded.messageId = existing.messageId
+                    decoded.receivedAt = existing.receivedAt
+                    decoded.isRead = existing.isRead
+                    let decodedRecord = try buildMessageRecord(from: decoded)
+                    try insertOrUpdateMessage(decodedRecord, db: db, updateOnConflict: true, projectionMessage: decoded)
+                    try enqueueCanonicalDerivedWork(messageID: existing.id, db: db)
+                    let saved = try loadMessageRecordByMessageId(existing.messageId, db: db) ?? existing
+                    return .duplicateRequest(saved.toPushMessage(decoder: decoder))
+                }
+                // A later extension may have no decryption key. Its original
+                // ciphertext is proof of replay, not permission to replace a
+                // successfully decoded body with placeholder content.
+                return .duplicateRequest(canonical)
+            }
+            guard matchesContent else {
+                if isolatingIdentityConflicts { return .identityConflict }
+                throw AppError.typedLocal(code: "identity_conflict", category: .conflict,
+                    message: "An existing notification identity has different content. Its saved content cannot be replaced.")
+            }
+            // Receipt time/read snapshots and delivery transport metadata do
+            // not replace an acquired historical version or restart its work.
+            try retainProcessedNotificationIdentity(canonical, db: db)
+            return .duplicateRequest(canonical)
+        }
+
+        // Existing request identity is checked before a changed parent can
+        // claim an ACK-safe waiting-area responsibility for the same delivery.
+        if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
+           try !hasThingParentRecord(thingId: thingId, db: db)
+        {
+            try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
+            return .persistedPending(canonicalMessage)
         }
 
         if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
@@ -9482,6 +9527,43 @@ private actor GRDBStore {
         }
         try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
         return .persisted(record.toPushMessage(decoder: decoder))
+    }
+
+    private static func sameNotificationContent(_ stored: PushMessage, _ incoming: PushMessage) -> Bool {
+        guard sameNotificationIdentityAndNonDisplayContent(stored, incoming),
+              stored.title == incoming.title, stored.body == incoming.body, stored.url == incoming.url,
+              stored.imageURLs == incoming.imageURLs,
+              stored.metadata == incoming.metadata, stored.tags == incoming.tags else { return false }
+        return ["images", "ciphertext", "alg", "algorithm", "iv", "nonce", "encryption_version"]
+            .allSatisfy { stored.rawPayload[$0] == incoming.rawPayload[$0] }
+    }
+
+    private static func sameNotificationIdentityAndNonDisplayContent(_ stored: PushMessage, _ incoming: PushMessage) -> Bool {
+        guard stored.messageId == incoming.messageId, stored.channel == incoming.channel,
+              stored.entityType == incoming.entityType, stored.entityId == incoming.entityId,
+              stored.eventId == incoming.eventId, stored.thingId == incoming.thingId,
+              stored.projectionDestination == incoming.projectionDestination,
+              stored.eventState == incoming.eventState,
+              stored.operationId == incoming.operationId else { return false }
+        // These are content/projection inputs, unlike local receipt time,
+        // notification-request routing, source attribution and read state.
+        return ["description", "message", "attrs", "profile", "state", "status", "severity",
+                "primary_image", "started_at", "ended_at", "created_at", "deleted_at", "external_ids",
+                "location_type", "location_value", "location", "event_time", "observed_at", "occurred_at"]
+            .allSatisfy { stored.rawPayload[$0] == incoming.rawPayload[$0] }
+    }
+
+    private static func sameEncryptedNotificationEnvelope(_ stored: PushMessage, _ incoming: PushMessage) -> Bool {
+        guard notificationProvenOriginScope(stored) != nil,
+              notificationProvenOriginScope(stored) == notificationProvenOriginScope(incoming),
+              stored.deliveryId == incoming.deliveryId,
+              sameNotificationIdentityAndNonDisplayContent(stored, incoming),
+              stored.decryptionState != incoming.decryptionState,
+              stored.decryptionState == .decryptOk || incoming.decryptionState == .decryptOk,
+              let ciphertext = stored.rawPayload["ciphertext"]?.value as? String, !ciphertext.isEmpty,
+              incoming.rawPayload["ciphertext"]?.value as? String == ciphertext else { return false }
+        return ["alg", "algorithm", "iv", "nonce", "encryption_version"]
+            .allSatisfy { stored.rawPayload[$0] == incoming.rawPayload[$0] }
     }
 
     private func enqueueCanonicalDerivedWork(messageID: UUID, db: Database) throws {

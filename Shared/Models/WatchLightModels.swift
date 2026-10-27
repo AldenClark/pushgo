@@ -94,6 +94,18 @@ struct WatchDeliveryRecord: Codable, Hashable, Identifiable, Sendable {
     var id: String { "\(gatewayKey)|\(deliveryId)" }
 }
 
+/// Stable keyset for bounded diagnostics/export reads. It is not a retention
+/// deadline or proof that a delivery may be forgotten after a server ACK.
+struct WatchDeliveryRecordCursor: Hashable, Sendable {
+    let gatewayKey: String
+    let deliveryId: String
+
+    init(_ record: WatchDeliveryRecord) {
+        gatewayKey = record.gatewayKey
+        deliveryId = record.deliveryId
+    }
+}
+
 struct WatchDeliveryIngestRecord: Sendable {
     let payload: WatchLightPayload
     let metadata: WatchDeliveryMetadata

@@ -38,6 +38,14 @@ private func delivery(
     )
 }
 
+private func smallDeliveryRecords(_ store: WatchLocalSQLiteStore) throws -> [WatchDeliveryRecord] {
+#if WATCH_DELIVERY_PAGING_TESTS
+    try store.loadWatchDeliveryRecords(limit: 128)
+#else
+    try store.loadWatchDeliveryRecords()
+#endif
+}
+
 private func runLifecycleTests() throws {
 #if WATCH_FROZEN_PULL_METADATA_TESTS
     // The Pull adapter must use the response's frozen origin, not a current
@@ -103,7 +111,7 @@ private func runLifecycleTests() throws {
         _ = try store.ingestWatchDelivery(delivery("deleted-delivery", messageID: "deleted-message"))
         let target = try store.loadWatchLightMessage(messageId: "deleted-message")!
         try require(try store.deleteWatchLightMessage(matching: target, config: nil, localConfig: nil), "confirmed delete must commit")
-        try require(try store.loadWatchDeliveryRecords().count == 1, "deleting content may not delete the processed fact")
+        try require(try smallDeliveryRecords(store).count == 1, "deleting content may not delete the processed fact")
 #if WATCH_DELIVERY_LOOKUP_TESTS
         try require(try store.hasWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "deleted-delivery"), "the bounded lookup must retain the fact after content deletion")
 #endif
@@ -143,7 +151,7 @@ private func runLifecycleTests() throws {
         ))
         try require(otherGateway.disposition == .inserted, "different Gateway must have a distinct delivery scope")
         try require(try reopened.loadWatchLightMessage(messageId: "other-gateway-message") != nil, "other Gateway content must persist")
-        try require(try reopened.loadWatchDeliveryRecords().count == 3, "distinct delivery scopes must all retain their own facts")
+        try require(try smallDeliveryRecords(reopened).count == 3, "distinct delivery scopes must all retain their own facts")
         print("PASS gateway_scope_isolation")
     }
 
@@ -185,9 +193,50 @@ private func runLifecycleTests() throws {
             "delivery-a", messageID: "shared-message-id", body: "Late A after restart", ack: .ackedDirect
         ))
         try require(try reopened.loadWatchLightMessage(messageId: "shared-message-id")?.body == "B body", "restart forgot cross-Gateway delivery ownership evidence")
-        try require(try reopened.loadWatchDeliveryRecords().count == 2, "ownership check must retain both delivery facts")
+        try require(try smallDeliveryRecords(reopened).count == 2, "ownership check must retain both delivery facts")
         print("PASS deleted_identity_reused_by_other_gateway")
     }
+
+#if WATCH_DELIVERY_PAGING_TESTS
+    do {
+        var cursor: WatchDeliveryRecordCursor?
+        var seen: [WatchDeliveryRecord] = []
+        do {
+            let store = try WatchLocalSQLiteStore(appGroupIdentifier: "bounded-delivery-pages")
+            for index in 0..<260 {
+                let identity = String(format: "%04d", index)
+                _ = try store.ingestWatchDelivery(delivery(identity, messageID: "message-" + identity,
+                    ack: [.pending, .unknown, .ackedDirect][index % 3]))
+            }
+            try require(try store.loadWatchDeliveryRecords(limit: Int.max).count == 128, "large caller limit must still be bounded")
+            try require(try store.loadWatchDeliveryRecords(limit: 0).isEmpty, "zero limit must not read the entire ledger")
+            seen = try store.loadWatchDeliveryRecords(limit: 17)
+            cursor = WatchDeliveryRecordCursor(seen.last!)
+            _ = try store.ingestWatchDelivery(delivery("0016", messageID: "message-0016"))
+            let target = try store.loadWatchLightMessage(messageId: "message-0000")!
+            try require(try store.deleteWatchLightMessage(matching: target, config: nil, localConfig: nil), "confirmed content deletion must commit")
+        }
+        // Reopen after an interrupted enumeration. New rows later in the key
+        // range can progress without forgetting pending/unknown/processed facts.
+        let reopened = try WatchLocalSQLiteStore(appGroupIdentifier: "bounded-delivery-pages")
+        _ = try reopened.ingestWatchDelivery(delivery("new", messageID: "later-message", gateway: "https://z-gateway.example"))
+        while true {
+            let page = try reopened.loadWatchDeliveryRecords(after: cursor, limit: 17)
+            try require(page.count <= 17, "native page may not exceed the requested bound")
+            guard let last = page.last else { break }
+            seen.append(contentsOf: page)
+            cursor = WatchDeliveryRecordCursor(last)
+        }
+        try require(seen.count == 261 && Set(seen.map(\.id)).count == 261, "restart/keyset must retain every original exact delivery once")
+        try require(Set(seen.map(\.serverAckState)) == Set([.pending, .unknown, .ackedDirect]), "age or ACK label may not silently remove facts")
+        try require(seen.allSatisfy { $0.persistedAt == Date(timeIntervalSince1970: 1_800_000_001) }, "paging/replay may not renew first persistence time")
+        _ = try reopened.ingestWatchDelivery(delivery("0000", messageID: "late-deleted-alias"))
+        try require(try reopened.loadWatchLightMessage(messageId: "message-0000") == nil, "paging cannot release deletion protection")
+        try require(try reopened.loadWatchDeliveryRecord(gatewayKey: "https://gateway.example/root", deliveryId: "0001")?.serverAckState == .unknown, "exact pending/unknown facts remain queryable after restart")
+        try require(try reopened.loadWatchDeliveryRecord(gatewayKey: "https://other-gateway.example", deliveryId: "0001") == nil, "point lookup cannot borrow another scope")
+        print("PASS bounded_delivery_paging_restart_states_and_deleted_replay")
+    }
+#endif
 }
 
 #if WATCH_RESOURCE_TESTS
@@ -308,6 +357,9 @@ private enum WatchSQLiteLifecycleTests {
             passed += 6
 #endif
 #if WATCH_FROZEN_PULL_METADATA_TESTS
+            passed += 1
+#endif
+#if WATCH_DELIVERY_PAGING_TESTS
             passed += 1
 #endif
             print("RESULT passed=\(passed) failed=0 layer=host_production_watch_sqlite")

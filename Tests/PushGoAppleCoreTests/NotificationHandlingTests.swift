@@ -133,6 +133,98 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func decryptedEnvelopeReplayKeepsContentAndAllowsOnlyTheProvenDecodeTransition() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let keyData = Data(repeating: 0x5A, count: 16)
+            let nonce = try AES.GCM.Nonce(data: Data(0..<12))
+            let imageURL = "https://example.com/encrypted-original.png?signature=original"
+            let plaintext = try JSONSerialization.data(withJSONObject: [
+                "title": "Decoded title", "body": "Decoded body", "images": [imageURL],
+            ])
+            let sealed = try AES.GCM.seal(plaintext, using: SymmetricKey(data: keyData), nonce: nonce)
+            var wire = sealed.ciphertext
+            wire.append(sealed.tag)
+            wire.append(Data(0..<12))
+            func placeholder(_ suffix: String) -> PushMessage {
+                PushMessage(messageId: "encrypted-replay-" + suffix, title: "Encrypted", body: "Configure decryption",
+                    receivedAt: Date(timeIntervalSince1970: 1_800_000_000), rawPayload: [
+                        "message_id": AnyCodable("encrypted-replay-" + suffix),
+                        "entity_type": AnyCodable("message"),
+                        "entity_id": AnyCodable("encrypted-replay-" + suffix),
+                        "title": AnyCodable("Encrypted"), "body": AnyCodable("Configure decryption"),
+                        "base_url": AnyCodable("https://gateway.invalid/encrypted"),
+                        "provider_device_key": AnyCodable("recipient"),
+                        "delivery_id": AnyCodable("encrypted-delivery-" + suffix),
+                        "_notificationRequestId": AnyCodable("encrypted-request-" + suffix),
+                        "ciphertext": AnyCodable(wire.base64EncodedString()),
+                        "decryption_state": AnyCodable("notConfigured"),
+                    ], decryptionState: .notConfigured)
+            }
+            let first = placeholder("first")
+            _ = try await store.persistNotificationMessageIfNeeded(first)
+            let report = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+                using: ServerConfig.NotificationKeyMaterial(algorithm: .aesGcm, keyData: keyData, ivBase64: nil, updatedAt: Date()),
+                dataStore: store)
+            #expect(report.decryptedCount == 1)
+            let decoded = try #require(await store.loadMessage(id: first.id))
+            #expect(decoded.body == "Decoded body" && decoded.decryptionState == .decryptOk)
+            #expect(decoded.imageURLs.map(\.absoluteString) == [imageURL])
+            try await store.setMessageReadState(id: first.id, isRead: true)
+            let snapshot = try #require(await store.imageResourceSnapshot(owner: .message(localID: first.id)))
+            guard case let .duplicateRequest(replayed) = try await store.persistNotificationMessageIfNeeded(first) else {
+                Issue.record("The proven same ciphertext may not be blocked when the extension temporarily lacks its key."); return
+            }
+            #expect(replayed.body == decoded.body && replayed.isRead && replayed.decryptionState == .decryptOk)
+            #expect(try await store.imageResourceSnapshot(owner: snapshot.owner) == snapshot)
+
+            let second = placeholder("second")
+            _ = try await store.persistNotificationMessageIfNeeded(second)
+            var newlyDecoded = decoded // Generated above by the real AES.GCM recovery path.
+            newlyDecoded.id = UUID()
+            newlyDecoded.messageId = second.messageId
+            newlyDecoded.rawPayload["message_id"] = second.rawPayload["message_id"]
+            newlyDecoded.rawPayload["entity_id"] = second.rawPayload["entity_id"]
+            newlyDecoded.rawPayload["delivery_id"] = second.rawPayload["delivery_id"]
+            newlyDecoded.rawPayload["_notificationRequestId"] = second.rawPayload["_notificationRequestId"]
+            guard case let .duplicateRequest(updated) = try await store.persistNotificationMessageIfNeeded(newlyDecoded) else {
+                Issue.record("A successful decode of the same proven envelope must preserve the existing legal recovery path."); return
+            }
+            #expect(updated.id == second.id && updated.body == decoded.body && updated.receivedAt == second.receivedAt)
+            #expect(updated.imageURLs == decoded.imageURLs && updated.decryptionState == .decryptOk)
+            for mutation in 0..<3 {
+                var conflicting = first
+                if mutation == 0 { conflicting.rawPayload["ciphertext"] = AnyCodable("different-ciphertext") }
+                if mutation == 1 { conflicting.channel = "different-business-channel" }
+                if mutation == 2 { conflicting.rawPayload["state"] = AnyCodable("different-business-state") }
+                await #expect(throws: (any Error).self) { _ = try await store.persistNotificationMessageIfNeeded(conflicting) }
+            }
+            #expect(try await store.loadMessage(id: first.id)?.body == decoded.body)
+
+            // An old inline-only decrypted row has no original cipher bytes
+            // to prove a later different display body is its own replay. Keep
+            // that uncertainty local to the item; never guess or overwrite.
+            var oldInline = placeholder("old-inline")
+            oldInline.body = "Previously decoded inline content"
+            oldInline.rawPayload["body"] = AnyCodable(oldInline.body)
+            oldInline.rawPayload["ciphertext"] = nil
+            oldInline.decryptionState = .decryptOk
+            oldInline.rawPayload["decryption_state"] = AnyCodable("decryptOk")
+            _ = try await store.persistNotificationMessageIfNeeded(oldInline)
+            var unprovedReplay = oldInline
+            unprovedReplay.body = wire.base64EncodedString()
+            unprovedReplay.rawPayload["body"] = AnyCodable(unprovedReplay.body)
+            unprovedReplay.decryptionState = .notConfigured
+            unprovedReplay.rawPayload["decryption_state"] = AnyCodable("notConfigured")
+            let healthy = PushMessage(messageId: "healthy-beside-unproved-inline", title: "healthy", body: "saved")
+            let outcomes = try await store.persistNotificationMessagesIfNeeded([unprovedReplay, healthy], isolatingIdentityConflicts: true)
+            guard case .identityConflict = outcomes[0], case .persisted = outcomes[1] else {
+                Issue.record("Missing inline evidence must not block an independent healthy message."); return
+            }
+            #expect(try await store.loadMessage(id: oldInline.id)?.body == oldInline.body)
+        }
+    }
+
+    @Test
     func skipPersistenceRecognizesTruthyFlagVariants() {
         #expect(NotificationHandling.shouldSkipPersistence(for: ["_skip_persist": "true"]))
         #expect(NotificationHandling.shouldSkipPersistence(for: ["_skip_persist": "1"]))
@@ -492,7 +584,7 @@ struct NotificationHandlingTests {
     }
 
     @Test
-    func persistIfNeededSurfacesDuplicateRequestAndBeforeSaveMessage() async throws {
+    func persistIfNeededSurfacesConflictingRequestAndBeforeSaveMessage() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let firstContent = UNMutableNotificationContent()
             firstContent.title = "First title"
@@ -549,8 +641,8 @@ struct NotificationHandlingTests {
             let messages = try await store.loadMessages()
             let storedMessage = try await store.loadMessage(notificationRequestId: "req-notification-001")
 
-            guard case .duplicate = duplicateOutcome else {
-                Issue.record("Expected second notification delivery with same request id to surface duplicate.")
+            guard case .identityConflict = duplicateOutcome else {
+                Issue.record("Conflicting content for the same request identity must not surface an ACK-safe duplicate.")
                 return
             }
             #expect(beforeSaveSnapshot?.title == "Updated title")
@@ -558,7 +650,8 @@ struct NotificationHandlingTests {
             #expect(beforeSaveSnapshot?.notificationRequestId == "req-notification-001")
             #expect(beforeSaveSnapshot?.messageId == "msg-notification-002")
             #expect(messages.count == 1)
-            #expect(storedMessage?.title == "Updated title")
+            #expect(storedMessage?.title == "First title")
+            #expect(storedMessage?.body == "First body")
         }
     }
 

@@ -103,6 +103,8 @@ private enum DarwinNotificationPoster { static func post(name: String) {} }
         command.extend(["-D", "WATCH_RESOURCE_TESTS"])
     if "func hasWatchDeliveryRecord(gatewayKey:" in store:
         command.extend(["-D", "WATCH_DELIVERY_LOOKUP_TESTS"])
+    if "func loadWatchDeliveryRecords(after:" in store:
+        command.extend(["-D", "WATCH_DELIVERY_PAGING_TESTS"])
     if "static func pulled(" in models:
         command.extend(["-D", "WATCH_FROZEN_PULL_METADATA_TESTS"])
     print("compile_command=" + " ".join(command), flush=True)
@@ -130,6 +132,23 @@ private enum DarwinNotificationPoster { static func post(name: String) {} }
                     "indexed_ranges": len(indexed_ranges), "status": "PASSED"}
         (output / "ownership-query-plan.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print("PASS ownership_query_two_indexed_ranges", flush=True)
+        if "func loadWatchDeliveryRecords(after:" in store:
+            paging_query = """SELECT gateway_key, delivery_id, watch_device_key, message_id,
+                entity_type, entity_id, ingress_source, content_digest, persisted_at, server_ack_state
+                FROM watch_delivery_records WHERE (gateway_key, delivery_id) > (?, ?)
+                ORDER BY gateway_key ASC, delivery_id ASC LIMIT ?"""
+            database = Path(root) / "bounded-delivery-pages/watch.sqlite"
+            with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
+                paging_plan = list(db.execute("EXPLAIN QUERY PLAN " + paging_query, (
+                    "https://gateway.example/root", "0016", 17,
+                )))
+            if not any("SEARCH watch_delivery_records USING INDEX sqlite_autoindex_watch_delivery_records" in row[3] for row in paging_plan):
+                raise AssertionError(f"delivery page did not seek its immutable primary-key range: {paging_plan!r}")
+            (output / "delivery-paging-query-plan.json").write_text(json.dumps({
+                "status": "PASSED", "sql": paging_query, "plan": paging_plan,
+                "retention": "No facts deleted; no age/ACK/expiry policy invented",
+            }, indent=2) + "\n")
+            print("PASS delivery_paging_primary_key_seek", flush=True)
 
 
 if __name__ == "__main__":

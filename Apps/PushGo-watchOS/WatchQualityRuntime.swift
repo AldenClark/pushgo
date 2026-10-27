@@ -250,7 +250,7 @@ enum WatchQualityRuntime {
 
         if scenario == "watch.migration" {
             guard let retained = try await environment.dataStore.loadWatchLightMessage(messageId: "quality-watch-legacy-message"), retained.isRead,
-                  try await environment.dataStore.loadWatchDeliveryRecords().contains(where: { $0.deliveryId == "legacy-pending-ack" && $0.serverAckState == .pending }) else {
+                  try await environment.dataStore.loadWatchDeliveryRecord(gatewayKey: "quality-migration-gateway", deliveryId: "legacy-pending-ack")?.serverAckState == .pending else {
                 throw WatchQualityRuntimeError.legacyStorePreparationFailed("Upgrade lost content, local read state, or pending Gateway ACK")
             }
             let directory = try AppConstants.appLocalDatabaseDirectory(fileManager: .default, appGroupIdentifier: AppConstants.appGroupIdentifier)
@@ -415,7 +415,7 @@ enum WatchQualityRuntime {
             "aps": AnyCodable(["alert": ["title": "Unverified APNs preview", "body": advertisedBody]]),
         ]
         await environment.qualityReceiveDurableWakeup(hint)
-        let factsBeforeDuplicate = try await store.loadWatchDeliveryRecords()
+        let factBeforeDuplicate = try await store.loadWatchDeliveryRecord(gatewayKey: config.normalizedBaseURL.absoluteString, deliveryId: deliveryID)
         if !unsupported { await environment.qualityReceiveDurableWakeup(hint) }
         let requests = await probe.recordedPaths()
         let authorizationChecks = await probe.recordedAuthorizationChecks()
@@ -449,11 +449,10 @@ enum WatchQualityRuntime {
                 )
             }
         } else {
-            let deliveryFacts = try await store.loadWatchDeliveryRecords().filter { $0.deliveryId == deliveryID }
+            let deliveryFact = try await store.loadWatchDeliveryRecord(gatewayKey: config.normalizedBaseURL.absoluteString, deliveryId: deliveryID)
             guard requests == [ChannelSubscriptionService.pullV2Path, ChannelSubscriptionService.batchAckV2Path],
-                  deliveryFacts.count == 1,
-                  let before = factsBeforeDuplicate.first(where: { $0.deliveryId == deliveryID }),
-                  let after = deliveryFacts.first, after.persistedAt == before.persistedAt
+                  let before = factBeforeDuplicate,
+                  let after = deliveryFact, after.persistedAt == before.persistedAt
             else { throw WatchQualityRuntimeError.gatewayRouteInvariant("V2 wakeup must Pull once and ACK once after durable Store, including duplicate hint") }
         }
         return ["http_paths": requests, "authorization_matches_expected": authorizationChecks,
@@ -915,7 +914,7 @@ private actor QualityWatchV2WakeupProbe {
                   let stored = try await store.loadWatchLightMessage(messageId: messageID),
                   stored.body == "Pulled content survives duplicate wakeups and reopen.",
                   Int64((stored.receivedAt.timeIntervalSince1970 * 1_000).rounded()) == (sentAtMilliseconds / 1_000) * 1_000,
-                  try await store.loadWatchDeliveryRecords().contains(where: { $0.deliveryId == deliveryID })
+                  try await store.loadWatchDeliveryRecord(gatewayKey: "https://quality-watch-v2.pushgo.dev", deliveryId: deliveryID) != nil
             else { throw WatchQualityRuntimeError.gatewayRouteInvariant("Gateway ACK preceded accurate durable Watch content") }
             status = 200
             data = ["success": true, "data": ["requested_count": 1, "removed_count": 1]]

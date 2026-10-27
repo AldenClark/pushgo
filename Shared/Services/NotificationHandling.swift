@@ -257,6 +257,8 @@ enum NotificationPersistenceCoordinator {
             return persistenceOutcome(
                 from: try await dataStore.persistNotificationMessageIfNeeded(message)
             )
+        } catch let AppError.local(problem) where problem.code == "identity_conflict" && problem.category == .conflict {
+            return .identityConflict
         } catch {
             return .failed
         }

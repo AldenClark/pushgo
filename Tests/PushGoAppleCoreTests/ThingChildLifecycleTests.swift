@@ -237,11 +237,18 @@ struct ThingChildLifecycleTests {
                 messageID: "formal-event-stable-id", title: "Formal event survives", body: "formal event body",
                 thingID: nil, entityType: "event", eventID: "formal-event", operationID: nil
             )
-            try await store.saveMessage(formalEvent)
-            _ = try await store.persistNotificationMessageIfNeeded(child(
+            let eventPendingBeforeCanonical = child(
                 messageID: "formal-event-stable-id", title: "Pending event must not overwrite", body: "pending event body",
                 thingID: "thing-formal-event-collision", entityType: "event", eventID: "formal-event", operationID: nil
-            ))
+            )
+            // A real waiting-area responsibility can precede a later canonical
+            // import/local save. Keep testing its recovery without using a new
+            // conflicting replay to manufacture that historical state.
+            _ = try await store.persistNotificationMessageIfNeeded(eventPendingBeforeCanonical)
+            try await store.saveMessage(formalEvent)
+            await #expect(throws: AppError.self) {
+                _ = try await store.persistNotificationMessageIfNeeded(eventPendingBeforeCanonical)
+            }
 
             let ledgerSeed = child(
                 messageID: "ledger-seed-message", title: "Ledger seed", body: "seed",

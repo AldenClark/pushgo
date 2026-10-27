@@ -4,6 +4,48 @@ import Testing
 @testable import PushGoAppleCore
 
 struct LocalDataStoreTests {
+    @Test func watchDeliveryFactsArePagedWithoutInventingARetentionDeadline() async throws {
+        try await withIsolatedAutomationStorage { root, group in
+            let store = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            func record(_ number: Int, gateway: String = "gateway-a") -> WatchDeliveryIngestRecord {
+                let identity = String(format: "%04d", number)
+                return WatchDeliveryIngestRecord(payload: .message(WatchLightMessage(messageId: gateway + identity,
+                    title: "title", body: "body", imageURL: nil, url: nil, severity: nil,
+                    receivedAt: Date(timeIntervalSince1970: 1_800_000_000), isRead: false, entityType: "message",
+                    entityId: nil, notificationRequestId: identity)), metadata: WatchDeliveryMetadata(
+                        deliveryId: identity, gatewayKey: gateway, ingressSource: .watchPull,
+                        serverAckState: [.pending, .unknown, .ackedDirect][number % 3],
+                        persistedAt: Date(timeIntervalSince1970: 1_800_000_000)))
+            }
+            for index in 0..<305 { _ = try await store.ingestWatchDelivery(record(index)) }
+            #expect(try await store.loadWatchDeliveryRecords(limit: Int.max).count == 128)
+            #expect(try await store.loadWatchDeliveryRecords(limit: 0).isEmpty)
+            let firstPage = try await store.loadWatchDeliveryRecords(limit: 37)
+            let checkpoint = WatchDeliveryRecordCursor(try #require(firstPage.last))
+            // A repeated delivery can change ACK metadata but not pagination's
+            // immutable primary key or its original persisted timestamp.
+            _ = try await store.ingestWatchDelivery(record(36))
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: group, spotlightIndexer: nil)
+            _ = try await reopened.ingestWatchDelivery(record(1, gateway: "gateway-z"))
+            var result = firstPage
+            var cursor: WatchDeliveryRecordCursor? = checkpoint
+            while true {
+                let page = try await reopened.loadWatchDeliveryRecords(after: cursor, limit: 37)
+                #expect(page.count <= 37)
+                guard let last = page.last else { break }
+                result.append(contentsOf: page)
+                cursor = WatchDeliveryRecordCursor(last)
+            }
+            #expect(result.count == 306)
+            #expect(Set(result.map(\.id)).count == 306)
+            #expect(Set(result.map(\.serverAckState)) == Set([.pending, .unknown, .ackedDirect]))
+            #expect(result.allSatisfy { $0.persistedAt == Date(timeIntervalSince1970: 1_800_000_000) })
+            #expect(try await reopened.loadWatchDeliveryRecord(gatewayKey: "gateway-a", deliveryId: "0001")?.serverAckState == .unknown)
+            #expect(try await reopened.loadWatchDeliveryRecord(gatewayKey: "other-gateway", deliveryId: "0001") == nil)
+        }
+    }
+
     @Test
     func thingDetailExistenceAndHistoryAreIndependentOfTheCurrentPage() async throws {
         try await withIsolatedLocalDataStore { store, _ in
@@ -123,7 +165,7 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func persistNotificationMessageUpdatesExistingRowForDuplicateRequest() async throws {
+    func persistNotificationMessageRejectsConflictingContentForDuplicateRequest() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let first = makeMessage(
                 messageId: "msg-duplicate-request-001",
@@ -146,19 +188,14 @@ struct LocalDataStoreTests {
             #expect(initialStored.title == "Original title")
 
             try await store.setMessageReadState(id: initialStored.id, isRead: true)
-            let duplicateOutcome = try await store.persistNotificationMessageIfNeeded(second)
+            await #expect(throws: (any Error).self) {
+                _ = try await store.persistNotificationMessageIfNeeded(second)
+            }
             let stored = try await store.loadMessage(notificationRequestId: "req-duplicate-request-001")
             let messages = try await store.loadMessages()
 
-            guard case let .duplicateRequest(updated) = duplicateOutcome else {
-                Issue.record("Expected same notification request id to be treated as duplicateRequest.")
-                return
-            }
-            #expect(updated.title == "Updated title")
-            #expect(updated.body == "Updated body")
-            #expect(updated.isRead)
-            #expect(stored?.title == "Updated title")
-            #expect(stored?.body == "Updated body")
+            #expect(stored?.title == "Original title")
+            #expect(stored?.body == "Original body")
             #expect(stored?.isRead == true)
             #expect(messages.count == 1)
         }
@@ -174,10 +211,10 @@ struct LocalDataStoreTests {
                 body: "First body"
             )
             let duplicateRequest = makeMessage(
-                messageId: "msg-batch-002",
+                messageId: "msg-batch-001",
                 notificationRequestId: "req-batch-shared",
-                title: "Updated title",
-                body: "Updated body"
+                title: "First title",
+                body: "First body"
             )
             let independent = makeMessage(
                 messageId: "msg-batch-003",
@@ -200,9 +237,9 @@ struct LocalDataStoreTests {
                 Issue.record("Expected ordered persisted/duplicateRequest/persisted batch outcomes.")
                 return
             }
-            #expect(updated.title == "Updated title")
+            #expect(updated.title == "First title")
             #expect(try await store.loadMessages().count == 2)
-            #expect(try await store.loadMessage(notificationRequestId: "req-batch-shared")?.title == "Updated title")
+            #expect(try await store.loadMessage(notificationRequestId: "req-batch-shared")?.title == "First title")
         }
     }
 
@@ -949,7 +986,7 @@ struct LocalDataStoreTests {
             #expect(message.isRead)
             #expect(try await upgraded.loadWatchLightEvent(eventId: "retained-event")?.title == "Existing event")
             #expect(try await upgraded.loadWatchLightThing(thingId: "retained-thing")?.title == "Existing thing")
-            let records = try await upgraded.loadWatchDeliveryRecords()
+            let records = try await upgraded.loadWatchDeliveryRecords(limit: 128)
             #expect(records.count == 1)
             #expect(records.first?.deliveryId == "pending-delivery")
             #expect(records.first?.serverAckState == .pending)
@@ -1098,7 +1135,7 @@ struct LocalDataStoreTests {
             let first = try await store.ingestWatchDelivery(direct)
             let second = try await store.ingestWatchDelivery(pullReplay)
             let messages = try await store.loadWatchLightMessages()
-            let records = try await store.loadWatchDeliveryRecords()
+            let records = try await store.loadWatchDeliveryRecords(limit: 128)
 
             #expect(first.disposition == .inserted)
             #expect(second.disposition == .duplicateDelivery)
@@ -1210,7 +1247,7 @@ struct LocalDataStoreTests {
 
             let events = try await store.loadWatchLightEvents()
             let things = try await store.loadWatchLightThings()
-            let records = try await store.loadWatchDeliveryRecords()
+            let records = try await store.loadWatchDeliveryRecords(limit: 128)
 
             #expect(events.count == 1)
             #expect(events.first?.eventId == "event-watch-1")

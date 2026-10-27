@@ -135,11 +135,6 @@ func resolvedDetailImageAssetURLs(for message: PushMessage) -> [URL] {
     )
 }
 
-func resolvedDetailImageAssetURLs(bodyText: String, directImageURLs: [URL]) -> [URL] {
-    let markdownImageURLs = MarkdownImageURLExtractor.extractURLs(from: bodyText)
-    return Array(Set(directImageURLs + markdownImageURLs))
-}
-
 @MainActor
 final class MessageDetailSnapshotCache {
     static let shared = MessageDetailSnapshotCache()
