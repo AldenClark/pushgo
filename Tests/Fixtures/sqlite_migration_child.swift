@@ -97,7 +97,10 @@ private enum MigrationChild {
                     body: "Canonical content must survive the interrupted snapshot write."
                 ))
                 _ = await store.drainDerivedWorkForBackgroundRefresh()
-            } catch { Darwin._exit(36) }
+            } catch {
+                FileHandle.standardError.write(Data("snapshot fixture persistence failed: \(error)\n".utf8))
+                Darwin._exit(36)
+            }
             if arguments[1] == "snapshot-pause-before-publish" { Darwin._exit(0) }
             Darwin._exit(37) // The file boundary must have killed this process.
         }
@@ -162,10 +165,11 @@ private final class PausedSnapshotPublicationFileManager: FileManager, @unchecke
         if url.lastPathComponent == "system-surface-snapshot", !intercepted {
             intercepted = true
             try Data().write(to: controlDirectory.appendingPathComponent("paused"))
-            let deadline = Date().addingTimeInterval(10)
-            while !super.fileExists(atPath: controlDirectory.appendingPathComponent("release").path) {
-                if Date() >= deadline { Darwin._exit(39) }
-                Thread.sleep(forTimeInterval: 0.005)
+            // Parent owns the release pipe. Its explicit byte establishes the
+            // interleave; closing/dying yields EOF instead of a wall-clock race
+            // with unrelated tests on the parent's cooperative executor.
+            guard try FileHandle.standardInput.read(upToCount: 1) == Data([1]) else {
+                Darwin._exit(39)
             }
             if failFirstWrite { throw InjectedWriteFailure() }
         }

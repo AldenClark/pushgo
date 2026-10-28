@@ -10,6 +10,7 @@ import Testing
 final class SnapshotPublicationChild {
     private let process: Process
     private let controlDirectory: URL
+    private let releasePipe = Pipe()
 
     init(root: URL, appGroupIdentifier: String, failFirstWrite: Bool = false) throws {
         controlDirectory = root.appendingPathComponent("snapshot-publication-control", isDirectory: true)
@@ -18,17 +19,24 @@ final class SnapshotPublicationChild {
         process.executableURL = Bundle(for: SnapshotChildBundleAnchor.self).bundleURL
             .deletingLastPathComponent().appendingPathComponent("PushGoSQLiteMigrationChild")
         process.arguments = ["snapshot-pause-before-publish", appGroupIdentifier, controlDirectory.path, failFirstWrite ? "fail" : "succeed"]
+        process.standardInput = releasePipe
         var environment = ProcessInfo.processInfo.environment
         environment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = root.path
         process.environment = environment
         try process.run()
     }
 
-    deinit { if process.isRunning { process.terminate() } }
+    deinit {
+        try? releasePipe.fileHandleForWriting.close()
+        if process.isRunning { process.terminate() }
+    }
 
     func waitUntilPaused() async throws {
         for _ in 0..<400 {
-            try #require(process.isRunning)
+            if !process.isRunning {
+                process.waitUntilExit()
+                try #require(process.isRunning, "Snapshot child exited before a live pause: status \(process.terminationStatus), reason \(process.terminationReason.rawValue), paused=\(FileManager.default.fileExists(atPath: controlDirectory.appendingPathComponent("paused").path))")
+            }
             if FileManager.default.fileExists(atPath: controlDirectory.appendingPathComponent("paused").path) { return }
             try await Task.sleep(for: .milliseconds(5))
         }
@@ -36,7 +44,8 @@ final class SnapshotPublicationChild {
     }
 
     func releaseAndWait() async throws {
-        try Data().write(to: controlDirectory.appendingPathComponent("release"))
+        try releasePipe.fileHandleForWriting.write(contentsOf: Data([1]))
+        try releasePipe.fileHandleForWriting.close()
         for _ in 0..<400 {
             if !process.isRunning {
                 process.waitUntilExit()
